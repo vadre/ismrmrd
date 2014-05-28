@@ -17,3 +17,13 @@ else(WIN32)
 endif(WIN32)
 	INSTALL(TARGETS ismrmrd_generate_cartesian_shepp_logan DESTINATION bin)
 ENDIF(FFTW3_FOUND)
+
+find_package(NFFT COMPONENTS double)
+if(NFFT_FOUND)
+  include_directories(${NFFT_INCLUDE_DIR})
+  add_executable(ismrmrd_generate_radial_shepp_logan 
+      generate_radial_shepp_logan.cpp ismrmrd_nfft.cpp ${XSDS_SOURCES})
+  target_link_libraries(ismrmrd_generate_radial_shepp_logan ismrmrd_utilities
+      ismrmrd ${NFFT_LIBRARIES} ${XERCESC_LIBRARIES})
+  install(TARGETS ismrmrd_generate_radial_shepp_logan DESTINATION bin)
+endif(NFFT_FOUND)
