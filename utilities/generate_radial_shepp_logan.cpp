@@ -39,6 +39,7 @@ int main(int argc, char** argv)
 {
   unsigned int ndim = 2;  // 2D trajectory
   unsigned int matrix_size;
+  unsigned int ros;
   std::string outfile;
   std::string dataset;
   unsigned int profiles;
@@ -47,6 +48,7 @@ int main(int argc, char** argv)
   desc.add_options()
     ("help,h", "produce help message")
     ("matrix,m", po::value<unsigned int>(&matrix_size)->default_value(256), "Matrix size")
+    ("oversampling,O", po::value<unsigned int>(&ros)->default_value(2), "Readout oversampling")
     ("output,o", po::value<std::string>(&outfile)->default_value("testdata.h5"), "Output file name")
     ("dataset,d", po::value<std::string>(&dataset)->default_value("dataset"), "Output dataset name")
     ("profiles,p", po::value<unsigned int>(&profiles)->default_value(256), "Number of angular profiles")
@@ -61,17 +63,35 @@ int main(int argc, char** argv)
       return 1;
   }
 
-  std::cout << "Generating Radial Shepp Logan Phantom" << std::endl;
+  /* some convenient geometry vars */
+  unsigned int os_matrix_size = ros * matrix_size;
+  unsigned int readout = ros * matrix_size;
+  std::vector<unsigned int> imdims;
+  imdims.push_back(os_matrix_size);
+  imdims.push_back(os_matrix_size);
+  std::vector<unsigned int> ksdims;
+  ksdims.push_back(readout);
+  ksdims.push_back(profiles);
+
+
+  std::cout << "Generating radial Shepp-Logan phantom" << std::endl;
 
   std::cout << "DEBUG: Generating phantom data" << std::endl;
   boost::shared_ptr<NDArrayContainer<std::complex<float> > > phantom = shepp_logan_phantom(matrix_size);
-  std::vector<unsigned int> dims;
-  dims.push_back(matrix_size);
-  dims.push_back(matrix_size);
+  NDArrayContainer<std::complex<float> > os_phantom(imdims);
+  os_phantom.data_ = std::complex<float>(0.0,0.0);
+  size_t iindex, oindex;
+  for (unsigned int y = 0; y < os_matrix_size; y++) {
+    for (unsigned int x = 0; x < os_matrix_size; x++) {
+      oindex = (y + ((os_matrix_size - matrix_size) >> 1)) * os_matrix_size +
+          x + ((os_matrix_size - matrix_size) >> 1);
+      iindex = y * matrix_size + x;
+      os_phantom.data_[oindex] = phantom->data_[iindex];
+    }
+  }
 
   /* compute fully-sampled trajectory */
   std::cout << "DEBUG: Generating trajectory" << std::endl;
-  unsigned int readout = matrix_size;
   std::valarray<float> kr(readout);
   for (unsigned int ife = 0; ife < readout; ife++)
     kr[ife] = (float)ife * (1.0f / readout) - 0.5f;
@@ -91,14 +111,11 @@ int main(int argc, char** argv)
 
   /* instantiate the NFFT plan */
   std::cout << "DEBUG: instantiate plan" << std::endl;
-  NFFT2 plan = NFFT2(matrix_size, matrix_size, profiles*readout);
+  NFFT2 plan = NFFT2(os_matrix_size, os_matrix_size, profiles*readout);
   plan.precompute(full_traj);
 
   /* compute fully sampled k-space for each coil */
-  std::vector<unsigned int> ksdims;
-  ksdims.push_back(readout);
-  ksdims.push_back(profiles);
-  NDArrayContainer<std::complex<float> > imdata = *phantom;
+  NDArrayContainer<std::complex<float> > imdata = os_phantom;
   NDArrayContainer<std::complex<float> > ksdata(ksdims);
 
   /* itok */
@@ -178,10 +195,14 @@ int main(int argc, char** argv)
   h.acquisitionSystemInformation(sys);
 
   /* create an encoding section */
-  ISMRMRD::encodingSpaceType es(ISMRMRD::matrixSize(readout, matrix_size, 1),
-      ISMRMRD::fieldOfView_mm(300, 300, 6));
-  ISMRMRD::encodingSpaceType rs(ISMRMRD::matrixSize(readout, matrix_size, 1),
-      ISMRMRD::fieldOfView_mm(300, 300, 6));
+  ISMRMRD::encodingSpaceType es(
+      ISMRMRD::matrixSize(os_matrix_size, os_matrix_size, 1),
+      ISMRMRD::fieldOfView_mm(ros*300, ros*300, 6)
+      );
+  ISMRMRD::encodingSpaceType rs(
+      ISMRMRD::matrixSize(matrix_size, matrix_size, 1),
+      ISMRMRD::fieldOfView_mm(300, 300, 6)
+      );
   ISMRMRD::encodingLimitsType el;
   el.kspace_encoding_step_1(ISMRMRD::limitType(0, profiles-1, 0));
   ISMRMRD::encoding e(es, rs, el, ISMRMRD::trajectoryType::radial);
