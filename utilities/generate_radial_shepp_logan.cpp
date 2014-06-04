@@ -38,61 +38,61 @@ namespace po = boost::program_options;
 int main(int argc, char** argv)
 {
   unsigned int ndim = 2;  // 2D trajectory
-	unsigned int matrix_size;
-	std::string outfile;
-	std::string dataset;
-	unsigned int profiles;
+  unsigned int matrix_size;
+  std::string outfile;
+  std::string dataset;
+  unsigned int profiles;
 
-	po::options_description desc("Allowed options");
-	desc.add_options()
-		("help,h", "produce help message")
-		("matrix,m", po::value<unsigned int>(&matrix_size)->default_value(256), "Matrix size")
-		("output,o", po::value<std::string>(&outfile)->default_value("testdata.h5"), "Output file name")
-		("dataset,d", po::value<std::string>(&dataset)->default_value("dataset"), "Output dataset name")
-		("profiles,p", po::value<unsigned int>(&profiles)->default_value(256), "Number of angular profiles")
-	;
+  po::options_description desc("Allowed options");
+  desc.add_options()
+    ("help,h", "produce help message")
+    ("matrix,m", po::value<unsigned int>(&matrix_size)->default_value(256), "Matrix size")
+    ("output,o", po::value<std::string>(&outfile)->default_value("testdata.h5"), "Output file name")
+    ("dataset,d", po::value<std::string>(&dataset)->default_value("dataset"), "Output dataset name")
+    ("profiles,p", po::value<unsigned int>(&profiles)->default_value(256), "Number of angular profiles")
+  ;
 
-	po::variables_map vm;
-	po::store(po::parse_command_line(argc, argv, desc), vm);
-	po::notify(vm);
+  po::variables_map vm;
+  po::store(po::parse_command_line(argc, argv, desc), vm);
+  po::notify(vm);
 
-	if (vm.count("help")) {
-	    std::cout << desc << "\n";
-	    return 1;
-	}
+  if (vm.count("help")) {
+      std::cout << desc << "\n";
+      return 1;
+  }
 
-	std::cout << "Generating Radial Shepp Logan Phantom" << std::endl;
+  std::cout << "Generating Radial Shepp Logan Phantom" << std::endl;
 
   std::cout << "DEBUG: Generating phantom data" << std::endl;
-	boost::shared_ptr<NDArrayContainer<std::complex<float> > > phantom = shepp_logan_phantom(matrix_size);
-	std::vector<unsigned int> dims;
-	dims.push_back(matrix_size);
-	dims.push_back(matrix_size);
+  boost::shared_ptr<NDArrayContainer<std::complex<float> > > phantom = shepp_logan_phantom(matrix_size);
+  std::vector<unsigned int> dims;
+  dims.push_back(matrix_size);
+  dims.push_back(matrix_size);
 
-	/* compute fully-sampled trajectory */
+  /* compute fully-sampled trajectory */
   std::cout << "DEBUG: Generating trajectory" << std::endl;
   unsigned int readout = matrix_size;
-	std::valarray<float> kr(readout);
-	for (unsigned int ife = 0; ife < readout; ife++)
-		kr[ife] = (float)ife * (1.0f / readout) - 0.5f;
+  std::valarray<float> kr(readout);
+  for (unsigned int ife = 0; ife < readout; ife++)
+    kr[ife] = (float)ife * (1.0f / readout) - 0.5f;
 
-	std::valarray<float> full_traj(profiles*readout*ndim);
-	std::slice ix_kx, ix_ky;
+  std::valarray<float> full_traj(profiles*readout*ndim);
+  std::slice ix_kx, ix_ky;
   float angle_ipe, cos_angle, sin_angle;
   for (unsigned int ipe = 0; ipe < profiles; ipe++) {
     angle_ipe = (float)ipe * (M_PI / profiles);
     cos_angle = cos(angle_ipe);
     sin_angle = sin(angle_ipe);
-		ix_kx = std::slice(ipe*readout*ndim, readout, ndim);
-		ix_ky = std::slice(ipe*readout*ndim+1, readout, ndim);    
-		full_traj[ix_kx] = kr * cos_angle;
-		full_traj[ix_ky] = kr * sin_angle;
-	}
-	
-	/* instantiate the NFFT plan */
+    ix_kx = std::slice(ipe*readout*ndim, readout, ndim);
+    ix_ky = std::slice(ipe*readout*ndim+1, readout, ndim);    
+    full_traj[ix_kx] = kr * cos_angle;
+    full_traj[ix_ky] = kr * sin_angle;
+  }
+
+  /* instantiate the NFFT plan */
   std::cout << "DEBUG: instantiate plan" << std::endl;
-	NFFT2 plan = NFFT2(matrix_size, matrix_size, profiles*readout);
-	plan.precompute(full_traj);
+  NFFT2 plan = NFFT2(matrix_size, matrix_size, profiles*readout);
+  plan.precompute(full_traj);
 
   /* compute fully sampled k-space for each coil */
   std::vector<unsigned int> ksdims;
@@ -106,13 +106,13 @@ int main(int argc, char** argv)
   std::valarray<std::complex<float> > ksdata_ico = ksdata.data_;
   plan.trafo(imdata_ico, ksdata_ico);
 
-	// create dataset
-	IsmrmrdDataset d(outfile.c_str(), dataset.c_str());
-	Acquisition acq;
-	acq.setActiveChannels(1);
-	acq.setAvailableChannels(1);
-	acq.setNumberOfSamples(readout);
-	acq.setCenterSample(readout>>1);
+  // create dataset
+  IsmrmrdDataset d(outfile.c_str(), dataset.c_str());
+  Acquisition acq;
+  acq.setActiveChannels(1);
+  acq.setAvailableChannels(1);
+  acq.setNumberOfSamples(readout);
+  acq.setCenterSample(readout>>1);
 
   /* record acquisiton of each phase encoding line individually */
   std::cout << "DEBUG: Looping through each encoding line" << std::endl;
@@ -168,39 +168,39 @@ int main(int argc, char** argv)
   }
 
   std::cout << "DEBUG: generating XML header" << std::endl;
-	/* create XML header */
-	ISMRMRD::experimentalConditionsType exp(63500000); //~1.5T
-	ISMRMRD::acquisitionSystemInformationType sys;
-	sys.institutionName("ISMRM Synthetic Imaging Lab");
-	sys.receiverChannels(1);
+  /* create XML header */
+  ISMRMRD::experimentalConditionsType exp(63500000); //~1.5T
+  ISMRMRD::acquisitionSystemInformationType sys;
+  sys.institutionName("ISMRM Synthetic Imaging Lab");
+  sys.receiverChannels(1);
 
-	ISMRMRD::ismrmrdHeader h(exp);
-	h.acquisitionSystemInformation(sys);
+  ISMRMRD::ismrmrdHeader h(exp);
+  h.acquisitionSystemInformation(sys);
 
-	/* create an encoding section */
-	ISMRMRD::encodingSpaceType es(ISMRMRD::matrixSize(readout, matrix_size, 1),
-			ISMRMRD::fieldOfView_mm(300, 300, 6));
-	ISMRMRD::encodingSpaceType rs(ISMRMRD::matrixSize(readout, matrix_size, 1),
-			ISMRMRD::fieldOfView_mm(300, 300, 6));
-	ISMRMRD::encodingLimitsType el;
-	el.kspace_encoding_step_1(ISMRMRD::limitType(0, profiles-1, 0));
-	ISMRMRD::encoding e(es, rs, el, ISMRMRD::trajectoryType::radial);
+  /* create an encoding section */
+  ISMRMRD::encodingSpaceType es(ISMRMRD::matrixSize(readout, matrix_size, 1),
+      ISMRMRD::fieldOfView_mm(300, 300, 6));
+  ISMRMRD::encodingSpaceType rs(ISMRMRD::matrixSize(readout, matrix_size, 1),
+      ISMRMRD::fieldOfView_mm(300, 300, 6));
+  ISMRMRD::encodingLimitsType el;
+  el.kspace_encoding_step_1(ISMRMRD::limitType(0, profiles-1, 0));
+  ISMRMRD::encoding e(es, rs, el, ISMRMRD::trajectoryType::radial);
 
-	/* add the encoding section to the header */
-	h.encoding().push_back(e);
+  /* add the encoding section to the header */
+  h.encoding().push_back(e);
 
-	/* serialize the header */
-	xml_schema::namespace_infomap map;
-	map[""].name = "http://www.ismrm.org/ISMRMRD";
-	map[""].schema = "ismrmrd.xsd";
-	std::stringstream str;
-	ISMRMRD::ismrmrdHeader_(str, h, map);
-	std::string xml_header = str.str();
+  /* serialize the header */
+  xml_schema::namespace_infomap map;
+  map[""].name = "http://www.ismrm.org/ISMRMRD";
+  map[""].schema = "ismrmrd.xsd";
+  std::stringstream str;
+  ISMRMRD::ismrmrdHeader_(str, h, map);
+  std::string xml_header = str.str();
 
-	/* write the header to the data file. */
-	d.writeHeader(xml_header);
+  /* write the header to the data file. */
+  d.writeHeader(xml_header);
 
-	return 0;
+  return 0;
 }
 
 
