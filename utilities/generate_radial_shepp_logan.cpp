@@ -153,18 +153,14 @@ int main(int argc, char** argv)
     acq.getIdx().kspace_encode_step_1 = ipe;
 
     /* set data:
-     * copy the relevant portion of the fully-sampled data
-     * here explicit conversion of the complex data to a float buffer is made
-     * this could also be implemented with a memcpy
+     * copy the relevant portion of the fully-sampled data to the current 
+     * acquisition instance
      */
     std::valarray<float> data(readout*2);
     std::valarray<std::complex<float> > ksdata_ico_ipe(readout);
     std::slice ix_ksdata_ipe(ipe*readout, readout, 1);
     ksdata_ico_ipe = ksdata_ico[ix_ksdata_ipe];
-    for (unsigned int ife = 0; ife < readout; ife++) {
-      data[2*ife] = ksdata_ico_ipe[ife].real();
-      data[2*ife+1] = ksdata_ico_ipe[ife].imag(); 
-    }
+    memcpy(&data, &ksdata_ico_ipe, data.size()*sizeof(float))
     acq.setData(data);
  
     /* set trajectory:
