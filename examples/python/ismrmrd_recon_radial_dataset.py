@@ -60,6 +60,17 @@ def main(argv):
     rFOVx = enc.reconSpace.fieldOfView_mm.x
     rFOVy = enc.reconSpace.fieldOfView_mm.y
 
+    # K-space encoding
+    nkes0 = enc.encodingLimits.kspace_encoding_step_0.maximum + 1
+    nkes1 = enc.encodingLimits.kspace_encoding_step_1.maximum + 1
+    nkes2 = enc.encodingLimits.kspace_encoding_step_2.maximum + 1
+
+    # Number of Slices, Reps, Contrasts, etc.
+    nslices = enc.encodingLimits.slice.maximum + 1
+    ncoils = header.acquisitionSystemInformation.receiverChannels
+    nreps = enc.encodingLimits.repetition.maximum + 1
+    ncontrasts = enc.encodingLimits.contrast.maximum + 1
+
     ignore_list = []
     nacq = dset.getNumberOfAcquisitions()
     for iacq in range(nacq):
@@ -69,40 +80,47 @@ def main(argv):
             ignore_list.append(iacq)
 
     print("DEBUG: reading ISMRMRD data")
-    kdata = np.empty([eNy, eNx], dtype=np.complex128)
-    ktraj = np.empty([eNy, eNx, 2], dtype=np.float64)
+    kdata = np.empty([ncoils, nkes1, nkes0], dtype=np.complex128)
+    ktraj = np.empty([nkes1, nkes0, 2], dtype=np.float64)
     for iacq in range(nacq):
         if iacq in ignore_list:
             continue
         acq = dset.readAcquisition(iacq)
         ktraj[iacq, :, 0] = acq.getTraj()[0::2]
         ktraj[iacq, :, 1] = acq.getTraj()[1::2]
-        kdata[iacq, :] = acq.getData()[0::2] + 1j * acq.getData()[1::2]
+        for icoil in range(ncoils):
+            kdata_icoil = acq.getData().reshape([ncoils, -1, 2])
+            kdata[icoil, iacq, :] = (kdata_icoil[icoil, :, 0] + 1j *
+                    kdata_icoil[icoil, :, 1])
 
     print("DEBUG: computing radial DCF")
     dcf = np.abs(np.linspace(-0.5, 0.5, eNx, endpoint=False))
     dcf = dcf.reshape([1, -1])
 
-    print("DEBUG: performing reconstruction")
-    plan = pynfft.nfft.NFFT(N=[rNx, rNy], M=eNx*eNy)
+    print("DEBUG: instantiate plan")
+    plan = pynfft.nfft.NFFT(N=[rNx, rNy], M=nkes1*nkes0)
     plan.x = ktraj
     plan.precompute()
-    plan.f = kdata * dcf
-    idata = plan.adjoint().copy()
+    
+    print("DEBUG: reconstruct coil images")
+    imdata = np.empty([ncoils, rNy, rNx])
+    for icoil in range(ncoils):
+        plan.f = kdata[icoil] * dcf
+        imdata_icoil = plan.adjoint()
+        imdata[icoil, :, :] = imdata_icoil
 
     # remove oversampling in frequency encoding direction if necessary
     if eNx != rNx:
         i0 = np.floor((eNx - rNx) / 2)
         i1 = i0 + rNx
-        idata = idata[i0:i1, :]
+        imdata = imdata[:, :, i0:i1]
 
     # display reconstructed image
     fig = plt.figure()
     fig.set_size_inches(4, 4)
-    plt.imshow(np.abs(idata), cmap='gray')
+    imdata_sos = np.abs((imdata**2).sum(axis=0)) 
+    plt.imshow(imdata_sos, cmap='gray')
     plt.show()
-
-
 
 if __name__ == "__main__":
    main(sys.argv[1:])
