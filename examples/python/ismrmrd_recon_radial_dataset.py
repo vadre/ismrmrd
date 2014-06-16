@@ -23,6 +23,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
+from __future__ import division
+
 import os
 import sys
 import numpy as np
@@ -61,15 +63,17 @@ def main(argv):
     rFOVy = enc.reconSpace.fieldOfView_mm.y
 
     # K-space encoding
-    nkes0 = enc.encodingLimits.kspace_encoding_step_0.maximum + 1
+    try:
+        nkes0 = enc.encodingLimits.kspace_encoding_step_0.maximum + 1
+    except AttributeError:
+        nkes0 = eNx
     nkes1 = enc.encodingLimits.kspace_encoding_step_1.maximum + 1
-    nkes2 = enc.encodingLimits.kspace_encoding_step_2.maximum + 1
 
     # Number of Slices, Reps, Contrasts, etc.
-    nslices = enc.encodingLimits.slice.maximum + 1
+    #nslices = enc.encodingLimits.slice.maximum + 1
     ncoils = header.acquisitionSystemInformation.receiverChannels
-    nreps = enc.encodingLimits.repetition.maximum + 1
-    ncontrasts = enc.encodingLimits.contrast.maximum + 1
+    #nreps = enc.encodingLimits.repetition.maximum + 1
+    #ncontrasts = enc.encodingLimits.contrast.maximum + 1
 
     ignore_list = []
     nacq = dset.getNumberOfAcquisitions()
@@ -86,41 +90,45 @@ def main(argv):
         if iacq in ignore_list:
             continue
         acq = dset.readAcquisition(iacq)
-        ktraj[iacq, :, 0] = acq.getTraj()[0::2]
-        ktraj[iacq, :, 1] = acq.getTraj()[1::2]
-        for icoil in range(ncoils):
-            kdata_icoil = acq.getData().reshape([ncoils, -1, 2])
-            kdata[icoil, iacq, :] = (kdata_icoil[icoil, :, 0] + 1j *
-                    kdata_icoil[icoil, :, 1])
+        ktraj[iacq] = acq.getTraj().reshape([nkes0, 2])
+        kdata_iacq = acq.getData().reshape([ncoils, -1, 2])
+        kdata_iacq_cpx = kdata_iacq[:, :, 0] + 1j * kdata_iacq[:, :, 1]
+        kdata[:, iacq, :] = kdata_iacq_cpx.reshape([ncoils, 1, nkes0])
 
     print("DEBUG: computing radial DCF")
-    dcf = np.abs(np.linspace(-0.5, 0.5, eNx, endpoint=False))
+    # FIXME: normalize DCF  
+    dcf = np.abs(np.linspace(-0.5, 0.5, nkes0, endpoint=False))
     dcf = dcf.reshape([1, -1])
 
     print("DEBUG: instantiate plan")
-    plan = pynfft.nfft.NFFT(N=[rNx, rNy], M=nkes1*nkes0)
+    plan = pynfft.nfft.NFFT(N=[eNx, eNy], M=nkes1*nkes0)
     plan.x = ktraj
     plan.precompute()
     
     print("DEBUG: reconstruct coil images")
-    imdata = np.empty([ncoils, rNy, rNx])
+    imdata = np.empty([ncoils, eNx, eNy], dtype=np.complex)
     for icoil in range(ncoils):
         plan.f = kdata[icoil] * dcf
-        imdata_icoil = plan.adjoint()
-        imdata[icoil, :, :] = imdata_icoil
+        imdata[icoil, :, :] = plan.adjoint()
 
-    # remove oversampling in frequency encoding direction if necessary
+    # remove oversampling in reconstructed FOV if necessary
     if eNx != rNx:
         i0 = np.floor((eNx - rNx) / 2)
         i1 = i0 + rNx
-        imdata = imdata[:, :, i0:i1]
+        imdata = imdata[:, i0:i1, i0:i1]
 
-    # display reconstructed image
+    # display reconstructed images for each coil
+    # coil images are displayed on 2 lines
     fig = plt.figure()
-    fig.set_size_inches(4, 4)
-    imdata_sos = np.abs((imdata**2).sum(axis=0)) 
-    plt.imshow(imdata_sos, cmap='gray')
-    plt.show()
+    nrows = 2
+    ncols = ncoils // 2 + ncoils % 2
+    for icoil in range(ncoils):
+        fig.add_subplot(nrows, ncols, 1+icoil, title="coil #%d"%(1+icoil))
+        coil_img = np.abs(imdata[icoil])
+        plt.imshow(coil_img, cmap='gray')
+        plt.axis('off')
+    fig.set_size_inches(16, 4)
+
 
 if __name__ == "__main__":
    main(sys.argv[1:])
