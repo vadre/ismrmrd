@@ -107,7 +107,8 @@ int main(int argc, char** argv)
   for (unsigned int c = 0; c < ncoils; c++) {
     for (unsigned int y = 0; y < rsdims[1]; y++) {
       for (unsigned int x = 0; x < rsdims[0]; x++) {
-        oindex = (y + ((esdims[1] - rsdims[1]) >> 1)) * esdims[0] +
+        oindex = c * esdims[1] * esdims[0] + 
+            (y + ((esdims[1] - rsdims[1]) >> 1)) * esdims[0] +
             x + ((esdims[0] - rsdims[0]) >> 1);
         iindex = y * rsdims[0] + x;
         cindex = c * rsdims[1] * rsdims[0] + iindex;
@@ -198,7 +199,7 @@ int main(int argc, char** argv)
     std::valarray<float> data(ncoils*os_readout*2);
     for (unsigned int ico = 0; ico < ncoils; ico++) {
       memcpy(&data[ico*os_readout*2],
-             &coil_ksdata.data_[ico*profiles*os_readout+ipe*os_readout],
+             &coil_ksdata.data_[(ico*profiles+ipe)*os_readout],
              sizeof(float)*os_readout*2);
     }
     acq.setData(data);
@@ -209,8 +210,8 @@ int main(int argc, char** argv)
     std::cout << "DEBUG: copy trajectory" << std::endl;
     std::valarray<float> traj(os_readout*ndim);
     for (unsigned int ife = 0; ife < os_readout; ife++) {
-      traj[ife*ndim] = full_traj[ipe*os_readout*ndim];
-      traj[1+ife*ndim] = full_traj[1+ipe*os_readout*ndim];
+      traj[ife*ndim] = full_traj[(ipe*os_readout+ife)*ndim];
+      traj[1+ife*ndim] = full_traj[1+(ipe*os_readout+ife)*ndim];
     }
     acq.setTrajectoryDimensions(2);
     acq.setTraj(traj);
@@ -225,7 +226,7 @@ int main(int argc, char** argv)
   ISMRMRD::experimentalConditionsType exp(63500000); //~1.5T
   ISMRMRD::acquisitionSystemInformationType sys;
   sys.institutionName("ISMRM Synthetic Imaging Lab");
-  sys.receiverChannels(1);
+  sys.receiverChannels(ncoils);
 
   ISMRMRD::ismrmrdHeader h(exp);
   h.acquisitionSystemInformation(sys);
