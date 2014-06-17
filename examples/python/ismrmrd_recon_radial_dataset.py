@@ -71,31 +71,39 @@ if __name__ == "__main__":
         nkes0 = eNx
     nkes1 = enc.encodingLimits.kspace_encoding_step_1.maximum + 1
 
-    # Number of Slices, Reps, Contrasts, etc.
-    #nslices = enc.encodingLimits.slice.maximum + 1
+    # Misc recon parameters
     ncoils = header.acquisitionSystemInformation.receiverChannels
-    #nreps = enc.encodingLimits.repetition.maximum + 1
-    #ncontrasts = enc.encodingLimits.contrast.maximum + 1
+    nrep = enc.encodingLimits.repetition.maximum + 1
+    nacq = dset.getNumberOfAcquisitions()
+    try:
+        acc_factor = header.parallelImaging.accelerationFactor.kspace_encoding_step_1
+    except AttributeError:
+        acc_factor = 1
 
     ignore_list = []
-    nacq = dset.getNumberOfAcquisitions()
     for iacq in range(nacq):
         acq = dset.readAcquisition(iacq)
         if acq.getHead().flags & ismrmrd.ACQ_IS_NOISE_MEASUREMENT:
+            # ignore noise measurements
             print("Found noise measurement @ %d" % iacq)
+            ignore_list.append(iacq)
+        if acq.getIdx().repetition >= acc_factor: 
+            # will only reconstruct first fully-sampled repetition
             ignore_list.append(iacq)
 
     print("DEBUG: reading ISMRMRD data")
-    kdata = np.empty([ncoils, nkes1, nkes0], dtype=np.complex128)
+    kdata = np.empty([nkes1, ncoils, nkes0], dtype=np.complex128)
     ktraj = np.empty([nkes1, nkes0, 2], dtype=np.float64)
     for iacq in range(nacq):
         if iacq in ignore_list:
             continue
         acq = dset.readAcquisition(iacq)
-        ktraj[iacq] = acq.getTraj().reshape([nkes0, 2])
-        kdata_iacq = acq.getData().reshape([ncoils, -1, 2])
+        ikes1 = acq.getIdx().kspace_encode_step_1
+        ktraj[ikes1] = acq.getTraj().reshape([nkes0, 2])
+        kdata_iacq = acq.getData().reshape([ncoils, nkes0, 2])
         kdata_iacq_cpx = kdata_iacq[:, :, 0] + 1j * kdata_iacq[:, :, 1]
-        kdata[:, iacq, :] = kdata_iacq_cpx.reshape([ncoils, nkes0])
+        kdata[ikes1] = kdata_iacq_cpx
+    kdata = np.swapaxes(kdata, 0, 1)  # shape is now [ncoils, nkes1, nkes0]
 
     print("DEBUG: computing radial DCF")
     # FIXME: normalize DCF  
