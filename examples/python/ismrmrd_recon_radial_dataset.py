@@ -34,7 +34,9 @@ import ismrmrd_xsd
 import pynfft
 
 
-def main(argv):
+if __name__ == "__main__":
+    argv = sys.argv[1:]
+  
     if len(argv) == 0:
         print ('ismrmrd file is missing')
         sys.exit(2)
@@ -93,7 +95,7 @@ def main(argv):
         ktraj[iacq] = acq.getTraj().reshape([nkes0, 2])
         kdata_iacq = acq.getData().reshape([ncoils, -1, 2])
         kdata_iacq_cpx = kdata_iacq[:, :, 0] + 1j * kdata_iacq[:, :, 1]
-        kdata[:, iacq, :] = kdata_iacq_cpx.reshape([ncoils, 1, nkes0])
+        kdata[:, iacq, :] = kdata_iacq_cpx.reshape([ncoils, nkes0])
 
     print("DEBUG: computing radial DCF")
     # FIXME: normalize DCF  
@@ -128,7 +130,6 @@ def main(argv):
         plt.imshow(coil_img, cmap='gray')
         plt.axis('off')
     fig.set_size_inches(16, 4)
+    fig.show()
 
-
-if __name__ == "__main__":
-   main(sys.argv[1:])
+    raw_input("Press any key to exit...")
