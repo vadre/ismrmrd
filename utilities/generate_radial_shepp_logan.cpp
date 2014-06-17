@@ -56,7 +56,7 @@ int main(int argc, char** argv)
     ("coils,c", po::value<unsigned int>(&ncoils)->default_value(8), "Number of Coils")
     ("oversampling,O", po::value<unsigned int>(&ros)->default_value(2), "Readout oversampling")
     //("repetitions,r", po::value<unsigned int>(&repetitions)->default_value(1), "Number of repetitions")
-    //("acceleration,a", po::value<unsigned int>(&acc_factor)->default_value(1), "Acceleration factor")
+    ("acceleration,a", po::value<unsigned int>(&acc_factor)->default_value(1), "Acceleration factor")
     ("output,o", po::value<std::string>(&outfile)->default_value("testdata.h5"), "Output file name")
     ("dataset,d", po::value<std::string>(&dataset)->default_value("dataset"), "Output dataset name")
   ;
@@ -173,52 +173,55 @@ int main(int argc, char** argv)
 
   /* record acquisiton of each phase encoding line individually */
   std::cout << "DEBUG: Looping through each encoding line" << std::endl;
-  for (unsigned int ipe = 0; ipe < profiles; ipe++) {
-    std::cout << "DEBUG: processing PE line #" << ipe << std::endl;
-    
-    /* reset acquisition flags */
-    acq.setFlags(0);
+  for (unsigned int iacc = 0; iacc < acc_factor; iacc++) {
+    for (unsigned int ipe = iacc; ipe < profiles; ipe += acc_factor) {
+      std::cout << "DEBUG: processing PE line #" << ipe << std::endl;
+      
+      /* reset acquisition flags */
+      acq.setFlags(0);
 
-    /* set relevant acquisition flags:
-     * ACQ_FIRST_IN_SLICE for first profile
-     * ACQ_LAST_IN_SLICE for last profile
-     */
-    if (ipe == 0)
-      acq.setFlag(ISMRMRD::FlagBit(ISMRMRD::ACQ_FIRST_IN_SLICE));
-    if (ipe == profiles-1)
-      acq.setFlag(ISMRMRD::FlagBit(ISMRMRD::ACQ_LAST_IN_SLICE));
+      /* set relevant acquisition flags:
+       * ACQ_FIRST_IN_SLICE for first profile
+       * ACQ_LAST_IN_SLICE for last profile
+       */
+				if (ipe == iacc)
+					acq.setFlag(ISMRMRD::FlagBit(ISMRMRD::ACQ_FIRST_IN_SLICE));
+				if (ipe >= (profiles - acc_factor))
+					acq.setFlag(ISMRMRD::FlagBit(ISMRMRD::ACQ_LAST_IN_SLICE));
 
-    /* set encoding index */
-    acq.getIdx().kspace_encode_step_1 = ipe;
+      /* set encoding information */
+      acq.getIdx().kspace_encode_step_1 = ipe;
+      acq.getIdx().repetition = iacc;
 
-    /* set data:
-     * Copy the relevant portion of the fully-sampled data to the current 
-     * acquisition instance. The coil data are concatenated into one vector.
-     */
-    std::cout << "DEBUG: copy data" << std::endl;
-    std::valarray<float> data(ncoils*os_readout*2);
-    for (unsigned int ico = 0; ico < ncoils; ico++) {
-      memcpy(&data[ico*os_readout*2],
-             &coil_ksdata.data_[(ico*profiles+ipe)*os_readout],
-             sizeof(float)*os_readout*2);
+      /* set data:
+       * Copy the relevant portion of the fully-sampled data to the current 
+       * acquisition instance. The coil data are concatenated into one vector.
+       */
+      std::cout << "DEBUG: copy data" << std::endl;
+      std::valarray<float> data(ncoils*os_readout*2);
+      for (unsigned int ico = 0; ico < ncoils; ico++) {
+        memcpy(&data[ico*os_readout*2],
+               &coil_ksdata.data_[(ico*profiles+ipe)*os_readout],
+               sizeof(float)*os_readout*2);
+      }
+      acq.setData(data);
+   
+      /* set trajectory:
+       * here, just copy the relevant portion of the fully-sampled trajectory
+       */
+      std::cout << "DEBUG: copy trajectory" << std::endl;
+      std::valarray<float> traj(os_readout*ndim);
+      for (unsigned int ife = 0; ife < os_readout; ife++) {
+        traj[ife*ndim] = full_traj[(ipe*os_readout+ife)*ndim];
+        traj[1+ife*ndim] = full_traj[1+(ipe*os_readout+ife)*ndim];
+      }
+      acq.setTrajectoryDimensions(2);
+      acq.setTraj(traj);
+      
+      /* add current acquisition to dataset */
+      std::cout << "DEBUG: append acquisition" << std::endl;
+      d.appendAcquisition(&acq);
     }
-    acq.setData(data);
- 
-    /* set trajectory:
-     * here, just copy the relevant portion of the fully-sampled trajectory
-     */
-    std::cout << "DEBUG: copy trajectory" << std::endl;
-    std::valarray<float> traj(os_readout*ndim);
-    for (unsigned int ife = 0; ife < os_readout; ife++) {
-      traj[ife*ndim] = full_traj[(ipe*os_readout+ife)*ndim];
-      traj[1+ife*ndim] = full_traj[1+(ipe*os_readout+ife)*ndim];
-    }
-    acq.setTrajectoryDimensions(2);
-    acq.setTraj(traj);
-    
-    /* add current acquisition to dataset */
-    std::cout << "DEBUG: append acquisition" << std::endl;
-    d.appendAcquisition(&acq);
   }
 
   std::cout << "DEBUG: generating XML header" << std::endl;
@@ -242,10 +245,20 @@ int main(int argc, char** argv)
       );
   ISMRMRD::encodingLimitsType el;
   el.kspace_encoding_step_1(ISMRMRD::limitType(0, ksdims[1]-1, 0));
+  el.repetition(ISMRMRD::limitType(0, acc_factor, 0));
   ISMRMRD::encoding e(es, rs, el, ISMRMRD::trajectoryType::radial);
 
   /* add the encoding section to the header */
   h.encoding().push_back(e);
+
+	/* set parellel imaging information if necessary */
+	if (acc_factor > 1) {
+		ISMRMRD::parallelImagingType parallel(
+        ISMRMRD::accelerationFactorType(acc_factor, 1));
+		parallel.calibrationMode(
+        ISMRMRD::calibrationModeType::interleaved);
+		h.parallelImaging(parallel);
+	}
 
   /* serialize the header */
   xml_schema::namespace_infomap map;
