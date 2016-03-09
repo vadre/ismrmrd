@@ -584,7 +584,7 @@ template <typename T> std::vector<unsigned char> Acquisition<T>::serialize()
     std::copy((unsigned char*)(&this->data_[0]),(unsigned char*)(&this->data_[0] + data_.size()),std::back_inserter(buffer));
 
     if (buffer.size() != bytes) {
-        throw std::runtime_error("Serialized buffer size does not match expected buffer size");
+        throw std::runtime_error("Serialized Acquision buffer size does not match expected buffer size");
     }
     
     return buffer; //Should not be copied on newer compilers due to return value optimization.
@@ -1192,7 +1192,7 @@ template <typename T> std::vector<unsigned char> Image<T>::serialize()
     std::copy((unsigned char*)(&this->data_[0]),(unsigned char*)(&this->data_[0] + data_.size()),std::back_inserter(buffer));
 
     if (buffer.size() != bytes) {
-        throw std::runtime_error("Serialized buffer size does not match expected buffer size");
+        throw std::runtime_error("Serialized Image buffer size does not match expected buffer size");
     }
     
     return buffer; //Should not be copied on newer compilers due to return value optimization.
@@ -1440,5 +1440,161 @@ void quaternion_to_directions(float quat[4], float read_dir[3],
     phase_dir[2] = 2.0f * (b * c + a * d);
     slice_dir[2] = 1.0f - 2.0f * (a * a + b * b);
 }
+
+
+
+std::vector<unsigned char> EntityHeader::serialize()
+{
+  size_t bytes = sizeof (uint32_t) * 4;
+  std::vector<unsigned char> buffer;
+  buffer.reserve (bytes);
+
+  std::copy ((unsigned char*) &this->version,
+             (unsigned char*) &this->version + sizeof (uint32_t),
+             std::back_inserter (buffer));
+
+  std::copy ((unsigned char*) &this->entity_type,
+             (unsigned char*) &this->entity_type + sizeof (uint32_t),
+             std::back_inserter (buffer));
+
+  std::copy ((unsigned char*) &this->storage_type,
+             (unsigned char*) &this->storage_type + sizeof (uint32_t),
+             std::back_inserter (buffer));
+
+  std::copy ((unsigned char*) &this->stream,
+             (unsigned char*) &this->stream + sizeof (uint32_t),
+             std::back_inserter (buffer));
+
+  if (buffer.size() != bytes)
+  {
+
+    std::cout << "buffer.size()         = " << buffer.size() << std::endl;
+    std::cout << "bytes                 = " << bytes << std::endl;
+    throw std::runtime_error
+      ("Serialized EntityHeader buffer size does not match expected buffer size");
+  }
+
+  return buffer; // Should not be copied on newer compilers due to return
+                 // value optimization.
+}
+
+
+void EntityHeader::deserialize(const std::vector<unsigned char>& buffer)
+{
+  if (buffer.size() != sizeof (uint32_t) * 4)
+  {
+    throw std::runtime_error
+      ("Buffer size does not match the size of EntityHeader");
+  }
+
+  std::copy (&buffer[0],
+             &buffer[sizeof(uint32_t)],
+             (unsigned char*) &this->version);
+
+  std::copy (&buffer[sizeof(uint32_t)],
+             &buffer[sizeof(uint32_t) * 2],
+             (unsigned char*) &this->entity_type);
+
+  std::copy (&buffer[sizeof(uint32_t) * 2],
+             &buffer[sizeof(uint32_t) * 3],
+             (unsigned char*) &this->storage_type);
+
+  std::copy (&buffer[sizeof(uint32_t) * 3],
+             &buffer[sizeof(uint32_t) * 4],
+             (unsigned char*) &this->stream);
+}
+
+std::vector<unsigned char> Handshake::serialize()
+{
+  size_t bytes = sizeof (uint64_t) + sizeof (uint32_t) + Max_Client_Name_Length;
+  std::vector<unsigned char> buffer;
+  buffer.reserve (bytes);
+
+  std::copy ((unsigned char*) &this->timestamp,
+             (unsigned char*) &this->timestamp + sizeof (uint64_t),
+             std::back_inserter (buffer));
+
+  std::copy ((unsigned char*) &this->conn_status,
+             (unsigned char*) &this->conn_status + sizeof (uint32_t),
+             std::back_inserter (buffer));
+
+  std::copy ((unsigned char*) &this->client_name,
+             (unsigned char*) &this->client_name + Max_Client_Name_Length,
+             std::back_inserter (buffer));
+
+  if (buffer.size() != bytes)
+  {
+    throw std::runtime_error
+      ("Serialized Handshake buffer size does not match expected buffer size");
+  }
+
+  return buffer; // Should not be copied on newer compilers due to return
+                 // value optimization.
+}
+
+
+void Handshake::deserialize(const std::vector<unsigned char>& buffer)
+{
+  if (buffer.size() != sizeof (uint64_t) + sizeof (uint32_t) + Max_Client_Name_Length)
+  {
+    throw std::runtime_error
+      ("Buffer size does not match the size of Handshake");
+  }
+
+  std::copy (&buffer[0],
+             &buffer[sizeof (uint64_t)],
+             (unsigned char*) &this->timestamp);
+
+  std::copy (&buffer[sizeof (uint64_t)],
+             &buffer[sizeof (uint64_t) + sizeof (uint32_t)],
+             (unsigned char*) &this->conn_status);
+
+  std::copy (&buffer[sizeof (uint64_t) + sizeof (uint32_t)],
+             &buffer[sizeof (uint64_t) + sizeof (uint32_t) + Max_Client_Name_Length],
+             (unsigned char*) &this->client_name);
+}
+
+std::vector<unsigned char> Command::serialize()
+{
+  size_t bytes = sizeof (uint32_t) * 2;
+  std::vector<unsigned char> buffer;
+  buffer.reserve (bytes);
+
+  std::copy ((unsigned char*) &this->command_type,
+             (unsigned char*) &this->command_type + sizeof (uint32_t),
+             std::back_inserter (buffer));
+
+  std::copy ((unsigned char*) &this->error_type,
+             (unsigned char*) &this->error_type + sizeof (uint32_t),
+             std::back_inserter (buffer));
+
+  if (buffer.size() != bytes)
+  {
+    throw std::runtime_error
+      ("Serialized buffer size does not match expected Command buffer size");
+  }
+
+  return buffer; // Should not be copied on newer compilers due to return
+                 // value optimization.
+}
+
+
+void Command::deserialize (const std::vector<unsigned char>& buffer)
+{
+  if (buffer.size() != sizeof (uint32_t) * 2)
+  {
+    throw std::runtime_error
+      ("Buffer size does not match the size of Command");
+  }
+
+  std::copy (&buffer[0],
+             &buffer[sizeof (uint32_t)],
+             (unsigned char*) &this->command_type);
+
+  std::copy (&buffer[sizeof (uint32_t)],
+             &buffer[sizeof (uint32_t) * 2],
+             (unsigned char*) &this->error_type);
+}
+
 
 } // namespace ISMRMRD
