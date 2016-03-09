@@ -38,6 +38,8 @@ typedef unsigned __int64 uint64_t;
 
 namespace ISMRMRD {
 
+const uint32_t Max_Client_Name_Length = 64;
+
 /** Global Constants */
 enum Constant {
     ISMRMRD_USER_INTS = 8,
@@ -73,6 +75,27 @@ enum EntityType {
     ISMRMRD_XML_HEADER = 5,    /**< The XML header describing the data    */
     ISMRMRD_ERROR = 6,         /**< Something went wrong                  */
     ISMRMRD_BLOB = 7           /**< Some binary object, with description  */
+};
+
+enum CommandType
+{
+  ISMRMRD_COMMAND_NO_COMMAND           = 1000,
+  ISMRMRD_COMMAND_STOP_FROM_CLIENT     = 1001,
+  ISMRMRD_COMMAND_DONE_FROM_SERVER     = 1002,
+  ISMRMRD_COMMAND_IMAGE_RECONSTRUCTION = 1003,
+  ISMRMRD_COMMAND_IMAGE_RECONSTRUCTED  = 1004,
+  ISMRMRD_COMMAND_USER_DEFINED_1       = 2001,
+  ISMRMRD_COMMAND_USER_DEFINED_2       = 2002,
+  ISMRMRD_COMMAND_USER_DEFINED_3       = 2003,
+  ISMRMRD_COMMAND_USER_DEFINED_4       = 2004
+};
+
+enum ErrorType
+{
+  ISMRMRD_ERROR_NO_ERROR               = 20000,
+  ISMRMRD_ERROR_INPUT_DATA_ERROR       = 20001,
+  ISMRMRD_ERROR_INTERNAL_ERROR         = 20002,
+  ISMRMRD_ERROR_UNKNOWN_ERROR          = 20100
 };
 
 /** Acquisition Flags */
@@ -139,11 +162,59 @@ enum ImageFlags {
     ISMRMRD_IMAGE_USER8 = 64
 };
 
-struct EntityHeader {
+enum ConnectionStatus {
+    CONNECTION_REQUEST = 222,               /**< Client to server */
+    CONNECTION_ACCEPTED = 322,              /**< Server to client */
+    CONNECTION_DENIED_UNKNOWN_USER = 332,   /**< Server to client */
+    CONNECTION_DENIED_SERVER_BUSY  = 342    /**< Server to client */
+};
+
+/// Entity type interface
+class EXPORTISMRMRD Entity
+{
+ public:
+    virtual std::vector<unsigned char> serialize() = 0;
+    virtual void deserialize(const std::vector<unsigned char>& buffer) = 0;
+};
+
+ 
+struct EntityHeader 
+    : public Entity
+{
+
+    // Functions inherited from Entity
+    virtual std::vector<unsigned char> serialize();
+    virtual void deserialize(const std::vector<unsigned char>& buffer);
+
     uint32_t version;       /**< First unsigned int indicates the version */
     uint32_t entity_type;   /**< Entity type code */
     uint32_t storage_type;  /**< numeric type of each sample */
     uint32_t stream;        /**< which stream this belongs to */
+};
+
+struct Handshake
+  : public Entity
+{
+    // Functions inherited from Entity
+    virtual std::vector<unsigned char> serialize();
+    virtual void deserialize(const std::vector<unsigned char>& buffer);
+
+    uint64_t         timestamp;   /**< Time of communication session start - 
+                                       provided by client */
+    uint32_t         conn_status; /**< ConnectionStatus returnd by server 
+                                       in response to clients handshake */
+    char             client_name[Max_Client_Name_Length];
+};
+
+struct Command
+  : public Entity
+{
+    // Functions inherited from Entity
+    virtual std::vector<unsigned char> serialize();
+    virtual void deserialize(const std::vector<unsigned char>& buffer);
+
+    uint32_t command_type; /**< CommandType */
+    uint32_t error_type;   /**< ErrorType */
 };
 
 /** EncodingCounters keeps track of typical loop counters in MR experiment. */
@@ -231,15 +302,6 @@ struct ImageHeader {
 bool operator==(const AcquisitionHeader &h1, const AcquisitionHeader &h2);
 bool operator==(const ImageHeader &h1, const ImageHeader &h2);
 
-/// Entity type interface
-class EXPORTISMRMRD Entity
-{
- public:
-    virtual std::vector<unsigned char> serialize() = 0;
-    virtual void deserialize(const std::vector<unsigned char>& buffer) = 0;
-};
-
- 
 /// Allowed data types for Images and NDArrays
 template <typename T> EXPORTISMRMRD StorageType get_storage_type();
 
