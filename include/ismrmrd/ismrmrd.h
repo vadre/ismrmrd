@@ -162,11 +162,12 @@ enum ImageFlags {
     ISMRMRD_IMAGE_USER8 = 64
 };
 
-enum ConnectionStatus {
-    CONNECTION_REQUEST = 222,               /**< Client to server */
-    CONNECTION_ACCEPTED = 322,              /**< Server to client */
-    CONNECTION_DENIED_UNKNOWN_USER = 332,   /**< Server to client */
-    CONNECTION_DENIED_SERVER_BUSY  = 342    /**< Server to client */
+enum ConnectionStatus
+{
+    CONNECTION_REQUEST               = 222,   /**< Client to server */
+    CONNECTION_ACCEPTED              = 322,   /**< Server to client */
+    CONNECTION_DENIED_UNKNOWN_USER   = 332,   /**< Server to client */
+    CONNECTION_DENIED_SERVER_BUSY    = 342    /**< Server to client */
 };
 
 /// Entity type interface
