@@ -639,6 +639,32 @@ void read_socket
     if (msg_struct.ehdr.entity_type == ISMRMRD::ISMRMRD_COMMAND)
     {
       ISMRMRD::Command cmd;
+    }
+    else if (msg_struct.ehdr.entity_type == ISMRMRD::ISMRMRD_ERROR)
+    {
+    }
+    else if (msg_struct.ehdr.entity_type == ISMRMRD::ISMRMRD_XML_HEADER)
+    {
+    }
+    else if (msg_struct.ehdr.entity_type == ISMRMRD::ISMRMRD_MRACQUISITION)
+    {
+    }
+    else if (msg_struct.ehdr.entity_type == ISMRMRD::ISMRMRD_WAVEFORM)
+    {
+    }
+    else if (msg_struct.ehdr.entity_type == ISMRMRD::ISMRMRD_IMAGE)
+    {
+    }
+    else if (msg_struct.ehdr.entity_type == ISMRMRD::ISMRMRD_BLOB)
+    {
+    }
+    else
+    {
+      // Unexpected entity type. Report and continue processing
+      std::cout << "Warning! unexpected Entity Type received: " <<
+                   msg_struct.ehdr.entity_type << std::endl;
+      continue;
+    }
   }
 
 

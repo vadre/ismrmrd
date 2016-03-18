@@ -1556,9 +1556,13 @@ void Handshake::deserialize(const std::vector<unsigned char>& buffer)
 
 std::vector<unsigned char> Command::serialize()
 {
-  size_t bytes = sizeof (uint32_t) * 2;
+  size_t bytes = sizeof (uint32_t) * 3;
   std::vector<unsigned char> buffer;
   buffer.reserve (bytes);
+
+  std::copy ((unsigned char*) &this->stream,
+             (unsigned char*) &this->stream + sizeof (uint32_t),
+             std::back_inserter (buffer));
 
   std::copy ((unsigned char*) &this->command_type,
              (unsigned char*) &this->command_type + sizeof (uint32_t),
@@ -1581,7 +1585,7 @@ std::vector<unsigned char> Command::serialize()
 
 void Command::deserialize (const std::vector<unsigned char>& buffer)
 {
-  if (buffer.size() != sizeof (uint32_t) * 2)
+  if (buffer.size() != sizeof (uint32_t) * 3)
   {
     throw std::runtime_error
       ("Buffer size does not match the size of Command");
@@ -1589,10 +1593,14 @@ void Command::deserialize (const std::vector<unsigned char>& buffer)
 
   std::copy (&buffer[0],
              &buffer[sizeof (uint32_t)],
-             (unsigned char*) &this->command_type);
+             (unsigned char*) &this->stream);
 
   std::copy (&buffer[sizeof (uint32_t)],
              &buffer[sizeof (uint32_t) * 2],
+             (unsigned char*) &this->command_type);
+
+  std::copy (&buffer[sizeof (uint32_t) * 2],
+             &buffer[sizeof (uint32_t) * 3],
              (unsigned char*) &this->error_type);
 }
 

@@ -214,6 +214,7 @@ struct Command
     virtual std::vector<unsigned char> serialize();
     virtual void deserialize(const std::vector<unsigned char>& buffer);
 
+    uint32_t stream;       /**< Associated stream number */
     uint32_t command_type; /**< CommandType */
     uint32_t error_type;   /**< ErrorType */
 };
