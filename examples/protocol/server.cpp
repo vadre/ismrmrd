@@ -417,7 +417,34 @@ void queue_xml_header_msg
 
 /*******************************************************************************
  ******************************************************************************/
-void process_image_recon_request (MSG_STRUCT_QUEUE& in_msg, MSG_QUEUE out_mq)
+void process_received_data
+(
+  ICPRECEIVEDDATA::ReceivedData& in_data,
+  MSG_QUEUE                      out_mq
+)
+{
+  bool                 not_done = true;
+  ISMRMRD::CommandType cmd;
+  uint32_t             stream;
+  while (in_data.getCommand (cmd, stream))
+  {
+    switch (cmd)
+    {
+      case ISMRMRD::ISMRMRD_COMMAND_IMAGE_RECONSTRUCTION:
+        process_image_recon_request (in_data, stream, out_mq);
+        break;
+      default:
+        // throw an error
+        std::cout << "No match for the command " << cmd << std::endl;
+        break;
+    }
+  }
+}
+/*******************************************************************************
+ ******************************************************************************/
+void process_image_recon_request (ICPRECEIVEDDATA::ReceivedData& in_data,
+                                  uint32_t&                      stream
+                                  MSG_QUEUE                      out_mq)
 {
   MESSAGE_STRUCT    msg_struct;
   ISMRMRD::Command  cmd;
@@ -601,7 +628,7 @@ void read_socket
   MSG_QUEUE        out_mq;
   std::thread writer (write_socket, sock, out_mq, id);
 
-  MSG_STRUCT_QUEUE in_msg (new std::queue<MESSAGE_STRUCT>);
+  ICPRECEIVEDDATA::ReceivedData in_data (new ICPRECEIVEDDATA::ReceivedData);
 
   // Receive and authenticate the Handshake
   ISMRMRD::Handshake handshake;
@@ -639,24 +666,42 @@ void read_socket
     if (msg_struct.ehdr.entity_type == ISMRMRD::ISMRMRD_COMMAND)
     {
       ISMRMRD::Command cmd;
+      cmd.deserialize (msg_struct.data);
+
+      in_data.addCommand (msg_struct.ehdr, cmd);
+
+      if (cmd.command_type == ISMRMRD::ISMRMRD_COMMAND_STOP_FROM_CLIENT)
+      {
+        done = true;
+        // TODO: Specific processing at the end of communication
+        std::cout << "RTeceived the STOP command from client" << std::endl;
+      }
     }
     else if (msg_struct.ehdr.entity_type == ISMRMRD::ISMRMRD_ERROR)
     {
+      // TODO: Error specific processing
+      // If needed - add the error to the Received data
     }
     else if (msg_struct.ehdr.entity_type == ISMRMRD::ISMRMRD_XML_HEADER)
     {
+      // TODO: XML Header specific processing here
+      in_data->addToStream (msg_struct.ehdr, msg_struct.data);
     }
     else if (msg_struct.ehdr.entity_type == ISMRMRD::ISMRMRD_MRACQUISITION)
     {
+      in_data->addToStream (msg_struct.ehdr, msg_struct.data);
     }
     else if (msg_struct.ehdr.entity_type == ISMRMRD::ISMRMRD_WAVEFORM)
     {
+      in_data->addToStream (msg_struct.ehdr, msg_struct.data);
     }
     else if (msg_struct.ehdr.entity_type == ISMRMRD::ISMRMRD_IMAGE)
     {
+      in_data->addToStream (msg_struct.ehdr, msg_struct.data);
     }
     else if (msg_struct.ehdr.entity_type == ISMRMRD::ISMRMRD_BLOB)
     {
+      in_data->addToStream (msg_struct.ehdr, msg_struct.data);
     }
     else
     {
@@ -667,25 +712,8 @@ void read_socket
     }
   }
 
+  process_received_data (in_data, out_mq);
 
-  printf ("About to receive command\n");
-  ISMRMRD::CommandType cmd_type;
-  receive_command (sock, in_msg, cmd_type);
-
-  if (cmd_type != ISMRMRD::ISMRMRD_COMMAND_IMAGE_RECONSTRUCTION)
-  {
-    printf ("Received unexpected command\n");
-    // Probably need to let the client know that the expected operation can't be executed
-    std::cout << "The use case for this command does not exist, the received data is discarded." << std::endl;
-    writer.join();
-    return;
-  }
-  printf ("Received command, about to receive data\n");
-
-  receive_image_recon_data (sock, in_msg);
-
-  printf ("About to receive the recon request command\n");
-  process_image_recon_request (in_msg, out_mq);
 
   printf ("reader is done, waiting for writer to join\n");
   writer.join();
@@ -693,47 +721,6 @@ void read_socket
 
   return;
 
-  /*
-  try
-  {
-    for (;;)
-    {
-      char data[max_length];
-
-      boost::system::error_code error;
-      size_t length = sock->read_some (boost::asio::buffer (data), error);
-
-      messages->push (std::string (data));
-
-      std::cout << "Reader (" << id << ") received: [" << data << "]" << std::endl;
-      //std::cout.write (data, length);
-
-      if (!std::strncmp (data, "Client Command Stop", std::strlen(data)))
-      {
-        std::cout << "Reader (" << id << ") received the Stop command, stopping reading\n";
-        break;
-      }
-
-      if (error == boost::asio::error::eof)
-      {
-        std::cout << "Reader (" << id << "): Num bytes received = " << length << std::endl;
-        std::cout << "Reader (" << id << "): Client disconnected, closing socket and exiting\n";
-        break; // Connection closed cleanly by peer.
-      }
-      else if (error)
-      {
-        throw boost::system::system_error (error); // Some other error.
-      }
-
-    }
-
-    writer.join();
-  }
-  catch (std::exception& e)
-  {
-    std::cerr << "Reader (" << id << "): Exception: " << e.what() << "\n";
-  }
-  */
 }
 
 
