@@ -22,17 +22,10 @@ namespace ICPRECEIVEDDATA
 struct icpStream
 {
   icpStream (ISMRMRD::EntityHeader,
-             ISMRMRD::CommandType,
-             ISMRMRD::ErrorType,
              bool complete);
 
   icpStream& operator = (const icpStream &other);
 
-
-  // Potentially multiple commands and/or errors may be
-  // associated with a stream.
-  std::queue<ISMRMRD::CommandType>         commands;
-  std::queue<ISMRMRD::ErrorType>           errors;
   ISMRMRD::EntityHeader                    entity_header;
   std::queue<std::vector<unsigned char> >  data;
   // Every new stream is created with the complete flag
@@ -62,8 +55,8 @@ public:
 
   void addToStream (ISMRMRD::EntityHeader hdr);
 
-  bool getCommand  (ISMRMRD::Command& command,
-                    uint32_t&         stream);
+  bool getCommand  (ISMRMRD::CommandType& command,
+                    uint32_t&             stream);
 
 protected:
 

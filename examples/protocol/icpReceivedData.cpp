@@ -157,14 +157,32 @@ namespace ICPRECEIVEDDATA
    ****************************************************************************/
   void ReceivedData::addToStream
   (
-    uint32_t           stream,
-    ISMRMRD::EntityType,
-                             ISMRMRD::StorageType  stor,
-    uint32_t           size,
+    ISMRMRD::EntityType        hdr,
     std::vector<unsigned char> data
   )
   {
+    checkStreamExist (hdr.stream, hdr.entity_type, hdr.storage_type);
+    streams.at (hdr.stream).data.push (data);
+    // TODO: Check against the stream description in the XML Header if this
+    //       stream is complete and ready for processing. If so - process and
+    //       then delete the stream, or possibly mark the stream as processed.
   }
+
+  /*****************************************************************************
+   ****************************************************************************/
+  bool ReceivedData::getCommand
+  (
+    ISMRMRD::CommandType& cmd,
+    uint32_t&             stream
+  )
+  {
+    bool more_to_process = true;
+
+    
+
+    return more_to_process;
+  }
+
 
 
 } /* namespace ICPRECEIVEDDATA */

@@ -684,7 +684,10 @@ void read_socket
     }
     else if (msg_struct.ehdr.entity_type == ISMRMRD::ISMRMRD_XML_HEADER)
     {
-      // TODO: XML Header specific processing here
+      // TODO: XML Header specific processing here...
+      //       This may include starting monitoring streams for completeness
+      //       and as streams are complete, calling the processing routinesi
+      //       or threads.
       in_data->addToStream (msg_struct.ehdr, msg_struct.data);
     }
     else if (msg_struct.ehdr.entity_type == ISMRMRD::ISMRMRD_MRACQUISITION)
@@ -712,6 +715,11 @@ void read_socket
     }
   }
 
+  // Process the streams of received data that have not been 
+  // processed yet. At this point in development all data is
+  // processed here, but the plan is to monitor the streams of
+  // data using the streams description in the XML header, and as
+  // streams are getting complete - process them immediatelly.
   process_received_data (in_data, out_mq);
 
 

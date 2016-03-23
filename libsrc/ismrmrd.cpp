@@ -1556,21 +1556,36 @@ void Handshake::deserialize(const std::vector<unsigned char>& buffer)
 
 std::vector<unsigned char> Command::serialize()
 {
-  size_t bytes = sizeof (uint32_t) * 3;
+  size_t bytes = (this->num_streams + 4) * sizeof (uint32_t) +
+                 this->config_size;
   std::vector<unsigned char> buffer;
   buffer.reserve (bytes);
 
-  std::copy ((unsigned char*) &this->stream,
-             (unsigned char*) &this->stream + sizeof (uint32_t),
+  std::copy ((unsigned char*) &this->command_id,
+             (unsigned char*) &this->command_id + sizeof (uint32_t),
              std::back_inserter (buffer));
 
   std::copy ((unsigned char*) &this->command_type,
              (unsigned char*) &this->command_type + sizeof (uint32_t),
              std::back_inserter (buffer));
 
-  std::copy ((unsigned char*) &this->error_type,
-             (unsigned char*) &this->error_type + sizeof (uint32_t),
+  std::copy ((unsigned char*) &this->num_streams,
+             (unsigned char*) &this->num_streams + sizeof (uint32_t),
              std::back_inserter (buffer));
+
+  std::copy ((unsigned char*) &this->streams,
+             (unsigned char*) &this->streams +
+               (this->num_streams * sizeof (uint32_t)),
+             std::back_inserter (buffer));
+
+  std::copy ((unsigned char*) &this->config_size,
+             (unsigned char*) &this->config_size + sizeof (uint32_t),
+             std::back_inserter (buffer));
+
+  std::copy ((unsigned char*) &this->config_buf,
+             (unsigned char*) &this->config_buf + this->config_size,
+             std::back_inserter (buffer));
+
 
   if (buffer.size() != bytes)
   {
@@ -1593,7 +1608,7 @@ void Command::deserialize (const std::vector<unsigned char>& buffer)
 
   std::copy (&buffer[0],
              &buffer[sizeof (uint32_t)],
-             (unsigned char*) &this->stream);
+             (unsigned char*) &this->command_id);
 
   std::copy (&buffer[sizeof (uint32_t)],
              &buffer[sizeof (uint32_t) * 2],
@@ -1601,7 +1616,26 @@ void Command::deserialize (const std::vector<unsigned char>& buffer)
 
   std::copy (&buffer[sizeof (uint32_t) * 2],
              &buffer[sizeof (uint32_t) * 3],
-             (unsigned char*) &this->error_type);
+             (unsigned char*) &this->num_streams);
+
+  int      ii;
+  for (ii = 0; ii < this->num_streams; ii++)
+  {
+    uint32_t temp;
+    std::copy (&buffer[sizeof (uint32_t) * (3 + ii)],
+               &buffer[sizeof (uint32_t) * (4 + ii)],
+               (unsigned char*) &temp);
+    this->streams[ii] = temp;
+  }
+
+  std::copy (&buffer[sizeof (uint32_t) * (3 + ii)],
+             &buffer[sizeof (uint32_t) * (4 + ii)],
+             (unsigned char*) &this->config_size);
+
+  this->config_buf = std::vector<unsigned char>
+                       (&buffer[sizeof (uint32_t) * (4 + ii)], 
+                        &buffer[sizeof (uint32_t) * (4 + ii) +
+                          this->config_size]);
 }
 
 

@@ -214,9 +214,12 @@ struct Command
     virtual std::vector<unsigned char> serialize();
     virtual void deserialize(const std::vector<unsigned char>& buffer);
 
-    uint32_t stream;       /**< Associated stream number */
-    uint32_t command_type; /**< CommandType */
-    uint32_t error_type;   /**< ErrorType */
+    uint32_t command_id;   /** ID number used to refer to the command */
+    uint32_t command_type; /**< CommandType maps to CommandType enum  */
+    uint32_t num_streams;  /** Number of streams associated with this command */
+    std::vector<uint32_t> streams; /**< Associated stream numbers */
+    uint32_t config_size   /**< Size of configuration buffer */
+    std::vector <unsigned char> config_buf; /**< Configuration buffer */
 };
 
 /** EncodingCounters keeps track of typical loop counters in MR experiment. */
