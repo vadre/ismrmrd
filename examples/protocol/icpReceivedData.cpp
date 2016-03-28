@@ -15,46 +15,81 @@ namespace ICPRECEIVEDDATA
    ****************************************************************************/
   icpStream::icpStream
   (
-    ISMRMRD::EntityType  ent = ISMRMRD::ISMRMRD_ERROR,
-    ISMRMRD::StorageType sto = ISMRMRD::ISMRMRD_CHAR,
-    ISMRMRD::CommandType cmd = ISMRMRD::ISMRMRD_COMMAND_NO_COMMAND,
-    ISMRMRD::ErrorType   err = ISMRMRD::ISMRMRD_ERROR_NO_ERROR,
-    bool                 complete = false) :
-    entity_type  (ent),
-    storage_type (sto),
-    this->complete (complete)
+    ISMRMRD::EntityHeader& hdr,
+    bool                   processed = false
+  )
   {
-    if (cmd != ISMRMRD::ISMRMRD_COMMAND_NO_COMMAND)
-    {
-      commands.push (cmd);
-    }
+    this->entity_header.version      = hdr.version;
+    this->entity_header.entity_type  = hdr.entity_type;
+    this->entity_header.storage_type = hdr.storage_type;
+    this->entity_header.stream       = hdr.stream;
 
-    if (err != ISMRMRD::ISMRMRD_ERROR_NO_ERROR)
-    {
-      errors.push (err);
-    }
+    this->processed                  = processed;
   }
 
   /*****************************************************************************
    ****************************************************************************/
-  icpStream& icpStream::operator= (const icpStream& o)
+  icpStream& icpStream::operator =
+  (
+    const icpStream& o
+  )
   {
     if (this == &o) return *this;
 
-    this->commands      = o.commands;
-    this->errors        = o.errors;
-    this->entity_type   = o.entity_type;
-    this->strorage_type = o.storage_type;
-    this->description   = o.description;
-    this->data          = o.data;
-    this->complete      = o.complete;
+    this->entity_header.version       = o.entity_header.version;
+    this->entity_header.entity_type   = o.entity_header.entity_type;
+    this->entity_header.storage_type  = o.entity_header.storage_type;
+    this->entity_header.stream        = o.entity_header.stream;
+    this->data                        = o.data;
+    this->processed                   = o.processed;
 
     return *this;
   }
 
   /*****************************************************************************
    ****************************************************************************/
-  ReceivedData::RecievedData ()
+  icpCommand::icpCommand ()
+  {
+    this->cmd         = ISMRMRD::ISMRMRD_COMMAND_NO_COMMAND;
+    this->in_progress = false;
+  }
+
+  /*****************************************************************************
+   ****************************************************************************/
+  icpCommand::icpCommand
+  (
+    ISMRMRD::CommandType       cmd,
+    std::vector<uint32_t>      streams,
+    std::vector<unsigned char> config,
+    bool                       in_progress
+  )
+  {
+    this->cmd         = cmd;
+    this->streams     = streams;
+    this->config      = config;
+    this->in_progress = in_progress;
+  }
+
+  /*****************************************************************************
+   ****************************************************************************/
+  icpCommand& icpCommand::operator =
+  (
+    const icpCommand& o
+  )
+  {
+    if (this == &o) return *this;
+
+    this->cmd           = o.cmd;
+    this->streams       = o.streams;
+    this->config        = o.config;
+    this->in_progress   = o.in_progress;
+
+    return *this;
+  }
+
+  /*****************************************************************************
+   ****************************************************************************/
+  ReceivedData::ReceivedData ()
   {
     memset (sender_name, 0, ISMRMRD::Max_Client_Name_Length);
     session_timestamp = 0;
@@ -62,7 +97,11 @@ namespace ICPRECEIVEDDATA
 
   /*****************************************************************************
    ****************************************************************************/
-  ReceivedData::RecievedData (char* name, uint64_t timestamp)
+  ReceivedData::ReceivedData
+  (
+    char* name,
+    uint64_t timestamp
+   )
   {
     ReceivedData::setSessionTimestamp (timestamp);
     ReceivedData::setSenderName (name);
@@ -70,7 +109,10 @@ namespace ICPRECEIVEDDATA
 
   /*****************************************************************************
    ****************************************************************************/
-  void ReceivedData::setSenderName (char* name)
+  void ReceivedData::setSenderName
+  (
+    char* name
+  )
   {
     memset (sender_name, 0, ISMRMRD::Max_Client_Name_Length);
     if (name)
@@ -86,19 +128,15 @@ namespace ICPRECEIVEDDATA
    ****************************************************************************/
   char* ReceivedData::getSenderName ()
   {
-    memset (sender_name, 0, ISMRMRD::Max_Client_Name_Length);
-    if (name)
-    {
-      size_t size = strlen (name);
-      size = (size > ISMRMRD::Max_Client_Name_Length) ?
-              ISMRMRD::Max_Client_Name_Length : size;
-      strncpy (sender_name, name, size);
-    }
+    return sender_name;
   }
 
   /*****************************************************************************
    ****************************************************************************/
-  void ReceivedData::setSessionTimestamp (uint64_t timestamp)
+  void ReceivedData::setSessionTimestamp
+  (
+    uint64_t timestamp
+  )
   {
     session_timestamp = timestamp;
   }
@@ -112,77 +150,114 @@ namespace ICPRECEIVEDDATA
 
   /*****************************************************************************
    ****************************************************************************/
-  void ReceivedData::checkStreamExist
+  void ReceivedData::ensureStreamExist
   (
-    uint32_t                stream,
-    ISMRMRD::EntityType     ent,
-    ISMRMRD::StorageType    stor
+    ISMRMRD::EntityHeader& hdr
   )
   {
-    if (streams.find (stream) == streams.end())
+    if (streams.find (hdr.stream) == streams.end())
     {
-      streams (stream) = icpStream tmp (ent, stor);
+      icpStream tmp (hdr, false);
+      //streams [hdr.stream] = tmp;
+      streams.insert (std::make_pair (hdr.stream, tmp));
     }
-    else
+    else if (streams.at (hdr.stream).entity_header.entity_type  !=
+               hdr.entity_type ||
+             streams.at (hdr.stream).entity_header.storage_type !=
+               hdr.storage_type)
     {
-      if ( streams.at (stream).entity_type != ent ||
-           streams.at (stream).storage_type != stor )
-      {
         // Throw an error - all messages of a stream must have the same
         // entity type and storage type
-        std::cout << "Entity and/or Storage types for stream " << stream <<
+        std::cout << "Entity and/or Storage types for stream " << hdr.stream <<
                      " differ" << std::endl;
-      }
     }
   }
 
   /*****************************************************************************
    ****************************************************************************/
-  void ReceivedData::addCommand (ISMRMRD::EntityHeader  hdr,
-                                 ISMRMRD::Command       cmd)
+  void ReceivedData::addCommand
+  (
+    ISMRMRD::EntityHeader  hdr,
+    ISMRMRD::Command       cmd
+  )
   {
-    checkStreamExist (hdr.stream, hdr.entity_type, hdr.storage_type);
-
-    streams.at (hdr.stream).commands.push (cmd.command_type);
-
-    if (cmd.error_type != ISMRMRD::ISMRMRD_ERROR_NO_ERROR)
+    if (commands.find (cmd.command_id) == commands.end())
     {
-      streams.at (hdr.stream).errors.push (cmd.error_type);
+      // Commands should have unique IDs - throw an error
+      std::cout << "Error!  Command ID " << cmd.command_id <<
+                   " already exists" << std::endl;
+      return;
     }
 
-    // Evaluate the command/error to see if an action is immediately needed.
+    icpCommand command ((ISMRMRD::CommandType)cmd.command_type,
+                        cmd.streams,
+                        cmd.config_buf,
+                        false);
+    commands [cmd.command_id] = command;
+    return;
+  }
+
+  /*****************************************************************************
+   ****************************************************************************/
+  void ReceivedData::addXMLHeader
+  (
+    ISMRMRD::EntityHeader      entity_header,
+    std::vector<unsigned char> data
+  )
+  {
+    ISMRMRD::deserialize ((const char*) &data[0], xml_header);
+    return;
   }
 
   /*****************************************************************************
    ****************************************************************************/
   void ReceivedData::addToStream
   (
-    ISMRMRD::EntityType        hdr,
+    ISMRMRD::EntityHeader      hdr,
     std::vector<unsigned char> data
   )
   {
-    checkStreamExist (hdr.stream, hdr.entity_type, hdr.storage_type);
+    ensureStreamExist (hdr);
     streams.at (hdr.stream).data.push (data);
-    // TODO: Check against the stream description in the XML Header if this
-    //       stream is complete and ready for processing. If so - process and
-    //       then delete the stream, or possibly mark the stream as processed.
+    // TODO:
+    // If feasible - process this transmission now, otherwise this stream
+    // will need to be processed later, for example when the client is done
+    // transmitting.
   }
 
   /*****************************************************************************
    ****************************************************************************/
   bool ReceivedData::getCommand
   (
-    ISMRMRD::CommandType& cmd,
-    uint32_t&             stream
+    ICPRECEIVEDDATA::icpCommand& cmd,
+    uint32_t&                    cmd_id
   )
   {
-    bool more_to_process = true;
+    bool more_to_process = false;
+    bool found           = false;
 
-    
+    // TODO: Get the first command that is not in progress ???
+
+    for (auto val : commands)
+    {
+      if (found)
+      {
+        if (val.second.in_progress)
+        {
+          more_to_process = true;
+          break;
+        }
+      }
+      else if (!val.second.in_progress)
+      {
+        cmd_id = val.first;
+        cmd    = val.second;
+        val.second.in_progress = true;
+        found = true;
+      }
+    }
 
     return more_to_process;
   }
-
-
 
 } /* namespace ICPRECEIVEDDATA */

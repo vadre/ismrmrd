@@ -72,24 +72,22 @@ void write_socket (socket_ptr sock, MSG_QUEUE mq, int id)
 {
   std::cout << "Writer thread (" << id << ") started\n" << std::flush;
 
-  MESSAGE_STRUCT msg;
+  MESSAGE msg;
   bool done = false;
   try
   {
     while (!done)
     {
-      if (!done && msgs->size() <= 0)
+      if (!done && (*mq).size() <= 0)
       {
         sleep (1);
         continue;
       }
       
-      printf ("About to write, message size = %ld\n", msgs->size());
-      msg = (*msgs).front();
-      (*msgs).pop();
-      std::cout << "msg.size = " << msg.size << std::endl;
-      std::cout << "msg.ehdr.entity_type = " << msg.ehdr.entity_type << std::endl;
-      std::cout << "msg.size = " << msg.size << std::endl;
+      printf ("About to write, message size = %ld\n", mq->size());
+      msg = (*mq).front();
+      (*mq).pop();
+      std::cout << "msg.size = " << (*msg).size() << std::endl;
       std::string data = std::to_string (msg.size);
       data.append ((char*) &(msg.ehdr.serialize())[0], sizeof (ISMRMRD::EntityHeader));
       data.append (msg.data);
@@ -423,15 +421,17 @@ void process_received_data
   MSG_QUEUE                      out_mq
 )
 {
+  // TODO:
+  // Re-write this routine to process a single transmission at a time
+  // rather than waiting for an entire dataset before starting processing.
   bool                 not_done = true;
-  ISMRMRD::CommandType cmd;
-  uint32_t             stream;
-  while (in_data.getCommand (cmd, stream))
+  ICPRECEIVEDDATA::Command command;
+  while (in_data.getCommand (command))
   {
-    switch (cmd)
+    switch (command.cmd)
     {
       case ISMRMRD::ISMRMRD_COMMAND_IMAGE_RECONSTRUCTION:
-        process_image_recon_request (in_data, stream, out_mq);
+        process_image_recon_request (in_data, command, out_mq);
         break;
       default:
         // throw an error
@@ -443,9 +443,13 @@ void process_received_data
 /*******************************************************************************
  ******************************************************************************/
 void process_image_recon_request (ICPRECEIVEDDATA::ReceivedData& in_data,
-                                  uint32_t&                      stream
+                                  ICPRECEIVEDDATA::Command&      command,
                                   MSG_QUEUE                      out_mq)
 {
+  // TODO:
+  // re-write this routine to process an acquisition at a time rather than
+  // waiting for an entire dataset before starting processing.
+
   MESSAGE_STRUCT    msg_struct;
   ISMRMRD::Command  cmd;
 
@@ -663,74 +667,61 @@ void read_socket
     MSG_STRUCT msg_struct;
     receive_message (sock, msg_struct);
 
-    if (msg_struct.ehdr.entity_type == ISMRMRD::ISMRMRD_COMMAND)
+    switch (msg_struct.ehdr.entity_type)
     {
-      ISMRMRD::Command cmd;
-      cmd.deserialize (msg_struct.data);
+      case ISMRMRD::ISMRMRD_COMMAND:
 
-      in_data.addCommand (msg_struct.ehdr, cmd);
+        ISMRMRD::Command cmd;
+        cmd.deserialize (msg_struct.data);
 
-      if (cmd.command_type == ISMRMRD::ISMRMRD_COMMAND_STOP_FROM_CLIENT)
-      {
-        done = true;
-        // TODO: Specific processing at the end of communication
-        std::cout << "RTeceived the STOP command from client" << std::endl;
-      }
-    }
-    else if (msg_struct.ehdr.entity_type == ISMRMRD::ISMRMRD_ERROR)
-    {
-      // TODO: Error specific processing
-      // If needed - add the error to the Received data
-    }
-    else if (msg_struct.ehdr.entity_type == ISMRMRD::ISMRMRD_XML_HEADER)
-    {
-      // TODO: XML Header specific processing here...
-      //       This may include starting monitoring streams for completeness
-      //       and as streams are complete, calling the processing routinesi
-      //       or threads.
-      in_data->addToStream (msg_struct.ehdr, msg_struct.data);
-    }
-    else if (msg_struct.ehdr.entity_type == ISMRMRD::ISMRMRD_MRACQUISITION)
-    {
-      in_data->addToStream (msg_struct.ehdr, msg_struct.data);
-    }
-    else if (msg_struct.ehdr.entity_type == ISMRMRD::ISMRMRD_WAVEFORM)
-    {
-      in_data->addToStream (msg_struct.ehdr, msg_struct.data);
-    }
-    else if (msg_struct.ehdr.entity_type == ISMRMRD::ISMRMRD_IMAGE)
-    {
-      in_data->addToStream (msg_struct.ehdr, msg_struct.data);
-    }
-    else if (msg_struct.ehdr.entity_type == ISMRMRD::ISMRMRD_BLOB)
-    {
-      in_data->addToStream (msg_struct.ehdr, msg_struct.data);
-    }
-    else
-    {
-      // Unexpected entity type. Report and continue processing
-      std::cout << "Warning! unexpected Entity Type received: " <<
-                   msg_struct.ehdr.entity_type << std::endl;
-      continue;
-    }
-  }
+        in_data.addCommand (msg_struct.ehdr, cmd);
 
-  // Process the streams of received data that have not been 
-  // processed yet. At this point in development all data is
-  // processed here, but the plan is to monitor the streams of
-  // data using the streams description in the XML header, and as
-  // streams are getting complete - process them immediatelly.
-  process_received_data (in_data, out_mq);
+        if (cmd.command_type == ISMRMRD::ISMRMRD_COMMAND_STOP_FROM_CLIENT)
+        {
+          // TODO: Specific processing at the end of communication...
+          done = true;
+          std::cout << "Received the STOP command from client" << std::endl;
+          // Process any commands that were not finished or processed yet
+          process_received_data (in_data, out_mq);
+        }
+        break;
 
+      case ISMRMRD::ISMRMRD_ERROR:
+
+        // TODO: Error specific processing here...
+        // If needed - add this error to the Received data
+        break;
+
+      case ISMRMRD::ISMRMRD_XML_HEADER:
+
+        // TODO: XML Header specific processing here...
+        in_data->addXMLHeader (msg_struct.ehdr, msg_struct.data);
+        break;
+
+      case ISMRMRD::ISMRMRD_MRACQUISITION:
+      case ISMRMRD::ISMRMRD_WAVEFORM:
+      case ISMRMRD::ISMRMRD_IMAGE:
+      case ISMRMRD::ISMRMRD_BLOB:
+
+        in_data->addToStream (msg_struct.ehdr, msg_struct.data);
+        break;
+
+      default:
+
+        // Unexpected entity type. Report and continue processing
+        std::cout << "Warning! unexpected Entity Type received: " <<
+                     msg_struct.ehdr.entity_type << std::endl;
+        break;
+
+    } // switch (msg_struct.ehdr.entity_type)
+  } // while (!done)
 
   printf ("reader is done, waiting for writer to join\n");
   writer.join();
   printf ("writer joined, reader exiting\n");
 
   return;
-
 }
-
 
 /*******************************************************************************
  ******************************************************************************/

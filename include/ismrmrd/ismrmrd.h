@@ -218,7 +218,7 @@ struct Command
     uint32_t command_type; /**< CommandType maps to CommandType enum  */
     uint32_t num_streams;  /** Number of streams associated with this command */
     std::vector<uint32_t> streams; /**< Associated stream numbers */
-    uint32_t config_size   /**< Size of configuration buffer */
+    uint32_t config_size;  /**< Size of configuration buffer */
     std::vector <unsigned char> config_buf; /**< Configuration buffer */
 };
 

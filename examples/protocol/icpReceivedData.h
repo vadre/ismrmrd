@@ -14,26 +14,39 @@
 
 #include <complex>
 #include <vector>
+#include <queue>
+#include <map>
 #include "ismrmrd/ismrmrd.h"
+#include "ismrmrd/xml.h"
 
 namespace ICPRECEIVEDDATA
 {
 
 struct icpStream
 {
-  icpStream (ISMRMRD::EntityHeader,
-             bool complete);
-
+  icpStream (ISMRMRD::EntityHeader& hdr, bool complete);
   icpStream& operator = (const icpStream &other);
 
+  // TODO: do we need to include the label field from the struct stream
+  //       defined in the xml.h ?
   ISMRMRD::EntityHeader                    entity_header;
   std::queue<std::vector<unsigned char> >  data;
-  // Every new stream is created with the complete flag
-  // initialized to false. Determination whether a parti-
-  // cular stream is made later using the data-specific
-  // criteria. In some cases a strem can be determined
-  // complete when the STOP/DONE command is received.
-  bool                                     complete;
+  bool                                     processed;
+};
+
+struct icpCommand
+{
+  icpCommand ();
+  icpCommand (ISMRMRD::CommandType        cmd,
+              std::vector<uint32_t>       streams,
+              std::vector<unsigned char>  config,
+              bool                        in_progress);
+  icpCommand& operator = (const icpCommand& other);
+
+  ISMRMRD::CommandType         cmd;
+  std::vector<uint32_t>        streams;
+  std::vector<unsigned char>   config;
+  bool                         in_progress;
 };
 
 
@@ -41,8 +54,8 @@ class ReceivedData
 {
 public:
 
-  RecievedData ();
-  RecievedData (char* name, uint64_t timestamp = 0);
+  ReceivedData ();
+  ReceivedData (char* name, uint64_t timestamp = 0);
 
   void  setSenderName (char* name);
   char* getSenderName();
@@ -53,21 +66,25 @@ public:
   void addCommand (ISMRMRD::EntityHeader  header,
                    ISMRMRD::Command       command);
 
-  void addToStream (ISMRMRD::EntityHeader hdr);
+  void addXMLHeader (ISMRMRD::EntityHeader      entity_header,
+                     std::vector<unsigned char> data);
 
-  bool getCommand  (ISMRMRD::CommandType& command,
-                    uint32_t&             stream);
+  void addToStream (ISMRMRD::EntityHeader      hdr,
+                    std::vector<unsigned char> data);
+
+  bool getCommand  (ICPRECEIVEDDATA::icpCommand& command,
+                    uint32_t&                    cmd_id);
 
 protected:
 
-  uint32_t checkStreamExist (uint32_t stream,
-                             ISMRMRD::EntityType,
-                             ISMRMRD::StorageType);
+  void ensureStreamExist (ISMRMRD::EntityHeader& hdr);
 
   char      sender_name[ISMRMRD::Max_Client_Name_Length];
   uint64_t  session_timestamp;
 
+  ISMRMRD::IsmrmrdHeader         xml_header;
   std::map<uint32_t, icpStream>  streams;
+  std::map<uint32_t, icpCommand> commands;
 
   
 }; /* class ReceivedData */

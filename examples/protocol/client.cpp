@@ -277,7 +277,6 @@ void queue_command_string (ISMRMRD::CommandType cmd_type, msg_queue mq)
 
   ISMRMRD::Command cmd;
   cmd.command_type = cmd_type;
-  cmd.error_type   = ISMRMRD::ISMRMRD_ERROR_NO_ERROR;
   std::vector<unsigned char> command = cmd.serialize();
   printf ("command size = %ld, sizeof = %ld\n", command.size(), sizeof (command));
 
