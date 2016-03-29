@@ -63,8 +63,8 @@ public:
   void     setSessionTimestamp (uint64_t timestamp);
   uint64_t getSessionTimestamp ();
 
-  void addCommand (ISMRMRD::EntityHeader  header,
-                   ISMRMRD::Command       command);
+  //void addCommand (ISMRMRD::EntityHeader  header,
+                   //ISMRMRD::Command       command);
 
   void addXMLHeader (ISMRMRD::EntityHeader      entity_header,
                      std::vector<unsigned char> data);
@@ -72,8 +72,9 @@ public:
   void addToStream (ISMRMRD::EntityHeader      hdr,
                     std::vector<unsigned char> data);
 
-  bool getCommand  (ICPRECEIVEDDATA::icpCommand& command,
-                    uint32_t&                    cmd_id);
+  //bool getCommand  (ICPRECEIVEDDATA::icpCommand& command,
+                    //uint32_t&                    cmd_id);
+  void setClientDone();
 
 protected:
 
@@ -81,6 +82,7 @@ protected:
 
   char      sender_name[ISMRMRD::Max_Client_Name_Length];
   uint64_t  session_timestamp;
+  bool      client_done;
 
   ISMRMRD::IsmrmrdHeader         xml_header;
   std::map<uint32_t, icpStream>  streams;
