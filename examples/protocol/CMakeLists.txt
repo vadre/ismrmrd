@@ -12,6 +12,7 @@ set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 include_directories(${CMAKE_BINARY_DIR}/include ${CMAKE_SOURCE_DIR}/include)
 
 add_library(icpReceivedData icpReceivedData.cpp)
+install(TARGETS icpReceivedData DESTINATION lib)
 
 add_executable(ismrmrd_protocol_demo main.cpp)
 target_link_libraries(ismrmrd_protocol_demo ismrmrd ${Boost_LIBRARIES})
@@ -22,5 +23,5 @@ target_link_libraries(icpClient ismrmrd ${Boost_LIBRARIES} )
 install(TARGETS icpClient DESTINATION bin)
 
 add_executable(icpServer server.cpp)
-target_link_libraries(icpServer ismrmrd ${Boost_LIBRARIES} ${FFTW3_LIBRARIES} icpReceiveData )
+target_link_libraries(icpServer ismrmrd ${Boost_LIBRARIES} ${FFTW3_LIBRARIES} icpReceivedData )
 install(TARGETS icpServer DESTINATION bin)
