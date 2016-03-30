@@ -93,6 +93,7 @@ namespace ICPRECEIVEDDATA
   {
     memset (sender_name, 0, ISMRMRD::Max_Client_Name_Length);
     session_timestamp = 0;
+    respondent_done   = false;
   }
 
   /*****************************************************************************
@@ -105,6 +106,7 @@ namespace ICPRECEIVEDDATA
   {
     ReceivedData::setSessionTimestamp (timestamp);
     ReceivedData::setSenderName (name);
+    respondent_done   = false;
   }
 
   /*****************************************************************************
@@ -166,35 +168,25 @@ namespace ICPRECEIVEDDATA
              streams.at (hdr.stream).entity_header.storage_type !=
                hdr.storage_type)
     {
-        // Throw an error - all messages of a stream must have the same
-        // entity type and storage type
-        std::cout << "Entity and/or Storage types for stream " << hdr.stream <<
-                     " differ" << std::endl;
+      // TODO: Throw an error - all messages of a stream must have the same
+      //       entity type and storage type
+      std::cout << "Entity and/or Storage types for stream " << hdr.stream <<
+                   " differ" << std::endl;
     }
   }
 
   /*****************************************************************************
    ****************************************************************************/
-  void ReceivedData::addCommand
-  (
-    ISMRMRD::EntityHeader  hdr,
-    ISMRMRD::Command       cmd
-  )
+  void ReceivedData::setRespondentDone()
   {
-    if (commands.find (cmd.command_id) == commands.end())
-    {
-      // Commands should have unique IDs - throw an error
-      std::cout << "Error!  Command ID " << cmd.command_id <<
-                   " already exists" << std::endl;
-      return;
-    }
+    respondent_done = true;
+  }
 
-    icpCommand command ((ISMRMRD::CommandType)cmd.command_type,
-                        cmd.streams,
-                        cmd.config_buf,
-                        false);
-    commands [cmd.command_id] = command;
-    return;
+  /*****************************************************************************
+   ****************************************************************************/
+  bool ReceivedData::isRespondentDone()
+  {
+    return respondent_done;
   }
 
   /*****************************************************************************
@@ -211,6 +203,13 @@ namespace ICPRECEIVEDDATA
 
   /*****************************************************************************
    ****************************************************************************/
+  ISMRMRD::IsmrmrdHeader ReceivedData::getXMLHeader()
+  {
+    return xml_header;
+  }
+
+  /*****************************************************************************
+   ****************************************************************************/
   void ReceivedData::addToStream
   (
     ISMRMRD::EntityHeader      hdr,
@@ -219,45 +218,27 @@ namespace ICPRECEIVEDDATA
   {
     ensureStreamExist (hdr);
     streams.at (hdr.stream).data.push (data);
-    // TODO:
-    // If feasible - process this transmission now, otherwise this stream
-    // will need to be processed later, for example when the client is done
-    // transmitting.
   }
 
   /*****************************************************************************
    ****************************************************************************/
-  bool ReceivedData::getCommand
-  (
-    ICPRECEIVEDDATA::icpCommand& cmd,
-    uint32_t&                    cmd_id
-  )
+  icpStream ReceivedData::ExtractFromStream (uint32_t stream)
   {
-    bool more_to_process = false;
-    bool found           = false;
+    icpStream tmp = streams.at (stream);
 
-    // TODO: Get the first command that is not in progress ???
-
-    for (auto val : commands)
+    while (streams.at (stream).data.size() > 0)
     {
-      if (found)
-      {
-        if (val.second.in_progress)
-        {
-          more_to_process = true;
-          break;
-        }
-      }
-      else if (!val.second.in_progress)
-      {
-        cmd_id = val.first;
-        cmd    = val.second;
-        val.second.in_progress = true;
-        found = true;
-      }
+      streams.at (stream).data.pop();
     }
 
-    return more_to_process;
+    return tmp;
+  }
+
+  /*****************************************************************************
+   ****************************************************************************/
+  void ReceivedData::deleteStream (uint32_t stream)
+  {
+    streams.erase (stream);
   }
 
 } /* namespace ICPRECEIVEDDATA */

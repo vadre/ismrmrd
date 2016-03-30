@@ -75,7 +75,7 @@ void circshift(T *out, const T *in, int xdim, int ydim, int xshift, int yshift)
 
 /*******************************************************************************
  ******************************************************************************/
-void write_socket (socket_ptr sock, OUTPUT_QUEUE oq, int id)
+void writeSocket (socket_ptr sock, OUTPUT_QUEUE oq, int id)
 {
   std::cout << "Writer thread (" << id << ") started\n" << std::flush;
 
@@ -108,7 +108,7 @@ void write_socket (socket_ptr sock, OUTPUT_QUEUE oq, int id)
 
 /*******************************************************************************
  ******************************************************************************/
-void queue_message
+void queueMessage
 (
   uint32_t                    size,
   std::vector<unsigned char>& ent,
@@ -147,7 +147,7 @@ void queue_message
 
 /*******************************************************************************
  ******************************************************************************/
-void queue_handshake_msg
+void queueHandshakeMsg
 (
   OUTPUT_QUEUE              oq,
   ISMRMRD::ConnectionStatus status,
@@ -173,12 +173,12 @@ void queue_handshake_msg
   std::vector<unsigned char> hand = handshake.serialize();
   printf ("hand size = %ld, sizeof = %ld\n", hand.size(), sizeof (hand));
 
-  queue_message (ent.size() + hand.size(), ent, hand, oq);
+  queueMessage (ent.size() + hand.size(), ent, hand, oq);
 }
 
 /*******************************************************************************
  ******************************************************************************/
-void queue_command_msg
+void queueCommandMsg
 (
   OUTPUT_QUEUE          oq,
   ISMRMRD::CommandType  cmd_type = ISMRMRD::ISMRMRD_COMMAND_NO_COMMAND
@@ -200,12 +200,12 @@ void queue_command_msg
   std::vector<unsigned char> command = cmd.serialize();
   printf ("command size = %ld, sizeof = %ld\n", command.size(), sizeof (command));
 
-  queue_message (ent.size() + command.size(), ent, command, oq);
+  queueMessage (ent.size() + command.size(), ent, command, oq);
 }
 
 /*******************************************************************************
  ******************************************************************************/
-void reject_connection
+void rejectConnection
 (
   OUTPUT_QUEUE               oq,
   uint64_t                   timestamp,
@@ -213,18 +213,18 @@ void reject_connection
   char*                      client_name
 )
 {
-  queue_handshake_msg (oq,
+  queueHandshakeMsg (oq,
                        status,
                        client_name,
                        timestamp);
 
-  queue_command_msg (oq,
+  queueCommandMsg (oq,
                      ISMRMRD::ISMRMRD_COMMAND_DONE_FROM_SERVER);
 }
 
 /*******************************************************************************
  ******************************************************************************/
-int receive_frame_info (socket_ptr sock, IN_MSG in_msg)
+int receiveFrameInfo (socket_ptr sock, IN_MSG in_msg)
 {
   boost::system::error_code  error;
   std::vector<unsigned char> buffer;
@@ -271,13 +271,13 @@ int receive_frame_info (socket_ptr sock, IN_MSG in_msg)
 
 /*******************************************************************************
  ******************************************************************************/
-void receive_handshake (socket_ptr            sock,
+void receiveHandshake (socket_ptr            sock,
                         ISMRMRD::Handshake&   handshake)
 {
   boost::system::error_code  error;
   IN_MSG in_msg;
 
-  receive_frame_info (sock, in_msg);
+  receiveFrameInfo (sock, in_msg);
 
   if ((*in_msg).ehdr.entity_type != ISMRMRD::ISMRMRD_HANDSHAKE)
   {
@@ -303,10 +303,10 @@ void receive_handshake (socket_ptr            sock,
 
 /*******************************************************************************
  ******************************************************************************/
-void receive_message (socket_ptr sock, IN_MSG in_msg)
+void receiveMessage (socket_ptr sock, IN_MSG in_msg)
 {
   boost::system::error_code  error;
-  receive_frame_info (sock, in_msg);
+  receiveFrameInfo (sock, in_msg);
 
   if ((*in_msg).data_size <= 0)
   {
@@ -331,7 +331,7 @@ void receive_message (socket_ptr sock, IN_MSG in_msg)
 
 /*******************************************************************************
  ******************************************************************************/
-ISMRMRD::ConnectionStatus authenticate_client (ISMRMRD::Handshake& handshake)
+ISMRMRD::ConnectionStatus authenticateClient (ISMRMRD::Handshake& handshake)
 {
   ISMRMRD::ConnectionStatus status = ISMRMRD::CONNECTION_ACCEPTED;
 
@@ -351,7 +351,7 @@ ISMRMRD::ConnectionStatus authenticate_client (ISMRMRD::Handshake& handshake)
 
 /*******************************************************************************
  ******************************************************************************/
-void queue_xml_header_msg
+void queueXMLHeaderMsg
 (
   std::vector<unsigned char> data,
   OUTPUT_QUEUE               oq
@@ -365,61 +365,24 @@ void queue_xml_header_msg
   std::vector<unsigned char> ent = e_hdr.serialize();
   printf ("ent size = %ld, sizeof = %ld\n", ent.size(), sizeof (ent));
 
-  queue_message (ent.size() + data.size(), ent, data, oq);
+  queueMessage (ent.size() + data.size(), ent, data, oq);
 }
 
 /*******************************************************************************
  ******************************************************************************/
-void process_image_recon_request (ICPRECEIVEDDATA::ReceivedData& in_data,
-                                  ICPRECEIVEDDATA::icpCommand&   command,
-                                  OUTPUT_QUEUE                   oq)
+void processImageReconRequest (ICPRECEIVEDDATA::ReceivedData& in_data,
+                               ISMRMRD::Command&              command,
+                               OUTPUT_QUEUE                   oq)
 {
-  // TODO:
-  // re-write this routine to process an acquisition at a time rather than
-  // waiting for an entire dataset before starting processing.
 
-  IN_MSG    in_msg;
-  ISMRMRD::Command  cmd;
-
-  in_msg = (*in_data).front();
-  (*in_msg).pop();
-
-  if (in_msg.ehdr.entity_type != ISMRMRD::ISMRMRD_COMMAND)
-  {
-    std::cout << "Error: Reconstruction request must start with a command" <<
-                 std::endl;
-    std::cout << "Entity: " <<
-                 (ISMRMRD::EntityType) in_msg.ehdr.entity_type << std::endl;
-
-    queue_command_msg (out_mq,
-                       ISMRMRD::ISMRMRD_COMMAND_DONE_FROM_SERVER,
-                       ISMRMRD::ISMRMRD_ERROR_INPUT_DATA_ERROR);
-    return;
-  }
-
-  cmd.deserialize (std::vector<unsigned char>(in_msg.data.begin(),
-                                              in_msg.data.end()));
-
-  if (cmd.command_type != ISMRMRD::ISMRMRD_COMMAND_IMAGE_RECONSTRUCTION)
-  {
-    std::cout << "Error: command type doesnt match the task" << std::endl;
-    std::cout << "This task: ISMRMRD_COMMAND_IMAGE_RECONSTRUCTION"  << std::endl;
-    std::cout << "Requested: " << (ISMRMRD::CommandType) cmd.command_type <<
-                 std::endl;
-
-    queue_command_msg (out_mq,
-                       ISMRMRD::ISMRMRD_COMMAND_DONE_FROM_SERVER,
-                       ISMRMRD::ISMRMRD_ERROR_INTERNAL_ERROR);
-    return;
-  }
-
-
-  // Now we expect the ISMRMRD XML Header
-  in_msg = (*in_msg).front();
-  (*in_msg).pop();
-
+  ISMRMRD::IsmrmrdHeader xml_hdr = in_data.getXMLHeader();
   // There is nothing to change in the xml header for this demo but send it back
-  queue_xml_header_msg ((*in_msg).data, out_mq);
+  std::stringstream str;
+  ISMRMRD::serialize (xml_hdr, str);
+
+  std::vector<unsigned char> xml_str;
+
+  queueXMLHeaderMsg ((*in_msg).data, out_mq);
 
   ISMRMRD::IsmrmrdHeader hdr;
   ISMRMRD::deserialize((*in_msg).data, hdr); // needs to be redone
@@ -475,7 +438,7 @@ void process_image_recon_request (ICPRECEIVEDDATA::ReceivedData& in_data,
     if (!tmp)
     {
       std::cout << "Error allocating temporary storage for FFTW" << std::endl;
-      queue_error_command (out_msg, ISMRMRD::ISMRMRD_ERROR_INTERNAL_ERROR);
+      queueErrorCommand (out_msg, ISMRMRD::ISMRMRD_ERROR_INTERNAL_ERROR);
       return;
     }
 
@@ -545,39 +508,10 @@ void process_image_recon_request (ICPRECEIVEDDATA::ReceivedData& in_data,
 
   return;
 }
-/*******************************************************************************
- ******************************************************************************/
-void process_received_data
-(
-  ICPRECEIVEDDATA::ReceivedData& in_data,
-  OUTPUT_QUEUE                   oq
-)
-{
-  // TODO:
-  // Re-write this routine to process a single transmission at a time
-  // rather than waiting for an entire dataset before starting processing.
-  //bool                 not_done = true;
-  ICPRECEIVEDDATA::icpCommand command;
-  uint32_t                    cmd_id;
-  while (in_data.getCommand (command, cmd_id))
-  {
-    switch (command.cmd)
-    {
-      case ISMRMRD::ISMRMRD_COMMAND_IMAGE_RECONSTRUCTION:
-        process_image_recon_request (in_data, command, oq);
-        break;
-      default:
-        // throw an error
-        std::cout << "No matching processing task for the command " <<
-                     command.cmd << std::endl;
-        break;
-    }
-  }
-}
 
 /*******************************************************************************
  ******************************************************************************/
-bool authenticate_client
+bool authenticateClient
 (
   socket_ptr          sock,
   OUTPUT_QUEUE        out_mq,
@@ -587,17 +521,17 @@ bool authenticate_client
   bool accepted = false;
 
   // Receive and authenticate the Handshake
-  receive_handshake (sock, handshake);
+  receiveHandshake (sock, handshake);
 
   ISMRMRD::ConnectionStatus conn_status;
 
   printf ("Autenticating client\n");
 
-  if ((conn_status = authenticate_client (handshake)) !=
+  if ((conn_status = authenticateClient (handshake)) !=
        ISMRMRD::CONNECTION_ACCEPTED)
   {
     printf ("Rejecting client\n");
-    reject_connection (out_mq,
+    rejectConnection (out_mq,
                        handshake.timestamp,
                        conn_status,
                        handshake.client_name);
@@ -605,9 +539,9 @@ bool authenticate_client
   else
   {
     printf ("About to queue handshake response\n");
-    queue_handshake_msg (out_mq, ISMRMRD::CONNECTION_ACCEPTED,
-                         handshake.client_name,
-                         handshake.timestamp);
+    queueHandshakeMsg (out_mq, ISMRMRD::CONNECTION_ACCEPTED,
+                       handshake.client_name,
+                       handshake.timestamp);
     accepted = true;
   }
 
@@ -616,59 +550,100 @@ bool authenticate_client
 
 /*******************************************************************************
  ******************************************************************************/
-bool process_command
+void processRemainingData
 (
-  ISMRMRD::Command              cmd,
   ICPRECEIVEDDATA::ReceivedData in_data,
-  OUTPUT_QUEUE                  out_mq
+  OUTPUT_QUEUE                  out_mq,
+  std::vector<std::thread>&     thread_v
 )
 {
-  bool done = false;
-  if (cmd.command_type == ISMRMRD::ISMRMRD_COMMAND_STOP_FROM_CLIENT)
-  {
-    done = true;
-    in_data.setClientDone();
-    std::cout << "Received the STOP command from client" << std::endl;
-    // Process data not associated with any of the received commands
-    processRemainingData (in_data, out_mq);
-  }
-  else
-  {
-    // Start command specific task in a new thread
-  }
+  // TODO:
 
-  return done;
+  // We are making an assumption here that any input data that was previously
+  // processed was then either deleted from the input data, or marked as
+  // processed.
+
+  // We will now look for any remaining input data that was not associated
+  // with any of the received commands and decide what should be done with it.
+  // For every processing action we decide to take we will spawn a new thread.
+  // If after all processing there is still some data that we don't know what
+  // to do with - report an error to the respondent and discard the data.
+  // And then return.
+
+  // TODO:
+  // Should consider calling this routine periodically so it may determine if
+  // there already is some input data not associated with any commands, that we
+  // can start processing immediatelly.
+
+  return;
 }
 
 /*******************************************************************************
  ******************************************************************************/
-void read_socket
+void processCommand
+(
+  ISMRMRD::Command              cmd,
+  ICPRECEIVEDDATA::ReceivedData in_data,
+  OUTPUT_QUEUE                  out_mq,
+  std::vector<std::thread>&     thread_v
+)
+{
+  switch (cmd.command_type)
+  {
+    case ISMRMRD::ISMRMRD_COMMAND_STOP_FROM_CLIENT:
+
+      in_data.setRespondentDone();
+      std::cout << "Received the STOP command from client" << std::endl;
+      // Process data not associated with any of the received commands
+      processRemainingData (in_data, out_mq, thread_v);
+      break;
+
+    case ISMRMRD::ISMRMRD_COMMAND_IMAGE_RECONSTRUCTION:
+
+      thread_v.push_back (std::thread (processImageReconRequest,
+                                       std::ref (in_data),
+                                       std::ref (cmd),
+                                       out_mq));
+      break;
+
+    default:
+
+      // throw an error
+      std::cout << "No matching processing task for the command " <<
+                   cmd.command_type << std::endl;
+      break;
+  }
+
+  return;
+}
+
+/*******************************************************************************
+ ******************************************************************************/
+void readSocket
 (
   socket_ptr sock,
   int        id
 )
 {
-  std::cout << "Reader thread (" << id << ") started\n" << std::flush;
-
   // Start the writer thread
   OUTPUT_QUEUE        out_mq;
-  std::thread writer (write_socket, sock, out_mq, id);
+  std::thread writer (writeSocket, sock, out_mq, id);
 
   ISMRMRD::Handshake handshake;
-  if (!authenticate_client (sock, out_mq, handshake))
+  if (!authenticateClient (sock, out_mq, handshake))
   {
     writer.join();
     return;
   }
 
-  // Keep reading messages until the STOP_FROM_CLIENT command is received
   ICPRECEIVEDDATA::ReceivedData in_data (handshake.client_name,
                                          handshake.timestamp);
-  bool done = false;
-  while (!done)
+  std::vector<std::thread> thread_v;
+  // Keep reading messages until respondents STOP/DONE command is received
+  while (!in_data.isRespondentDone())
   {
     IN_MSG in_msg;
-    receive_message (sock, in_msg);
+    receiveMessage (sock, in_msg);
     ISMRMRD::Command cmd;
 
     switch ((*in_msg).ehdr.entity_type)
@@ -676,14 +651,13 @@ void read_socket
       case ISMRMRD::ISMRMRD_COMMAND:
 
         cmd.deserialize ((*in_msg).data);
-        done = process_command (cmd, in_data, out_mq);
-        Here->// TODO: remove this: in_data.addCommand ((*in_msg).ehdr, cmd);
+        processCommand (cmd, in_data, out_mq, thread_v);
         break;
 
       case ISMRMRD::ISMRMRD_ERROR:
 
         // TODO: Error specific processing here...
-        // If needed - add this error to the Received data
+        // Consider adding to the Received data
         break;
 
       case ISMRMRD::ISMRMRD_XML_HEADER:
@@ -702,17 +676,22 @@ void read_socket
 
       default:
 
-        // Unexpected entity type. Report and continue processing
+        // TODO: Throw Unexpected entity type error.
         std::cout << "Warning! unexpected Entity Type received: " <<
                      (*in_msg).ehdr.entity_type << std::endl;
         break;
 
     } // switch ((*in_msg).ehdr.entity_type)
-  } // while (!done)
+  } // while (!in_data.isRespondentDone())
 
-  printf ("reader is done, waiting for writer to join\n");
+  printf ("Reader is done, waiting for processing threads to join\n");
+		for (int ii = 0; ii < thread_v.size(); ii++)
+  {
+    thread_v[ii].join();
+  }
+  printf ("Processors joined, now waiting for writer to join\n");
   writer.join();
-  printf ("writer joined, reader exiting\n");
+  printf ("Writer joined, reader exiting\n");
 
   return;
 }
@@ -744,7 +723,7 @@ int main
       a.accept (*sock);
       std::cout << "Accepted client (id " << id <<
                    "), starting communications...\n";
-      std::thread (read_socket, sock, id).detach();
+      std::thread (readSocket, sock, id).detach();
     }
   }
   catch (std::exception& e)
