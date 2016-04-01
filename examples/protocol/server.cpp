@@ -353,10 +353,13 @@ ISMRMRD::ConnectionStatus authenticateClient (ISMRMRD::Handshake& handshake)
  ******************************************************************************/
 void queueXMLHeaderMsg
 (
-  std::vector<unsigned char> data,
-  OUTPUT_QUEUE               oq
+  std::string    xml_string,
+  OUTPUT_QUEUE   oq
 )
 {
+  std::vector<unsigned char> data;
+  std::copy (xml_string.begin(), xml_string.end(), std::back_inserter (data));
+
   ISMRMRD::EntityHeader e_hdr;
   e_hdr.version = my_version;
   e_hdr.entity_type = ISMRMRD::ISMRMRD_XML_HEADER;
@@ -370,25 +373,55 @@ void queueXMLHeaderMsg
 
 /*******************************************************************************
  ******************************************************************************/
-void processImageReconRequest (ICPRECEIVEDDATA::ReceivedData& in_data,
-                               ISMRMRD::Command&              command,
-                               OUTPUT_QUEUE                   oq)
+bool getIcpStream
+(
+  ICPRECEIVEDDATA::ReceivedData&  in_data,
+  uint32_t                        stream_num,
+  icpStream&                      icp_stream
+)
+{
+  // Keep trying to get the requested stream for defined number of times with
+  // a defined waiting period of time between the tries. 
+
+  struct timespec   ts;
+
+  ts.tv_sec      = 0;
+  ts.tv_nsec     = 500000000; // half a second
+  bool success   = false;
+  int  num_tries = 240;       // Adds up to 2 min
+
+
+  for (int ii = 0; ii < num_tries && !success; ii++)
+  {
+    success = in_data.extractFromStream (stream_num, icp_stream);
+    if (!success)
+    {
+      nanosleep (&ts, NULL);
+    }
+  }
+
+  return success;
+}
+
+/*******************************************************************************
+ ******************************************************************************/
+void processImageReconRequest
+(
+  ICPRECEIVEDDATA::ReceivedData& in_data,
+  ISMRMRD::Command&              command,
+  OUTPUT_QUEUE                   oq
+)
 {
 
   ISMRMRD::IsmrmrdHeader xml_hdr = in_data.getXMLHeader();
   // There is nothing to change in the xml header for this demo but send it back
   std::stringstream str;
   ISMRMRD::serialize (xml_hdr, str);
+  queueXMLHeaderMsg (str.str(), oq);
 
-  std::vector<unsigned char> xml_str;
 
-  queueXMLHeaderMsg ((*in_msg).data, out_mq);
-
-  ISMRMRD::IsmrmrdHeader hdr;
-  ISMRMRD::deserialize((*in_msg).data, hdr); // needs to be redone
-
-  ISMRMRD::EncodingSpace e_space = hdr.encoding[0].encodedSpace;
-  ISMRMRD::EncodingSpace r_space = hdr.encoding[0].reconSpace;
+  ISMRMRD::EncodingSpace e_space = xml_hdr.encoding[0].encodedSpace;
+  ISMRMRD::EncodingSpace r_space = xml_hdr.encoding[0].reconSpace;
   uint16_t eX = e_space.matrixSize.x;
   uint16_t eY = e_space.matrixSize.y;
   //uint16_t eZ = e_space.matrixSize.z;
@@ -396,29 +429,64 @@ void processImageReconRequest (ICPRECEIVEDDATA::ReceivedData& in_data,
   uint16_t rY = r_space.matrixSize.y;
   uint16_t rZ = r_space.matrixSize.z;
   
-  // Get first acquisition to read the number of coils
-  in_msg = (*in_msg).front(); // Fix
-  (*in_msg).pop();
+  for (int ii = 0; ii < command.num_streams; ii++)
+  {
+    ICPRECEIVEDDATA::icpStream  icp_stream;
+    ISMRMRD::EntityType         e_type;
+    ISMRMRD::StorageType        s_type;
+    uint32_t                    stream_num = command.stream[ii];
+    uint16_t                    num_coils  = 0;
+    ISMRMRD::NDArray<std::complex<float> > buffer;
+    std::vector<size_t>         dims;
 
-  ISMRMRD::EntityType e_type =
-    (ISMRMRD::EntityType)((*in_msg).ehdr.entity_type);
-  ISMRMRD::StorageType e_type =
-    (ISMRMRD::StorageType)((*in_msg).ehdr.entity_type);
-  uint32_t stream = (*in_msg).ehdr.stream;
+    while (getIcpStream (in_data, stream_num, icp_stream))
+    {
+      e_type = (ISMRMRD::EntityType)  icp_stream.entity_header.entity_type;
+      s_type = (ISMRMRD::StorageType) icp_stream.entity_header.storage_type;
 
+      if (e_type != ISMRMRD::ISMRMRD_MRACQUISITION)
+      {
+        // TODO: Throw an error for unexpected entity type
+        std::cout << "Unexpected entity type: " < e_type << std::endl;
+      }
 
+      if (s_type != ISMRMRD::ISMRMRD_CXFLOAT &&
+          s_type != ISMRMRD::ISMRMRD_CXDOUBLE)
+      {
+        // TODO: Throw an error for unexpected storage type
+        std::cout << "Unexpected storage type: " < s_type << std::endl;
+      }
 
-  ISMRMRD::Acquisition<float> acq; // Look up the data type in the entity header
-  // Need to group the acquisitions by their stream numbers. Every stream will be
-  // reconstructed separately
-  acq.deserialize (std::vector<unsigned char>(msg.data.begin(), msg.data.end()));
-  uint16_t num_coils = acq.getActiveChannels();
+      if (num_coils == 0)
+      {
+        std::vector<unsigned char> data = icp_stream.data.front();
+        ISMRMRD::Acquisition<float> acq;
+        acq.deserialize (data);
+        num_coils = acq.getActiveChannels();
+        num_coils = (num_coils == 0) ? 1 : num_coils;
 
-  std::vector<size_t> dims;
-  dims.push_back (eX);
-  dims.push_back (eY);
-  dims.push_back (num_coils);
-  ISMRMRD::NDArray<std::complex<float> >buffer (dims);
+        dims.push_back (eX);
+        dims.push_back (eY);
+        dims.push_back (num_coils);
+        buffer.resize (dims);
+      }
+
+      for (int ii = 0; ii < icp_stream.data.size(); ii++)
+      {
+        std::vector<unsigned char> data = icp_stream.data.front();
+        icp_stream.data.pop();
+        ISMRMRD::Acquisition<float> acq;
+        acq.deserialize (data);
+
+        for (uint16_t coil = 0; coil < num_coils; coil++)
+        {
+          memcpy (&buffer.at(0, acq.getHead().idx.kspace_encode_step_1, coil),
+            &acq.at(0, coil), sizeof (std::complex<float>) * eX);
+        }
+      }
+    }
+  }
+
 
   for (uint16_t ii = 0;  msg.ehdr.entity_type == ISMRMRD::ISMRMRD_MRACQUISITION; ++ii)
   {

@@ -71,7 +71,8 @@ public:
   void addToStream (ISMRMRD::EntityHeader      hdr,
                     std::vector<unsigned char> data);
 
-  icpStream ExtractFromStream (uint32_t stream);
+  icpStream extractFromStream (uint32_t   stream_num,
+                               icpStream& icp_stream);
 
   void deleteStream (uint32_t stream);
 

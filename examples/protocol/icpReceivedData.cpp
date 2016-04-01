@@ -197,6 +197,7 @@ namespace ICPRECEIVEDDATA
     std::vector<unsigned char> data
   )
   {
+    // TODO: Needs synchronization
     ISMRMRD::deserialize ((const char*) &data[0], xml_header);
     return;
   }
@@ -205,6 +206,7 @@ namespace ICPRECEIVEDDATA
    ****************************************************************************/
   ISMRMRD::IsmrmrdHeader ReceivedData::getXMLHeader()
   {
+    // TODO: Needs synchronization
     return xml_header;
   }
 
@@ -216,22 +218,39 @@ namespace ICPRECEIVEDDATA
     std::vector<unsigned char> data
   )
   {
+    // TODO: Needs synchronization
     ensureStreamExist (hdr);
     streams.at (hdr.stream).data.push (data);
   }
 
   /*****************************************************************************
    ****************************************************************************/
-  icpStream ReceivedData::ExtractFromStream (uint32_t stream)
+  bool ReceivedData::extractFromStream
+  (
+    uint32_t    stream_num,
+    icpStream&  icp_stream
+  )
   {
-    icpStream tmp = streams.at (stream);
+    // TODO: Needs synchronization
 
-    while (streams.at (stream).data.size() > 0)
+    bool success = false;
+
+    if (streams.find (stream_num) != streams.end())
     {
-      streams.at (stream).data.pop();
+      icpStream tmp = streams.at (stream);
+
+      if (tmp.data.size() > 0)
+      {
+        icp_stream = tmp;
+        while (streams.at (stream).data.size() > 0)
+        {
+          streams.at (stream).data.pop();
+        }
+        success = true;
+      }
     }
 
-    return tmp;
+    return success;
   }
 
   /*****************************************************************************
