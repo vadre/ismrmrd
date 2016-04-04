@@ -1578,6 +1578,11 @@ std::vector<unsigned char> Command::serialize()
                (this->num_streams * sizeof (uint32_t)),
              std::back_inserter (buffer));
 
+  std::copy ((unsigned char*) &this->data_count,
+             (unsigned char*) &this->data_count +
+               (this->num_streams * sizeof (uint32_t)),
+             std::back_inserter (buffer));
+
   std::copy ((unsigned char*) &this->config_size,
              (unsigned char*) &this->config_size + sizeof (uint32_t),
              std::back_inserter (buffer));
@@ -1606,36 +1611,57 @@ void Command::deserialize (const std::vector<unsigned char>& buffer)
       ("Buffer size does not match the size of Command");
   }
 
-  std::copy (&buffer[0],
-             &buffer[sizeof (uint32_t)],
+  int left  = 0;                  // Offset to the begin byte in the buffer
+  int right = sizeof (uint32_t);  // Offset to the end byte in the buffer
+  std::copy (&buffer[left],
+             &buffer[right],
              (unsigned char*) &this->command_id);
 
-  std::copy (&buffer[sizeof (uint32_t)],
-             &buffer[sizeof (uint32_t) * 2],
+  left   = right;
+  right += sizeof (uint32_t);
+  std::copy (&buffer[left],
+             &buffer[right],
              (unsigned char*) &this->command_type);
 
-  std::copy (&buffer[sizeof (uint32_t) * 2],
-             &buffer[sizeof (uint32_t) * 3],
+  left   = right;
+  right += sizeof (uint32_t);
+  std::copy (&buffer[left],
+             &buffer[right],
              (unsigned char*) &this->num_streams);
 
   int      ii;
   for (ii = 0; ii < this->num_streams; ii++)
   {
+    left   = right;
+    right += sizeof (uint32_t);
     uint32_t temp;
-    std::copy (&buffer[sizeof (uint32_t) * (3 + ii)],
-               &buffer[sizeof (uint32_t) * (4 + ii)],
+    std::copy (&buffer[left],
+               &buffer[right],
                (unsigned char*) &temp);
     this->streams[ii] = temp;
   }
 
-  std::copy (&buffer[sizeof (uint32_t) * (3 + ii)],
-             &buffer[sizeof (uint32_t) * (4 + ii)],
+  for (ii = 0; ii < this->num_streams; ii++)
+  {
+    left   = right;
+    right += sizeof (uint32_t);
+    uint32_t temp;
+    std::copy (&buffer[left],
+               &buffer[right],
+               (unsigned char*) &temp);
+    this->data_count[ii] = temp;
+  }
+
+  left   = right;
+  right += sizeof (uint32_t);
+  std::copy (&buffer[left],
+             &buffer[right],
              (unsigned char*) &this->config_size);
 
+  left   = right;
+  right += this->config_size;
   this->config_buf = std::vector<unsigned char>
-                       (&buffer[sizeof (uint32_t) * (4 + ii)], 
-                        &buffer[sizeof (uint32_t) * (4 + ii) +
-                          this->config_size]);
+                       (&buffer[left], &buffer[right]);
 }
 
 
