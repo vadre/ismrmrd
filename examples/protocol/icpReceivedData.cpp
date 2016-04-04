@@ -13,6 +13,18 @@ namespace ICPRECEIVEDDATA
 {
   /*****************************************************************************
    ****************************************************************************/
+  icpStream::icpStream ()
+  {
+    this->entity_header.version      = 0;
+    this->entity_header.entity_type  = ISMRMRD::ISMRMRD_ERROR;
+    this->entity_header.storage_type = ISMRMRD::ISMRMRD_CHAR;
+    this->entity_header.stream       = 0;
+
+    this->processed                  = false;
+  }
+
+  /*****************************************************************************
+   ****************************************************************************/
   icpStream::icpStream
   (
     ISMRMRD::EntityHeader& hdr,
@@ -237,14 +249,14 @@ namespace ICPRECEIVEDDATA
 
     if (streams.find (stream_num) != streams.end())
     {
-      icpStream tmp = streams.at (stream);
+      icpStream tmp = streams.at (stream_num);
 
       if (tmp.data.size() > 0)
       {
         icp_stream = tmp;
-        while (streams.at (stream).data.size() > 0)
+        while (streams.at (stream_num).data.size() > 0)
         {
-          streams.at (stream).data.pop();
+          streams.at (stream_num).data.pop();
         }
         success = true;
       }

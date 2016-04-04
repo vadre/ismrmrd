@@ -24,6 +24,7 @@ namespace ICPRECEIVEDDATA
 
 struct icpStream
 {
+  icpStream ();
   icpStream (ISMRMRD::EntityHeader& hdr, bool complete);
   icpStream& operator = (const icpStream &other);
 
@@ -71,7 +72,7 @@ public:
   void addToStream (ISMRMRD::EntityHeader      hdr,
                     std::vector<unsigned char> data);
 
-  icpStream extractFromStream (uint32_t   stream_num,
+  bool extractFromStream (uint32_t   stream_num,
                                icpStream& icp_stream);
 
   void deleteStream (uint32_t stream);

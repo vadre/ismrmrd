@@ -377,7 +377,7 @@ bool getIcpStream
 (
   ICPRECEIVEDDATA::ReceivedData&  in_data,
   uint32_t                        stream_num,
-  icpStream&                      icp_stream
+  ICPRECEIVEDDATA::icpStream&     icp_stream
 )
 {
   // Keep trying to get the requested stream for defined number of times with
@@ -434,29 +434,50 @@ void processImageReconRequest
     ICPRECEIVEDDATA::icpStream  icp_stream;
     ISMRMRD::EntityType         e_type;
     ISMRMRD::StorageType        s_type;
-    uint32_t                    stream_num = command.stream[ii];
+    uint32_t                    stream_num = command.streams[ii];
     uint16_t                    num_coils  = 0;
     ISMRMRD::NDArray<std::complex<float> > buffer;
     std::vector<size_t>         dims;
+    uint32_t                    num_processed = 0;
 
-    while (getIcpStream (in_data, stream_num, icp_stream))
+    while (num_processed < command.data_count[ii])
     {
+      // Try to get a stream to process
+      if (!getIcpStream (in_data, stream_num, icp_stream))
+      {
+        if (in_data.isRespondentDone())
+        {
+          // Less data than expected was received before our respondent
+          // reported end of transmitting.
+          // TODO: Send an error to the respondent and discard the data
+          std::cout << "Error: Received less data than anticipated" << std::endl;
+          break;
+        }
+        // TODO: Rather than sleep could move on to the next stream number,
+        //       and then return to this one later.
+        sleep (5);  
+        continue;
+      }
+      // Verify that we are dealing with the correct type of data
       e_type = (ISMRMRD::EntityType)  icp_stream.entity_header.entity_type;
       s_type = (ISMRMRD::StorageType) icp_stream.entity_header.storage_type;
 
       if (e_type != ISMRMRD::ISMRMRD_MRACQUISITION)
       {
         // TODO: Throw an error for unexpected entity type
-        std::cout << "Unexpected entity type: " < e_type << std::endl;
+        std::cout << "Unexpected entity type: " << e_type << std::endl;
       }
 
       if (s_type != ISMRMRD::ISMRMRD_CXFLOAT &&
           s_type != ISMRMRD::ISMRMRD_CXDOUBLE)
       {
         // TODO: Throw an error for unexpected storage type
-        std::cout << "Unexpected storage type: " < s_type << std::endl;
+        std::cout << "Unexpected storage type: " << s_type << std::endl;
       }
 
+      // If number of coils is 0, then this is the first iteration of the loop
+      // while (getIcpStream (in_data, stream_num, icp_stream)). This is where
+      // we need to get the number of coils and set up the buffer accordingly.
       if (num_coils == 0)
       {
         std::vector<unsigned char> data = icp_stream.data.front();
@@ -471,7 +492,8 @@ void processImageReconRequest
         buffer.resize (dims);
       }
 
-      for (int ii = 0; ii < icp_stream.data.size(); ii++)
+      int to_process = num_processed + icp_stream.data.size();
+      for (int ii = num_processed; ii < to_process; ii++)
       {
         std::vector<unsigned char> data = icp_stream.data.front();
         icp_stream.data.pop();
@@ -483,96 +505,90 @@ void processImageReconRequest
           memcpy (&buffer.at(0, acq.getHead().idx.kspace_encode_step_1, coil),
             &acq.at(0, coil), sizeof (std::complex<float>) * eX);
         }
+        num_processed ++;
+      }
+
+      if (num_processed >= command.data_count[ii])
+      {
+        break;
       }
     }
-  }
 
+    // Here we expect the data for a single stream image reconstrction to be
+    // fully collected.
 
-  for (uint16_t ii = 0;  msg.ehdr.entity_type == ISMRMRD::ISMRMRD_MRACQUISITION; ++ii)
-  {
     for (uint16_t coil = 0; coil < num_coils; coil++)
     {
-      memcpy (&buffer.at(0, acq.getHead().idx.kspace_encode_step_1, coil),
-        &acq.at(0, coil), sizeof (std::complex<float>) * eX);
-    }
-    msg = (*in_msg).front();
-    acq.deserialize (std::vector<unsigned char>(msg.data.begin(), msg.data.end()));
-    (*in_msg).pop();
-  }
+      fftwf_complex* tmp =
+        (fftwf_complex*) fftwf_malloc (sizeof (fftwf_complex) * (eX * eY));
 
-  for (uint16_t coil = 0; coil < num_coils; coil++)
-  {
-    fftwf_complex* tmp = (fftwf_complex*)fftwf_malloc (sizeof (fftwf_complex) * (eX * eY));
-    if (!tmp)
-    {
-      std::cout << "Error allocating temporary storage for FFTW" << std::endl;
-      queueErrorCommand (out_msg, ISMRMRD::ISMRMRD_ERROR_INTERNAL_ERROR);
-      return;
-    }
-
-    //Create the FFTW plan
-    fftwf_plan p = fftwf_plan_dft_2d (eY, eX, tmp, tmp, FFTW_BACKWARD, FFTW_ESTIMATE);
-
-    //FFTSHIFT
-    fftshift (reinterpret_cast<std::complex<float>*> (tmp), &buffer.at (0, 0, coil), eX, eY);
-
-    //Execute the FFT
-    fftwf_execute (p);
-
-    //FFTSHIFT
-    fftshift (&buffer.at (0, 0, coil), reinterpret_cast<std::complex<float>*> (tmp), eX, eY);
-
-    //Clean up.
-    fftwf_destroy_plan (p);
-    fftwf_free (tmp);
-  }
-
-  //Allocate an image
-  ISMRMRD::Image<float> img_out (rX, rY, rZ, 1);
-  //memset (img_out.getDataPtr(), 0, sizeof (float_t) * rX * rY);
-
-  //f there is oversampling in the readout direction remove it
-  //Take the sqrt of the sum of squares
-  uint16_t offset = ((e_space.matrixSize.x - r_space.matrixSize.x) >> 1);
-  for (uint16_t y = 0; y < rY; y++)
-  {
-    for (uint16_t x = 0; x < rX; x++)
-    {
-      for (uint16_t coil = 0; coil < num_coils; coil++)
+      if (!tmp)
       {
-        img_out.at (x, y) += (std::abs (buffer.at (x + offset, y, coil))) *
-                            (std::abs (buffer.at (x + offset, y, coil)));
+        std::cout << "Error allocating temporary storage for FFTW" << std::endl;
+        // queue ISMRMRD::ISMRMRD_ERROR_INTERNAL_ERROR responce
+        return;
       }
-      img_out.at (x, y) = std::sqrt (img_out.at (x, y));
+
+      //Create the FFTW plan
+      fftwf_plan p =
+        fftwf_plan_dft_2d (eY, eX, tmp, tmp, FFTW_BACKWARD, FFTW_ESTIMATE);
+
+      //FFTSHIFT
+      fftshift (reinterpret_cast<std::complex<float>*> (tmp),
+                &buffer.at (0, 0, coil), eX, eY);
+
+      //Execute the FFT
+      fftwf_execute (p);
+
+      //FFTSHIFT
+      fftshift (&buffer.at (0, 0, coil),
+                reinterpret_cast<std::complex<float>*> (tmp), eX, eY);
+
+      //Clean up.
+      fftwf_destroy_plan (p);
+      fftwf_free (tmp);
     }
+
+    //Allocate an image
+    ISMRMRD::Image<float> img_out (rX, rY, rZ, 1);
+    //memset (img_out.getDataPtr(), 0, sizeof (float_t) * rX * rY);
+
+    //f there is oversampling in the readout direction remove it
+    //Take the sqrt of the sum of squares
+    uint16_t offset = ((e_space.matrixSize.x - r_space.matrixSize.x) >> 1);
+    for (uint16_t y = 0; y < rY; y++)
+    {
+      for (uint16_t x = 0; x < rX; x++)
+      {
+        for (uint16_t coil = 0; coil < num_coils; coil++)
+        {
+          img_out.at (x, y) += (std::abs (buffer.at (x + offset, y, coil))) *
+                              (std::abs (buffer.at (x + offset, y, coil)));
+        }
+        img_out.at (x, y) = std::sqrt (img_out.at (x, y));
+      }
+    }
+
+    // The following are extra guidance we can put in the image header
+    img_out.setImageType (ISMRMRD::ISMRMRD_IMTYPE_MAGNITUDE);
+    img_out.setSlice (0);
+    img_out.setFieldOfView (r_space.fieldOfView_mm.x,
+                            r_space.fieldOfView_mm.y,
+                            r_space.fieldOfView_mm.z);
+    //And so on
+
+    //Let's write the reconstructed image into the same data file
+    ISMRMRD::EntityHeader ehdr;
+    ehdr.version = my_version;
+    ehdr.entity_type = ISMRMRD::ISMRMRD_IMAGE;
+    ehdr.storage_type = ISMRMRD::ISMRMRD_FLOAT;
+    ehdr.stream = 65536;
+    std::vector<unsigned char> ent  = ehdr.serialize();
+    std::vector<unsigned char> data = img_out.serialize();
+    int size = ent.size() + data.size();
+    queueMessage (size, ent, data, oq);
+
   }
-
-  // The following are extra guidance we can put in the image header
-  img_out.setImageType (ISMRMRD::ISMRMRD_IMTYPE_MAGNITUDE);
-  img_out.setSlice (0);
-  img_out.setFieldOfView (r_space.fieldOfView_mm.x,
-                          r_space.fieldOfView_mm.y,
-                          r_space.fieldOfView_mm.z);
-  //And so on
-
-  //Let's write the reconstructed image into the same data file
-  msg.size = sizeof (ISMRMRD::EntityHeader) + sizeof (float_t) * rX * rY * rZ;
-  msg.ehdr.version = my_version;
-  msg.ehdr.entity_type = ISMRMRD::ISMRMRD_IMAGE;
-  msg.ehdr.storage_type = ISMRMRD::ISMRMRD_FLOAT;
-  msg.ehdr.stream = 65536;
-  msg.data = (char*)&(img_out.serialize())[0];
-  (*out_msg).push (msg);
-
-  msg.size = sizeof (ISMRMRD::EntityHeader) + sizeof (ISMRMRD::Command);
-  msg.ehdr.version = my_version;
-  msg.ehdr.entity_type = ISMRMRD::ISMRMRD_COMMAND;
-  msg.ehdr.storage_type = ISMRMRD::ISMRMRD_CHAR;
-  msg.ehdr.stream = 65537;
-  cmd.command_type = ISMRMRD::ISMRMRD_COMMAND_DONE_FROM_SERVER;
-  cmd.error_type   = ISMRMRD::ISMRMRD_ERROR_NO_ERROR;
-  msg.data = (char*)&(cmd.serialize())[0];
-  (*out_msg).push (msg);
 
   return;
 }
@@ -758,6 +774,20 @@ void readSocket
     thread_v[ii].join();
   }
   printf ("Processors joined, now waiting for writer to join\n");
+
+  ISMRMRD::EntityHeader ehdr;
+  ehdr.version = my_version;
+  ehdr.entity_type = ISMRMRD::ISMRMRD_COMMAND;
+  ehdr.storage_type = ISMRMRD::ISMRMRD_CHAR;
+  ehdr.stream = 65537;
+  std::vector<unsigned char> ent = ehdr.serialize();
+
+  ISMRMRD::Command cmd;
+  cmd.command_type = ISMRMRD::ISMRMRD_COMMAND_DONE_FROM_SERVER;
+  std::vector<unsigned char> data = cmd.serialize();
+  int size = ent.size() + data.size();
+  queueMessage (size, ent, data, out_mq);
+
   writer.join();
   printf ("Writer joined, reader exiting\n");
 
