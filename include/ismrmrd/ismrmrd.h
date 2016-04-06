@@ -210,6 +210,9 @@ struct Handshake
 struct Command
   : public Entity
 {
+    explicit Command (int num = 1) : streams (num),
+                                     data_count (num),
+                                     config_buf (num) {}
     // Functions inherited from Entity
     virtual std::vector<unsigned char> serialize();
     virtual void deserialize(const std::vector<unsigned char>& buffer);
