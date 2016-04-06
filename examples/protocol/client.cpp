@@ -19,49 +19,156 @@ const bool isCpuLittleEndian = 1 == *(char*)(&__one__);
 
 const unsigned char my_version = 2;
 
-typedef std::shared_ptr<std::vector<unsigned char> > message;
-typedef std::shared_ptr<std::queue<message> > msg_queue;
+// Dataframe size is of type uint64_t
+const size_t   DATAFRAME_SIZE_FIELD_SIZE  =  sizeof (uint64_t);
+
+// Entity Header size with 0 padding is sizeof (uint32_t) times 4
+const size_t   ENTITY_HEADER_SIZE         = sizeof (uint32_t) * 4;
+
+struct INPUT_MESSAGE_STRUCTURE
+{
+  uint64_t                   size;
+  ISMRMRD::EntityHeader      ehdr;
+  uint32_t                   data_size;
+  std::vector<unsigned char> data;
+};
+typedef std::shared_ptr<INPUT_MESSAGE_STRUCTURE>  IN_MSG;
+
+struct OUTPUT_MESSAGE_STRUCTURE
+{
+  uint32_t                   size;
+  std::vector<unsigned char> data;
+};
+typedef OUTPUT_MESSAGE_STRUCTURE OUT_MSG;
+typedef std::shared_ptr<std::queue<OUT_MSG> >     OUTPUT_QUEUE;
+
 typedef std::shared_ptr<tcp::socket> socket_ptr;
 //const unsigned char stamp[4] = {'I', 'M', 'R', 'D' };
 
 /*******************************************************************************
  ******************************************************************************/
-int receive_frame_info (socket_ptr sock, uint64_t& size, ISMRMRD::EntityHeader& e_hdr)
+int receiveFrameInfo
+(
+  socket_ptr sock,
+  IN_MSG     in_msg
+)
 {
   boost::system::error_code  error;
-  std::string temp;
+  std::vector<unsigned char> buffer;
 
-  boost::asio::read (*sock, boost::asio::buffer (&size, sizeof (uint64_t)), error);
+  buffer.reserve (DATAFRAME_SIZE_FIELD_SIZE);
+  boost::asio::read (*sock,
+                     boost::asio::buffer (&buffer[0], DATAFRAME_SIZE_FIELD_SIZE),
+                     error);
+
+  std::copy (&buffer[0],
+             &buffer[DATAFRAME_SIZE_FIELD_SIZE],
+             (unsigned char*)&(*in_msg).size);
 
   std::cout << "frame_size read status: " << error << std::endl;
-  std::cout << "frame_size            : " << size << std::endl;
+  std::cout << "frame_size            : " << (*in_msg).size << std::endl;
 
-  boost::asio::read (*sock, boost::asio::buffer (&temp[0],
-                     sizeof (ISMRMRD::EntityHeader)), error);
-  e_hdr.deserialize (std::vector<unsigned char>(temp.begin(), temp.end()));
-  std::cout << "Entity header read status: " << error << std::endl;
-  std::cout << "Entity header size       : " << sizeof (e_hdr) << std::endl;
-  std::cout << "version                  : " << std::to_string (e_hdr.version) << std::endl;
-  std::cout << "entity_type              : " << (ISMRMRD::EntityType) e_hdr.entity_type << std::endl;
-  std::cout << "storage_type             : " << (ISMRMRD::StorageType) e_hdr.storage_type << std::endl;
-  std::cout << "stream                   : " << e_hdr.stream << std::endl;
+  buffer.resize (ENTITY_HEADER_SIZE);
+  boost::asio::read (*sock,
+                     boost::asio::buffer (&buffer[0], ENTITY_HEADER_SIZE),
+                     error);
+
+  std::cout << "EntityHeader read status: " << error << std::endl;
+  //if (error != )
+  //{
+    //return 1;
+  //}
+
+  (*in_msg).ehdr.deserialize (buffer);
+
+  (*in_msg).data_size = (*in_msg).size - ENTITY_HEADER_SIZE;
+
+  std::cout << "sizeof (EntityHeader)   : " << sizeof (ISMRMRD::EntityHeader) <<
+            std::endl;
+  std::cout << "version                 : " <<
+               std::to_string ((*in_msg).ehdr.version) << std::endl;
+  std::cout << "entity_type             : " <<
+               (ISMRMRD::EntityType) (*in_msg).ehdr.entity_type <<
+               std::endl;
+  std::cout << "storage_type            : " <<
+               (ISMRMRD::StorageType) (*in_msg).ehdr.storage_type <<
+               std::endl;
+  std::cout << "stream                  : " <<
+               (*in_msg).ehdr.stream << std::endl;
+  std::cout << "data size               : " <<
+               (*in_msg).data_size << std::endl;
 
   return 0;
 }
 
 /*******************************************************************************
  ******************************************************************************/
-int receive_handshake (socket_ptr sock, ISMRMRD::Handshake& handshake)
+bool processCommand
+(
+  ISMRMRD::Command& cmd
+)
+{
+  bool success = true;
+  if (cmd.command_type != ISMRMRD::ISMRMRD_COMMAND_IMAGE_RECONSTRUCTED)
+  {
+    std::cout << "Error: expected command " <<
+                 ISMRMRD::ISMRMRD_COMMAND_IMAGE_RECONSTRUCTED << std::endl;
+    success = false;
+  }
+  std::cout << "Received command: " << cmd.command_type << std::endl;
+
+  return success;
+}
+
+/*******************************************************************************
+ ******************************************************************************/
+void receiveMessage (socket_ptr sock, IN_MSG in_msg)
 {
   boost::system::error_code  error;
-  uint64_t                   frame_size;
-  ISMRMRD::EntityHeader      e_hdr;
+  receiveFrameInfo (sock, in_msg);
 
-  receive_frame_info (sock, frame_size, e_hdr);
+  if ((*in_msg).data_size <= 0)
+  {
+    // TODO: Throw an error (unless we can have an entity_header as a command ??)
+    std::cout << "Error! The data_size = " << (*in_msg).data_size << std::endl;
+    std::cout << "EntityType = " << (*in_msg).ehdr.entity_type << std::endl;
+    return;
+  }
 
-  boost::asio::read (*sock, boost::asio::buffer (&handshake, sizeof (ISMRMRD::Handshake)), error);
-  std::cout << "Handshake read status: " << error << std::endl;
-  std::cout << "Handshake struct size: " << sizeof (ISMRMRD::Handshake) << std::endl;
+  (*in_msg).data.reserve ((*in_msg).data_size);
+  boost::asio::read (*sock,
+                     boost::asio::buffer (&(*in_msg).data[0],
+                                          (*in_msg).data_size),
+                     error);
+
+  // TODO: Check read status and throw an error if bad
+  std::cout << "Read status : " << error << std::endl;
+  std::cout << "Data size   : " << (*in_msg).data_size << std::endl;
+  std::cout << "Entity Type : " <<
+               (*in_msg).ehdr.entity_type << std::endl;
+}
+
+/*******************************************************************************
+ ******************************************************************************/
+int receiveHandshake
+(
+  socket_ptr          sock,
+  ISMRMRD::Handshake& handshake
+)
+{
+  IN_MSG                     in_msg;
+
+  receiveMessage (sock, in_msg);
+
+  if ((*in_msg).ehdr.entity_type != ISMRMRD::ISMRMRD_HANDSHAKE)
+  {
+    std::cout << "Error! Expected handshake - received entity " <<
+                 (*in_msg).ehdr.entity_type << std::endl;
+    return 1;
+  }
+ 
+  handshake.deserialize ((*in_msg).data);
+
   std::cout << "Timestamp            :" << handshake.timestamp << std::endl;
   std::cout << "Client name          :" << handshake.client_name << std::endl;
 
@@ -70,74 +177,28 @@ int receive_handshake (socket_ptr sock, ISMRMRD::Handshake& handshake)
 
 /*******************************************************************************
  ******************************************************************************/
-int receive_command (socket_ptr sock, ISMRMRD::Command& cmd)
-{
-  boost::system::error_code  error;
-  uint64_t                   frame_size;
-  ISMRMRD::EntityHeader      e_hdr;
-
-  receive_frame_info (sock, frame_size, e_hdr);
-
-  boost::asio::read (*sock, boost::asio::buffer (&cmd, sizeof (ISMRMRD::Command)), error);
-  std::cout << "Command read status: " << error << std::endl;
-  std::cout << "Command struct size: " << sizeof (ISMRMRD::Command) << std::endl;
-  std::cout << "Command            : " << (ISMRMRD::CommandType) cmd.command_type << std::endl;
-
-  return 0;
-}
-
-/*******************************************************************************
- ******************************************************************************/
-int receive_xml_header (socket_ptr sock, std::string& xml_head_string)
-{
-  boost::system::error_code  error;
-  uint64_t                   frame_size;
-  ISMRMRD::EntityHeader      e_hdr;
-
-  receive_frame_info (sock, frame_size, e_hdr);
-
-  xml_head_string.resize (frame_size - sizeof (ISMRMRD::EntityHeader));
-  boost::asio::read (*sock, boost::asio::buffer (&xml_head_string[0], frame_size - sizeof (ISMRMRD::EntityHeader)), error);
-  std::cout << "XML Header string read status: " << error << std::endl;
-  std::cout << "XML header string size       : " << xml_head_string.size() << std::endl;
-
-  return 0;
-}
-
-/*******************************************************************************
- ******************************************************************************/
-int receive_image (socket_ptr sock, ISMRMRD::EntityHeader& e_hdr, std::vector<unsigned char>& img_buf)
-{
-  boost::system::error_code  error;
-  uint64_t                   frame_size;
-
-  receive_frame_info (sock, frame_size, e_hdr);
-
-  img_buf.resize (frame_size - sizeof (ISMRMRD::EntityHeader));
-  boost::asio::read (*sock, boost::asio::buffer (img_buf, frame_size - sizeof (ISMRMRD::EntityHeader)), error);
-  std::cout << "Image string read status: " << error << std::endl;
-  std::cout << "Image string size       : " << img_buf.size() << std::endl;
-
-  return 0;
-}
-
-/*******************************************************************************
- ******************************************************************************/
-void socket_read (socket_ptr sock, std::string my_name, std::string out_fname, std::string dset_name)
+void readSocket
+(
+  socket_ptr  sock,
+  std::string my_name,
+  std::string out_fname,
+  std::string dset_name
+)
 {
   std::cout << "\nClient Reader started\n" << std::endl;
 
   boost::system::error_code  error;
-  //uint64_t                   frame_size;
   ISMRMRD::EntityHeader      e_hdr;
   ISMRMRD::Handshake         handshake;
   ISMRMRD::Command           cmd;
   std::string                xml_head_string;
   ISMRMRD::IsmrmrdHeader     xmlHeader;
   std::vector<unsigned char> img_buf;
-  
+  bool                       xml_hdr_received = false;
+  bool                       image_received   = false;
+  bool                       done             = false;
 
-  receive_handshake (sock, handshake);
+  receiveHandshake (sock, handshake);
   if (my_name != handshake.client_name)
   {
     std::cout << "Error: received handshake for different client:" << std::endl;
@@ -145,29 +206,79 @@ void socket_read (socket_ptr sock, std::string my_name, std::string out_fname, s
     std::cout << "Intended :" << handshake.client_name << std::endl;
   }
 
-  receive_command   (sock, cmd);
-  std::cout << "Received command: " << (ISMRMRD::CommandType) cmd.command_type << std::endl;
-
-  if (cmd.command_type != ISMRMRD::ISMRMRD_COMMAND_IMAGE_RECONSTRUCTED)
+  while (!done)
   {
-    std::cout << "The use case for this command does not exist, the received data is discarded." << std::endl;
+    IN_MSG in_msg;
+    receiveMessage (sock, in_msg);
+
+    switch ((*in_msg).ehdr.entity_type)
+    {
+      case ISMRMRD::ISMRMRD_COMMAND:
+
+        cmd.deserialize ((*in_msg).data);
+        if (cmd.command_type == ISMRMRD::ISMRMRD_COMMAND_DONE_FROM_SERVER)
+        {
+          done = true;
+        }
+        else
+        {
+          processCommand (cmd);
+        }
+        break;
+
+      case ISMRMRD::ISMRMRD_ERROR:
+
+        // TODO: Error specific processing here...
+        // Consider adding to the Received data
+        break;
+
+      case ISMRMRD::ISMRMRD_XML_HEADER:
+
+        // TODO: XML Header specific processing here...
+        ISMRMRD::deserialize ((const char*) &(*in_msg).data[0], xmlHeader);
+        xml_hdr_received = true;
+        break;
+
+      case ISMRMRD::ISMRMRD_IMAGE:
+
+        img_buf = (*in_msg).data;
+        image_received = true;
+        break;
+
+      default:
+
+        // TODO: Throw Unexpected entity type error.
+        std::cout << "Warning! unexpected Entity Type received: " <<
+                     (*in_msg).ehdr.entity_type << std::endl;
+        break;
+
+    } // switch ((*in_msg).ehdr.entity_type)
+  } // while (true)
+
+  if (!xml_hdr_received)
+  {
+    std::cout << "No XML header received, exiting" << std::endl;
     return;
   }
-  
-  // At this point a specific use case might become apparent, but for now we only have a single one to implement
-  receive_xml_header (sock, xml_head_string);
-  ISMRMRD::deserialize (xml_head_string.c_str(), xmlHeader);
-  ISMRMRD::EncodingSpace r_space = xmlHeader.encoding[0].reconSpace;
+  else if (!image_received)
+  {
+    std::cout << "No image received, exiting" << std::endl;
+    return;
+  }
 
-  receive_image (sock, e_hdr, img_buf);
-  ISMRMRD::Image<float> img(r_space.matrixSize.x, r_space.matrixSize.y, // TODO: determine type!
-                                         r_space.matrixSize.z,  1); // num channels ???
+  ISMRMRD::EncodingSpace r_space = xmlHeader.encoding[0].reconSpace;
+  ISMRMRD::Image<float> img (r_space.matrixSize.x,
+                             r_space.matrixSize.y,
+                             r_space.matrixSize.z,
+                             1); // num channels ???
   img.deserialize (img_buf);
 
   ISMRMRD::Dataset dset (out_fname.c_str(), dset_name.c_str(), true);
   dset.writeHeader (xml_head_string);
-  dset.appendImage("cpp", img); // appendImage is not yet implemented for version 2.x 
-                                // consider implementing a version for appending serialized image
+  // TODO:
+  dset.appendImage ("cpp", img);
+  // appendImage is not yet implemented for version 2.x
+  // Consider implementing a version for appending serialized image
 
   std::cout << "\nFinished processing the data - exiting" << std::endl;
   return;
@@ -175,44 +286,61 @@ void socket_read (socket_ptr sock, std::string my_name, std::string out_fname, s
 
 /*******************************************************************************
  ******************************************************************************/
-void queue_message
+void queueMessage
 (
-  uint64_t& size,
+  uint32_t                    size,
   std::vector<unsigned char>& ent,
   std::vector<unsigned char>& data,
-  msg_queue mq
+  OUTPUT_QUEUE                oq
 )
 {
-  message msg;
-  (*msg).reserve (size + sizeof (size));
+  printf ("queueMessage 1\n");
+  OUT_MSG msg;
+  printf ("queueMessage 2\n");
+  msg.size = size;
+  printf ("queueMessage 3\n");
+  msg.data.reserve (size);
 
-  std::cout << "Size = " << size << std::endl;
+  std::cout << "Queueing message of size = " << size << std::endl;
   printf ("ent size = %ld, sizeof = %ld\n", ent.size(), sizeof (ent));
   printf ("data size = %ld, sizeof = %ld\n", data.size(), sizeof (data));
 
-  std::copy ((unsigned char*) &size,
-             (unsigned char*) &size + sizeof (size),
-             std::back_inserter (*msg));
+  uint64_t s = size;
+  std::cout << "Size = " << size << std::endl;
+  size = (isCpuLittleEndian) ? size : __builtin_bswap64 (size);
+  std::cout << "Size = " << size << std::endl;
+  std::cout << "Sizeof s = " << sizeof (s)  << std::endl;
+
+  std::copy ((unsigned char*) &s,
+             (unsigned char*) &s + sizeof (s),
+             std::back_inserter (msg.data));
+  printf ("queueMessage 4\n");
 
   std::copy ((unsigned char*) &ent,
              (unsigned char*) &ent + ent.size(),
-             std::back_inserter (*msg));
+             std::back_inserter (msg.data));
+  printf ("queueMessage 5\n");
 
   std::copy ((unsigned char*) &data,
              (unsigned char*) &data + data.size(),
-             std::back_inserter (*msg));
+             std::back_inserter (msg.data));
+  printf ("queueMessage 6\n");
 
-  (*mq).push (msg);
+  oq->push (msg);
+  printf ("queueMessage 7\n");
+
+  return;
 }
 
 /*******************************************************************************
  ******************************************************************************/
-void queue_handshake_string
+void queueHandshake
 (
   std::string  client_name,
-  msg_queue    mq
+  OUTPUT_QUEUE    out_mq
 )
 {
+  printf ("queueHandshake 1\n");
   struct timeval tv;
   gettimeofday(&tv, NULL);
 
@@ -237,12 +365,18 @@ void queue_handshake_string
   size = (isCpuLittleEndian) ? size : __builtin_bswap64 (size);
   std::cout << "Size = " << size << std::endl;
 
-  queue_message (size, ent, hand, mq);
+  printf ("queueHandshake 2\n");
+  queueMessage (size, ent, hand, out_mq);
+  printf ("queueHandshake 3\n");
 }
 
 /*******************************************************************************
  ******************************************************************************/
-void queue_xml_header_string (std::string xml_head, msg_queue mq)
+void queueXmlHeader
+(
+  std::string xml_head,
+  OUTPUT_QUEUE out_mq
+)
 {
   ISMRMRD::EntityHeader e_hdr;
   e_hdr.version = my_version;
@@ -260,23 +394,27 @@ void queue_xml_header_string (std::string xml_head, msg_queue mq)
   std::cout << "Size = " << size << std::endl;
   size = (isCpuLittleEndian) ? size : __builtin_bswap64 (size);
 
-  queue_message (size, ent, xml, mq);
+  queueMessage (size, ent, xml, out_mq);
 }
 
 /*******************************************************************************
  ******************************************************************************/
-void queue_command_string (ISMRMRD::CommandType cmd_type, msg_queue mq)
+void queueCommand (ISMRMRD::Command& cmd, OUTPUT_QUEUE out_mq)
 {
+  printf ("queueCommand 1\n");
   ISMRMRD::EntityHeader e_hdr;
+  printf ("queueCommand 2\n");
   e_hdr.version = my_version;
+  printf ("queueCommand 3\n");
   e_hdr.entity_type = ISMRMRD::ISMRMRD_COMMAND;
+  printf ("queueCommand 4\n");
   e_hdr.storage_type = ISMRMRD::ISMRMRD_CHAR;
+  printf ("queueCommand 5\n");
   e_hdr.stream = 65537; // Todo: define reserved stream number names
+  printf ("queueCommand 6\n");
   std::vector<unsigned char> ent = e_hdr.serialize();
   printf ("ent size = %ld, sizeof = %ld\n", ent.size(), sizeof (ent));
 
-  ISMRMRD::Command cmd;
-  cmd.command_type = cmd_type;
   std::vector<unsigned char> command = cmd.serialize();
   printf ("command size = %ld, sizeof = %ld\n", command.size(), sizeof (command));
 
@@ -284,13 +422,19 @@ void queue_command_string (ISMRMRD::CommandType cmd_type, msg_queue mq)
   std::cout << "Size = " << size << std::endl;
   size = (isCpuLittleEndian) ? size : __builtin_bswap64 (size);
 
-  queue_message (size, ent, command, mq);
+  printf ("queueCommand 7\n");
+  queueMessage (size, ent, command, out_mq);
+  printf ("queueCommand 8\n");
 }
 
 /*******************************************************************************
  ******************************************************************************/
 template <typename T>
-void queue_acquisition_string (ISMRMRD::Acquisition<T> acq, msg_queue mq)
+void queueAcquisition
+(
+  ISMRMRD::Acquisition<T> acq,
+  OUTPUT_QUEUE out_mq
+)
 {
   ISMRMRD::EntityHeader e_hdr;
 
@@ -307,38 +451,71 @@ void queue_acquisition_string (ISMRMRD::Acquisition<T> acq, msg_queue mq)
   std::cout << "Size = " << size << std::endl;
   size = (isCpuLittleEndian) ? size : __builtin_bswap64 (size);
 
-  queue_message (size, ent, acquisition, mq);
+  queueMessage (size, ent, acquisition, out_mq);
 }
 
 /*******************************************************************************
  ******************************************************************************/
-void prepare_data_queue (std::string         fname,
-                         std::string         dname,
-                         msg_queue           mq,
-                         std::string         client_name,
-                         std::atomic<bool>*  done)
+void prepareDataQueue (std::string         fname,
+                       std::string         dname,
+                       OUTPUT_QUEUE        out_mq,
+                       std::string         client_name,
+                       std::atomic<bool>*  done)
 {
+  printf ("prepareDataQueue 1, %s, %s\n", fname.c_str(), dname.c_str());
   ISMRMRD::Dataset dset (fname.c_str(), dname.c_str(), false);
   std::string xml_head = dset.readHeader();
-
-  queue_handshake_string (client_name, mq);
-  queue_command_string (ISMRMRD::ISMRMRD_COMMAND_IMAGE_RECONSTRUCTION, mq);
-  queue_xml_header_string (xml_head, mq);
-
   ISMRMRD::IsmrmrdHeader xmlHeader;
   ISMRMRD::deserialize (xml_head.c_str(), xmlHeader);
+
+  queueHandshake (client_name, out_mq);
+
+  ISMRMRD::Command cmd;
+  //std::vector<uint32_t> test;
+  //test.push_back (42);
+  std::cout << "prepareDataQueue 1.2 " << std::endl;
+  cmd.command_id = 1;
+  cmd.command_type = ISMRMRD::ISMRMRD_COMMAND_IMAGE_RECONSTRUCTION;
+  cmd.num_streams = 1;
+  //std::cout << "prepareDataQueue 1.3 " << xmlHeader.streams[0].number << std::endl;
+  cmd.streams.resize(2);
+  std::cout << "prepareDataQueue 1.3.1 " << std::endl;
+  cmd.streams.push_back (42);
+  //std::cout << "prepareDataQueue 1.3.2 " << xmlHeader.streams[0].number << std::endl;
+  //cmd.streams.push_back (xmlHeader.streams[0].number);
+  printf ("prepareDataQueue 1.4\n");
+  cmd.data_count.push_back
+    (dset.getNumberOfAcquisitions (xmlHeader.streams[0].number));
+  printf ("prepareDataQueue 2\n");
+  cmd.config_size = 0;
+  printf ("prepareDataQueue 3\n");
+  queueCommand (cmd, out_mq);
+  printf ("prepareDataQueue 4\n");
+
+  queueXmlHeader (xml_head, out_mq);
+  printf ("prepareDataQueue 5\n");
   
   int num_acq = dset.getNumberOfAcquisitions();
 
-  std::cout << "Acq storage type is: " << dset.readAcquisition<float>(0).getStorageType() << std::endl;
+  std::cout << "Acq storage type is: " <<
+               dset.readAcquisition<float>(0).getStorageType() << std::endl;
 
+  printf ("prepareDataQueue 6\n");
   for (int ii = 0; ii < num_acq; ++ii)
   {
-    queue_acquisition_string (dset.readAcquisition<float> (ii), mq);
+    queueAcquisition (dset.readAcquisition<float> (ii), out_mq);
   }
 
-  queue_command_string (ISMRMRD::ISMRMRD_COMMAND_STOP_FROM_CLIENT, mq);
+  printf ("prepareDataQueue 7\n");
+  cmd.command_id = 2;
+  cmd.command_type = ISMRMRD::ISMRMRD_COMMAND_STOP_FROM_CLIENT;
+  cmd.num_streams = 0;
+  cmd.streams.clear();
+  cmd.data_count.clear();
+  cmd.config_size = 0;
+  queueCommand (cmd, out_mq);
 
+  printf ("prepareDataQueue 8\n");
   *done = true;
 }
 
@@ -349,9 +526,9 @@ int main (int argc, char* argv[])
   std::string       client_name = "HAL 9000";
   std::string       host        = "127.0.0.1";
   std::string       in_fname    = "FileIn.h5";
-  std::string       in_dset     = "/dataset";
+  std::string       in_dset     = "dataset";
   std::string       out_fname   = "FileOut.h5";
-  std::string       out_dset    = "/dataset";
+  std::string       out_dset    = "dataset";
   unsigned short    port        = 50050;
   struct timespec   ts;
 
@@ -389,33 +566,48 @@ int main (int argc, char* argv[])
   // Spawn a thread to prepare the data to be sent to the server
   std::cout << "Attempting to prepare data from " << in_fname << std::endl;
   std::atomic<bool> done (false);
-  msg_queue mq;
-  std::thread t1 (prepare_data_queue, in_fname, in_dset, mq, client_name, &done);
+  OUTPUT_QUEUE      out_mq (new std::queue<OUT_MSG>);
+  printf ("Main 1\n");
+  std::thread t1 (prepareDataQueue,
+                  in_fname,
+                  in_dset,
+                  out_mq,
+                  client_name,
+                  &done);
+  printf ("Main 2\n");
 
   try
   {
+  printf ("Main 3\n");
     boost::asio::io_service io_service;
     socket_ptr sock (new tcp::socket (io_service));
     tcp::endpoint endpoint(boost::asio::ip::address::from_string(host), port);
+  printf ("Main 4\n");
 
     boost::system::error_code error = boost::asio::error::host_not_found;
     (*sock).connect(endpoint, error);
     if (error) throw boost::system::system_error(error);
+  printf ("Main 5\n");
 
-    std::thread t2 (socket_read, sock, client_name, out_fname, out_dset);
-    //sleep(1);
+    std::thread t2 (readSocket, sock, client_name, out_fname, out_dset);
+    sleep(1);
+  printf ("Main 6\n");
 
-    while (!done || !(*mq).empty())
+    while (!done || !(*out_mq).empty())
     {
-      if ((*mq).empty())
+  printf ("Main 7\n");
+      if (out_mq->empty())
       {
+  printf ("Main 7.1\n");
         nanosleep (&ts, NULL);
+  printf ("Main 7.2\n");
         continue;
       }
 
-      message msg = (*mq).front();
-      (*mq).pop();
-      boost::asio::write (*sock, boost::asio::buffer (*msg, (*msg).size()));
+  printf ("Main 8\n");
+      OUT_MSG msg = out_mq->front();
+      out_mq->pop();
+      boost::asio::write (*sock, boost::asio::buffer (msg.data, msg.size));
       std::cout << client_name << " sent out a frame" << std::endl;
     }
 
