@@ -210,9 +210,9 @@ struct Handshake
 struct Command
   : public Entity
 {
-    explicit Command (int num = 1) : streams (num),
-                                     data_count (num),
-                                     config_buf (num) {}
+    //explicit Command (int num = 1) : streams (num),
+                                     //data_count (num),
+                                     //config_buf (num) {}
     // Functions inherited from Entity
     virtual std::vector<unsigned char> serialize();
     virtual void deserialize(const std::vector<unsigned char>& buffer);
@@ -221,7 +221,6 @@ struct Command
     uint32_t command_type; /**< CommandType maps to CommandType enum  */
     uint32_t num_streams;  /** Number of streams associated with this command */
     std::vector<uint32_t> streams; /**< Associated stream numbers */
-    std::vector<uint32_t> data_count; /**< Expected data count for a stream */
     uint32_t config_size;  /**< Size of configuration buffer */
     std::vector <unsigned char> config_buf; /**< Configuration buffer */
 };
