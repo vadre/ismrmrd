@@ -1578,11 +1578,6 @@ std::vector<unsigned char> Command::serialize()
                (this->num_streams * sizeof (uint32_t)),
              std::back_inserter (buffer));
 
-  std::copy ((unsigned char*) &this->data_count,
-             (unsigned char*) &this->data_count +
-               (this->num_streams * sizeof (uint32_t)),
-             std::back_inserter (buffer));
-
   std::copy ((unsigned char*) &this->config_size,
              (unsigned char*) &this->config_size + sizeof (uint32_t),
              std::back_inserter (buffer));
@@ -1605,11 +1600,11 @@ std::vector<unsigned char> Command::serialize()
 
 void Command::deserialize (const std::vector<unsigned char>& buffer)
 {
-  if (buffer.size() != sizeof (uint32_t) * 3)
-  {
-    throw std::runtime_error
-      ("Buffer size does not match the size of Command");
-  }
+  //if (buffer.size() != sizeof (uint32_t) * 3)
+  //{
+    //throw std::runtime_error
+      //("Buffer size does not match the size of Command");
+  //}
 
   int left  = 0;                  // Offset to the begin byte in the buffer
   int right = sizeof (uint32_t);  // Offset to the end byte in the buffer
@@ -1639,17 +1634,6 @@ void Command::deserialize (const std::vector<unsigned char>& buffer)
                &buffer[right],
                (unsigned char*) &temp);
     this->streams[ii] = temp;
-  }
-
-  for (ii = 0; ii < this->num_streams; ii++)
-  {
-    left   = right;
-    right += sizeof (uint32_t);
-    uint32_t temp;
-    std::copy (&buffer[left],
-               &buffer[right],
-               (unsigned char*) &temp);
-    this->data_count[ii] = temp;
   }
 
   left   = right;
