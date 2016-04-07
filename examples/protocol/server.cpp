@@ -50,10 +50,10 @@ struct OUTPUT_MESSAGE_STRUCTURE
   std::vector<unsigned char> data;
 };
 
-typedef std::shared_ptr<INPUT_MESSAGE_STRUCTURE>  IN_MSG;
+typedef INPUT_MESSAGE_STRUCTURE                   IN_MSG;
 typedef std::shared_ptr<std::queue<IN_MSG> >      INPUT_QUEUE;
 
-typedef std::shared_ptr<OUTPUT_MESSAGE_STRUCTURE> OUT_MSG;
+typedef OUTPUT_MESSAGE_STRUCTURE                  OUT_MSG;
 typedef std::shared_ptr<std::queue<OUT_MSG> >     OUTPUT_QUEUE;
 
 //Helper function for the FFTW library
@@ -81,31 +81,36 @@ void writeSocket (socket_ptr sock, OUTPUT_QUEUE oq, int id)
 
   OUT_MSG msg;
   bool done = false; // TODO: determine exit criteria
-  try
-  {
-    while (!done)
-    {
-      printf ("writeSocket 1\n");
-      if ((*oq).size() <= 0)
-      {
-        sleep (1);
-        continue;
-      }
-      printf ("writeSocket 2\n");
-      
-      msg = (*oq).front();
-      (*oq).pop();
-      printf ("About to write, message size = %u\n", (*msg).size);
 
-      boost::asio::write (*sock, boost::asio::buffer ((*msg).data, (*msg).size));
-    }
+  struct timespec   ts;
+  ts.tv_sec  =    1;
+  ts.tv_nsec =    0;
 
-    std::cout << "Writer (" << id << "): Done!\n";
-  }
-  catch (std::exception& e)
-  {
-    std::cerr << "Writer (" << id << ") Exception: " << e.what() << "\n";
-  }
+  //try
+  //{
+    //while (!done)
+    //{
+      //printf ("writeSocket 1\n");
+      //if (oq->size() <= 0)
+      //{
+        //nanosleep (&ts, NULL);
+        //continue;
+      //}
+      //printf ("writeSocket 2\n");
+      //
+      //msg = oq->front();
+      //oq->pop();
+      //printf ("About to write, message size = %u\n", msg->size);
+//
+      //boost::asio::write (*sock, boost::asio::buffer (msg->data, msg->size));
+    //}
+//
+    //std::cout << "Writer (" << id << "): Done!\n";
+  //}
+  //catch (std::exception& e)
+  //{
+    //std::cerr << "Writer (" << id << ") Exception: " << e.what() << "\n";
+  //}
 }
 
 /*******************************************************************************
@@ -236,24 +241,27 @@ int receiveFrameInfo
   std::vector<unsigned char> buffer;
   uint64_t                   tmp;
 
-  printf ("receiveFrameInfo 1\n");
   buffer.reserve (DATAFRAME_SIZE_FIELD_SIZE);
-  printf ("receiveFrameInfo 2 %lu\n", DATAFRAME_SIZE_FIELD_SIZE);
+  printf ("receiveFrameInfo.1\n");
   boost::asio::read (*sock,
                      //boost::asio::buffer (&buffer[0], DATAFRAME_SIZE_FIELD_SIZE),
-                     boost::asio::buffer (buffer, DATAFRAME_SIZE_FIELD_SIZE),
+                     boost::asio::buffer(&tmp, DATAFRAME_SIZE_FIELD_SIZE),
+                     //boost::asio::buffer (buffer, DATAFRAME_SIZE_FIELD_SIZE),
                      error);
 
-  printf ("receiveFrameInfo 3\n");
-  std::copy (&buffer[0],
-             &buffer[DATAFRAME_SIZE_FIELD_SIZE],
-             (unsigned char*)&tmp);
+  printf ("receiveFrameInfo.2\n");
+  //std::copy (&buffer[0],
+             //&buffer[DATAFRAME_SIZE_FIELD_SIZE],
+             //(unsigned char*)&tmp);
              //(unsigned char*)&(*in_msg).size);
-  std::cout << "receiveFrameInfo 3.0: " << &buffer[0] << std::endl;
-  printf ("receiveFrameInfo 3.1 ... %lld\n", tmp);
-  (*in_msg).size = (uint32_t)tmp;
 
-  printf ("receiveFrameInfo 4\n");
+  //printf ("receiveFrameInfo 3.0: size buf: %s\n", &buffer[0]);
+  printf ("receiveFrameInfo.3: size tmp: %llu\n", tmp);
+
+  in_msg->size = tmp;
+  printf ("receiveFrameInfo.3.1: in_msg->size: %llu\n", in_msg->size);
+
+  printf ("receiveFrameInfo.4\n");
   std::cout << "frame_size read status: " << error << std::endl;
   std::cout << "frame_size            : " << (*in_msg).size << std::endl;
 
@@ -485,8 +493,9 @@ void processImageReconRequest
     ISMRMRD::NDArray<std::complex<float> > buffer;
     std::vector<size_t>         dims;
     uint32_t                    num_processed = 0;
+    bool                        done = false;
 
-    while (num_processed < command.data_count[ii])
+    while (!done)
     {
       // Try to get a stream to process
       if (!getIcpStream (in_data, stream_num, icp_stream))
@@ -504,6 +513,7 @@ void processImageReconRequest
         sleep (5);  
         continue;
       }
+
       // Verify that we are dealing with the correct type of data
       e_type = (ISMRMRD::EntityType)  icp_stream.entity_header.entity_type;
       s_type = (ISMRMRD::StorageType) icp_stream.entity_header.storage_type;
@@ -527,6 +537,13 @@ void processImageReconRequest
       if (num_coils == 0)
       {
         std::vector<unsigned char> data = icp_stream.data.front();
+        if (data.size() == 0)
+        {
+          // This would be unexepected as this is the first iteration
+          // TODO: Throw an error
+          done = true;
+          break;
+        }
         ISMRMRD::Acquisition<float> acq;
         acq.deserialize (data);
         num_coils = acq.getActiveChannels();
@@ -543,6 +560,14 @@ void processImageReconRequest
       {
         std::vector<unsigned char> data = icp_stream.data.front();
         icp_stream.data.pop();
+        if (data.size() == 0)
+        {
+          // The last acquisition for a stream is expected to be of 0 length
+          // TODO: consider a more gracious way of detecting end of stream
+          done = true;
+          break;
+        }
+
         ISMRMRD::Acquisition<float> acq;
         acq.deserialize (data);
 
@@ -552,11 +577,6 @@ void processImageReconRequest
             &acq.at(0, coil), sizeof (std::complex<float>) * eX);
         }
         num_processed ++;
-      }
-
-      if (num_processed >= command.data_count[ii])
-      {
-        break;
       }
     }
 
@@ -759,12 +779,11 @@ void readSocket
 )
 {
   // Start the writer thread
-  OUTPUT_QUEUE        out_mq;
+  OUTPUT_QUEUE        out_mq (new std::queue<OUT_MSG>);
   std::thread writer (writeSocket, sock, out_mq, id);
 
-  printf ("readSocket 1\n");
   ISMRMRD::Handshake handshake;
-  printf ("readSocket 2\n");
+  printf ("readSocket 1\n");
   if (!authenticateClient (sock, out_mq, handshake))
   {
     writer.join();

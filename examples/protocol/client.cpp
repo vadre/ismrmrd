@@ -294,40 +294,32 @@ void queueMessage
   OUTPUT_QUEUE                oq
 )
 {
-  printf ("queueMessage 1\n");
   OUT_MSG msg;
-  printf ("queueMessage 2\n");
   msg.size = size;
-  printf ("queueMessage 3\n");
   msg.data.reserve (size);
 
-  std::cout << "Queueing message of size = " << size << std::endl;
-  printf ("ent size = %ld, sizeof = %ld\n", ent.size(), sizeof (ent));
-  printf ("data size = %ld, sizeof = %ld\n", data.size(), sizeof (data));
+  printf ("Queueing message of size %u (%lu + %lu)",
+          size, ent.size(), data.size());
 
   uint64_t s = size;
-  std::cout << "Size = " << size << std::endl;
+  //std::cout << "Size = " << size << std::endl;
   size = (isCpuLittleEndian) ? size : __builtin_bswap64 (size);
-  std::cout << "Size = " << size << std::endl;
-  std::cout << "Sizeof s = " << sizeof (s)  << std::endl;
+  //std::cout << "Size = " << size << std::endl;
 
   std::copy ((unsigned char*) &s,
              (unsigned char*) &s + sizeof (s),
              std::back_inserter (msg.data));
-  printf ("queueMessage 4\n");
 
   std::copy ((unsigned char*) &ent,
              (unsigned char*) &ent + ent.size(),
              std::back_inserter (msg.data));
-  printf ("queueMessage 5\n");
 
   std::copy ((unsigned char*) &data,
              (unsigned char*) &data + data.size(),
              std::back_inserter (msg.data));
-  printf ("queueMessage 6\n");
 
   oq->push (msg);
-  printf ("queueMessage 7\n");
+  printf ("  -  Done\n");
 
   return;
 }
@@ -340,7 +332,6 @@ void queueHandshake
   OUTPUT_QUEUE    out_mq
 )
 {
-  printf ("queueHandshake 1\n");
   struct timeval tv;
   gettimeofday(&tv, NULL);
 
@@ -350,7 +341,7 @@ void queueHandshake
   e_hdr.storage_type = ISMRMRD::ISMRMRD_CHAR;
   e_hdr.stream = 65536;
   std::vector<unsigned char> ent = e_hdr.serialize();
-  printf ("ent size = %ld, sizeof = %ld\n", ent.size(), sizeof (ent));
+
 
   ISMRMRD::Handshake handshake;
   handshake.timestamp = (uint64_t)(tv.tv_sec);
@@ -358,16 +349,15 @@ void queueHandshake
   strncpy (handshake.client_name, client_name.c_str(), client_name.size());
 
   std::vector<unsigned char> hand = handshake.serialize();
-  printf ("hand size = %ld, sizeof = %ld\n", hand.size(), sizeof (hand));
+  printf ("ent size = %ld, hand size = %ld\n",  ent.size(), hand.size());
 
   uint64_t  size = (uint64_t) (ent.size() + hand.size());
-  std::cout << "Size = " << size << std::endl;
+  //std::cout << "Size = " << size << std::endl;
   size = (isCpuLittleEndian) ? size : __builtin_bswap64 (size);
-  std::cout << "Size = " << size << std::endl;
+  //std::cout << "Size = " << size << std::endl;
 
-  printf ("queueHandshake 2\n");
   queueMessage (size, ent, hand, out_mq);
-  printf ("queueHandshake 3\n");
+  printf ("Finished queueHandshake\n");
 }
 
 /*******************************************************************************
@@ -384,15 +374,15 @@ void queueXmlHeader
   e_hdr.storage_type = ISMRMRD::ISMRMRD_CHAR;
   e_hdr.stream = 1;
   std::vector<unsigned char> ent = e_hdr.serialize();
-  printf ("ent size = %ld, sizeof = %ld\n", ent.size(), sizeof (ent));
 
-  std::vector<unsigned char> xml;
-  xml.reserve (xml_head.size());
-  memcpy ((void*)&xml_head[0], (void*)&xml[0], xml_head.size());
+  std::vector<unsigned char> xml (xml_head.begin(), xml_head.end());
+  //xml.reserve (xml_head.size());
+  //memcpy ((void*)&xml_head[0], (void*)&xml[0], xml_head.size());
 
-  uint64_t size  = (uint64_t) (ent.size() + xml_head.size());
-  std::cout << "Size = " << size << std::endl;
+  uint64_t size  = (uint64_t) (ent.size() + xml.size());
   size = (isCpuLittleEndian) ? size : __builtin_bswap64 (size);
+  printf ("queueXmlHeader: Size = %llu (%ld + %ld)\n",
+          size, ent.size(), xml.size());
 
   queueMessage (size, ent, xml, out_mq);
 }
@@ -401,30 +391,23 @@ void queueXmlHeader
  ******************************************************************************/
 void queueCommand (ISMRMRD::Command& cmd, OUTPUT_QUEUE out_mq)
 {
-  printf ("queueCommand 1\n");
+  printf ("queueCommand begin \n");
   ISMRMRD::EntityHeader e_hdr;
-  printf ("queueCommand 2\n");
   e_hdr.version = my_version;
-  printf ("queueCommand 3\n");
   e_hdr.entity_type = ISMRMRD::ISMRMRD_COMMAND;
-  printf ("queueCommand 4\n");
   e_hdr.storage_type = ISMRMRD::ISMRMRD_CHAR;
-  printf ("queueCommand 5\n");
   e_hdr.stream = 65537; // Todo: define reserved stream number names
-  printf ("queueCommand 6\n");
   std::vector<unsigned char> ent = e_hdr.serialize();
-  printf ("ent size = %ld, sizeof = %ld\n", ent.size(), sizeof (ent));
 
   std::vector<unsigned char> command = cmd.serialize();
-  printf ("command size = %ld, sizeof = %ld\n", command.size(), sizeof (command));
+  printf ("ent size = %ld, command size = %ld\n", ent.size(), command.size());
 
   uint64_t size = (uint64_t) (ent.size() + command.size());
-  std::cout << "Size = " << size << std::endl;
+  //std::cout << "Size = " << size << std::endl;
   size = (isCpuLittleEndian) ? size : __builtin_bswap64 (size);
 
-  printf ("queueCommand 7\n");
   queueMessage (size, ent, command, out_mq);
-  printf ("queueCommand 8\n");
+  printf ("queueCommand Finished\n");
 }
 
 /*******************************************************************************
@@ -433,22 +416,32 @@ template <typename T>
 void queueAcquisition
 (
   ISMRMRD::Acquisition<T> acq,
-  OUTPUT_QUEUE out_mq
+  OUTPUT_QUEUE            out_mq,
+  bool                    empty = false
 )
 {
   ISMRMRD::EntityHeader e_hdr;
 
-  e_hdr.version = my_version;
+  e_hdr.version      = my_version;
   e_hdr.entity_type  = ISMRMRD::ISMRMRD_MRACQUISITION;
   e_hdr.storage_type = acq.getStorageType();
   e_hdr.stream       = acq.getStream();
   std::vector<unsigned char> ent = e_hdr.serialize();
-  printf ("ent size = %ld, sizeof = %ld\n", ent.size(), sizeof (ent));
 
-  std::vector<unsigned char> acquisition = acq.serialize();
+  std::vector<unsigned char> acquisition;
+  uint64_t size = 0;
+  if (empty)
+  {
+    size = (uint64_t) ent.size();
+  }
+  else
+  {
+    acquisition = acq.serialize();
+    size = (uint64_t) (ent.size() + acquisition.size());
+  }
 
-  uint64_t size = (uint64_t) (ent.size() + acquisition.size());
-  std::cout << "Size = " << size << std::endl;
+  //printf ("queueAcq: size = %llu, (%ld + %ld)\n",
+          //size, ent.size(), acquisition.size());
   size = (isCpuLittleEndian) ? size : __builtin_bswap64 (size);
 
   queueMessage (size, ent, acquisition, out_mq);
@@ -462,8 +455,10 @@ void prepareDataQueue (std::string         fname,
                        std::string         client_name,
                        std::atomic<bool>*  done)
 {
-  printf ("prepareDataQueue 1, %s, %s\n", fname.c_str(), dname.c_str());
-  ISMRMRD::Dataset dset (fname.c_str(), dname.c_str(), false);
+  printf ("prepareDataQueue for file %s, groupname: %s\n",
+          fname.c_str(), dname.c_str());
+
+  ISMRMRD::Dataset dset (fname.c_str(), dname.c_str());
   std::string xml_head = dset.readHeader();
   ISMRMRD::IsmrmrdHeader xmlHeader;
   ISMRMRD::deserialize (xml_head.c_str(), xmlHeader);
@@ -471,51 +466,58 @@ void prepareDataQueue (std::string         fname,
   queueHandshake (client_name, out_mq);
 
   ISMRMRD::Command cmd;
-  //std::vector<uint32_t> test;
-  //test.push_back (42);
-  std::cout << "prepareDataQueue 1.2 " << std::endl;
   cmd.command_id = 1;
   cmd.command_type = ISMRMRD::ISMRMRD_COMMAND_IMAGE_RECONSTRUCTION;
   cmd.num_streams = 1;
-  //std::cout << "prepareDataQueue 1.3 " << xmlHeader.streams[0].number << std::endl;
-  cmd.streams.resize(2);
-  std::cout << "prepareDataQueue 1.3.1 " << std::endl;
-  cmd.streams.push_back (42);
-  //std::cout << "prepareDataQueue 1.3.2 " << xmlHeader.streams[0].number << std::endl;
-  //cmd.streams.push_back (xmlHeader.streams[0].number);
-  printf ("prepareDataQueue 1.4\n");
-  cmd.data_count.push_back
-    (dset.getNumberOfAcquisitions (xmlHeader.streams[0].number));
-  printf ("prepareDataQueue 2\n");
-  cmd.config_size = 0;
-  printf ("prepareDataQueue 3\n");
-  queueCommand (cmd, out_mq);
-  printf ("prepareDataQueue 4\n");
 
-  queueXmlHeader (xml_head, out_mq);
-  printf ("prepareDataQueue 5\n");
-  
-  int num_acq = dset.getNumberOfAcquisitions();
-
-  std::cout << "Acq storage type is: " <<
-               dset.readAcquisition<float>(0).getStorageType() << std::endl;
-
-  printf ("prepareDataQueue 6\n");
-  for (int ii = 0; ii < num_acq; ++ii)
+  //cmd.streams.resize(1);
+  //cmd.data_count.resize(1);
+  if (xmlHeader.streams.size() <= 0)
   {
-    queueAcquisition (dset.readAcquisition<float> (ii), out_mq);
+    cmd.streams.push_back (42);
+    std::cout << "prepareDataQueue: no stream num available " << std::endl;
+  }
+  else
+  {
+    cmd.streams.push_back (xmlHeader.streams[0].number);
+    std::cout << "prepareDataQueue: stream num = " <<
+                 xmlHeader.streams[0].number << std::endl;
   }
 
-  printf ("prepareDataQueue 7\n");
+  cmd.config_size = 0;
+  if (cmd.config_size > 0)
+  {
+    // TODO: Config information has to come from somewhere
+    //cmd.config.resize(cmd.config_size);
+    //cmd.config = config_info;
+  }
+  queueCommand (cmd, out_mq);
+
+  queueXmlHeader (xml_head, out_mq);
+  printf ("prepareDataQueue: Queued XML Header\n");
+  
+  int num_acq = dset.getNumberOfAcquisitions(0);
+
+  std::cout << "Acq storage type is: " <<
+               dset.readAcquisition<float>(0, 0).getStorageType() << std::endl;
+
+  for (int ii = 0; ii < num_acq; ++ii)
+  {
+    queueAcquisition (dset.readAcquisition<float> (ii, 0), out_mq);
+  }
+  printf ("prepareDataQueue: finished acqs, sending empty...\n");
+  queueAcquisition (dset.readAcquisition<float> (num_acq - 1, 0), out_mq, true);
+  printf ("prepareDataQueue: queued the empty acq\n");
+
   cmd.command_id = 2;
   cmd.command_type = ISMRMRD::ISMRMRD_COMMAND_STOP_FROM_CLIENT;
   cmd.num_streams = 0;
   cmd.streams.clear();
-  cmd.data_count.clear();
   cmd.config_size = 0;
+  printf ("prepareDataQueue: queueing command to stop\n");
   queueCommand (cmd, out_mq);
 
-  printf ("prepareDataQueue 8\n");
+  printf ("prepareDataQueue: Finished \n");
   *done = true;
 }
 
@@ -523,9 +525,9 @@ void prepareDataQueue (std::string         fname,
  ******************************************************************************/
 int main (int argc, char* argv[])
 {
-  std::string       client_name = "HAL 9000";
+  std::string       client_name = "Client 1";
   std::string       host        = "127.0.0.1";
-  std::string       in_fname    = "FileIn.h5";
+  std::string       in_fname    = "test.h5";
   std::string       in_dset     = "dataset";
   std::string       out_fname   = "FileOut.h5";
   std::string       out_dset    = "dataset";
@@ -567,48 +569,42 @@ int main (int argc, char* argv[])
   std::cout << "Attempting to prepare data from " << in_fname << std::endl;
   std::atomic<bool> done (false);
   OUTPUT_QUEUE      out_mq (new std::queue<OUT_MSG>);
-  printf ("Main 1\n");
   std::thread t1 (prepareDataQueue,
                   in_fname,
                   in_dset,
                   out_mq,
                   client_name,
                   &done);
-  printf ("Main 2\n");
-
   try
   {
-  printf ("Main 3\n");
     boost::asio::io_service io_service;
     socket_ptr sock (new tcp::socket (io_service));
     tcp::endpoint endpoint(boost::asio::ip::address::from_string(host), port);
-  printf ("Main 4\n");
 
     boost::system::error_code error = boost::asio::error::host_not_found;
     (*sock).connect(endpoint, error);
     if (error) throw boost::system::system_error(error);
-  printf ("Main 5\n");
 
     std::thread t2 (readSocket, sock, client_name, out_fname, out_dset);
-    sleep(1);
-  printf ("Main 6\n");
+
+    ts.tv_nsec  =  5000000;
+    nanosleep (&ts, NULL);
+    ts.tv_nsec  =    1000;
+
+  printf ("Starting sending out...\n");
 
     while (!done || !(*out_mq).empty())
     {
-  printf ("Main 7\n");
       if (out_mq->empty())
       {
-  printf ("Main 7.1\n");
         nanosleep (&ts, NULL);
-  printf ("Main 7.2\n");
         continue;
       }
 
-  printf ("Main 8\n");
       OUT_MSG msg = out_mq->front();
       out_mq->pop();
       boost::asio::write (*sock, boost::asio::buffer (msg.data, msg.size));
-      std::cout << client_name << " sent out a frame" << std::endl;
+      printf ("   ==> %s sent out a frame\n", client_name.c_str());
     }
 
     t1.join();
