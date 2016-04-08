@@ -9,6 +9,7 @@
 
 #include <string.h>
 
+#include <stdio.h>
 
 namespace ISMRMRD {
 
@@ -1535,8 +1536,12 @@ std::vector<unsigned char> Handshake::serialize()
 
 void Handshake::deserialize(const std::vector<unsigned char>& buffer)
 {
-  if (buffer.size() != sizeof (uint64_t) + sizeof (uint32_t) + Max_Client_Name_Length)
+  if (buffer.size() != sizeof (uint64_t) + sizeof (uint32_t) +
+                               Max_Client_Name_Length)
   {
+    printf ("buffer.size(): %lu\n", buffer.size());
+    printf ("expected: %lu\n", sizeof (uint64_t) + sizeof (uint32_t) +
+                               Max_Client_Name_Length);
     throw std::runtime_error
       ("Buffer size does not match the size of Handshake");
   }
@@ -1624,16 +1629,20 @@ void Command::deserialize (const std::vector<unsigned char>& buffer)
              &buffer[right],
              (unsigned char*) &this->num_streams);
 
-  int      ii;
-  for (ii = 0; ii < this->num_streams; ii++)
+  if (this->num_streams > 0)
   {
-    left   = right;
-    right += sizeof (uint32_t);
-    uint32_t temp;
-    std::copy (&buffer[left],
-               &buffer[right],
-               (unsigned char*) &temp);
-    this->streams[ii] = temp;
+    streams.resize (this->num_streams);
+    for (int ii = 0; ii < this->num_streams; ii++)
+    {
+    
+      left   = right;
+      right += sizeof (uint32_t);
+      uint32_t temp;
+      std::copy (&buffer[left],
+                 &buffer[right],
+                 (unsigned char*) &temp);
+      this->streams[ii] = temp;
+    }
   }
 
   left   = right;
@@ -1642,10 +1651,14 @@ void Command::deserialize (const std::vector<unsigned char>& buffer)
              &buffer[right],
              (unsigned char*) &this->config_size);
 
-  left   = right;
-  right += this->config_size;
-  this->config_buf = std::vector<unsigned char>
-                       (&buffer[left], &buffer[right]);
+  if (this->config_size > 0)
+  {
+    left   = right;
+    right += this->config_size;
+    this->config_buf.resize (this->config_size);
+    this->config_buf = std::vector<unsigned char>
+                         (&buffer[left], &buffer[right]);
+  }
 }
 
 

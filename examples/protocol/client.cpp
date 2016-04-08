@@ -215,6 +215,7 @@ void readSocket
     {
       case ISMRMRD::ISMRMRD_COMMAND:
 
+        printf ("Deserializing command\n");
         cmd.deserialize ((*in_msg).data);
         if (cmd.command_type == ISMRMRD::ISMRMRD_COMMAND_DONE_FROM_SERVER)
         {
@@ -310,13 +311,17 @@ void queueMessage
              (unsigned char*) &s + sizeof (s),
              std::back_inserter (msg.data));
 
-  std::copy ((unsigned char*) &ent,
-             (unsigned char*) &ent + ent.size(),
+  std::copy ((unsigned char*) &ent[0],
+             (unsigned char*) &ent[0] + ent.size(),
              std::back_inserter (msg.data));
 
-  std::copy ((unsigned char*) &data,
-             (unsigned char*) &data + data.size(),
+  std::copy ((unsigned char*) &data[0],
+             (unsigned char*) &data[0] + data.size(),
              std::back_inserter (msg.data));
+
+  //std::cout << "serialized out_msg: " <<  std::endl;
+  //for (int ii = 0; ii != msg.data.size(); ii++) printf ("%x ", msg.data[ii]);
+  //std::cout << std::endl;
 
   oq->push (msg);
   printf ("  -  Done\n");
@@ -340,24 +345,40 @@ void queueHandshake
   e_hdr.entity_type = ISMRMRD::ISMRMRD_HANDSHAKE;
   e_hdr.storage_type = ISMRMRD::ISMRMRD_CHAR;
   e_hdr.stream = 65536;
+
+  //printf ("Handshake entity header:\n");
+  //printf ("version = %u, %x\n", e_hdr.version, e_hdr.version);
+  //printf ("entity  = %u, %x\n", e_hdr.entity_type, e_hdr.entity_type);
+  //printf ("storage = %u, %x\n", e_hdr.storage_type, e_hdr.storage_type);
+  //printf ("stream  = %u, %x\n", e_hdr.stream, e_hdr.stream);
   std::vector<unsigned char> ent = e_hdr.serialize();
 
+  //std::cout << "serialized: " <<  std::endl;
+  //for (int ii = 0; ii != ent.size(); ii++) printf ("%x ", ent[ii]); 
+  //std::cout << std::endl;
 
   ISMRMRD::Handshake handshake;
   handshake.timestamp = (uint64_t)(tv.tv_sec);
   memset (handshake.client_name, 0, ISMRMRD::Max_Client_Name_Length);
   strncpy (handshake.client_name, client_name.c_str(), client_name.size());
 
+  printf ("Handshake:\n");
+  printf ("timestamp   = %llu\n", handshake.timestamp);
+  printf ("client_name = %s\n", handshake.client_name);
+
   std::vector<unsigned char> hand = handshake.serialize();
-  printf ("ent size = %ld, hand size = %ld\n",  ent.size(), hand.size());
+  //std::cout << "serialized: " << std::endl;
+  //for (int ii = 0; ii != hand.size(); ++ii) printf ("%x ", hand[ii]);
+  //std::cout << std::endl;
+
+  //printf ("ent size = %ld, hand size = %ld\n",  ent.size(), hand.size());
 
   uint64_t  size = (uint64_t) (ent.size() + hand.size());
-  //std::cout << "Size = " << size << std::endl;
   size = (isCpuLittleEndian) ? size : __builtin_bswap64 (size);
   //std::cout << "Size = " << size << std::endl;
 
   queueMessage (size, ent, hand, out_mq);
-  printf ("Finished queueHandshake\n");
+  printf ("Finished queueHandshake\n\n");
 }
 
 /*******************************************************************************
@@ -391,7 +412,7 @@ void queueXmlHeader
  ******************************************************************************/
 void queueCommand (ISMRMRD::Command& cmd, OUTPUT_QUEUE out_mq)
 {
-  printf ("queueCommand begin \n");
+  printf ("In queueCommand... \n");
   ISMRMRD::EntityHeader e_hdr;
   e_hdr.version = my_version;
   e_hdr.entity_type = ISMRMRD::ISMRMRD_COMMAND;
@@ -407,7 +428,7 @@ void queueCommand (ISMRMRD::Command& cmd, OUTPUT_QUEUE out_mq)
   size = (isCpuLittleEndian) ? size : __builtin_bswap64 (size);
 
   queueMessage (size, ent, command, out_mq);
-  printf ("queueCommand Finished\n");
+  printf ("queueCommand Finished\n\n");
 }
 
 /*******************************************************************************
@@ -501,7 +522,8 @@ void prepareDataQueue (std::string         fname,
   std::cout << "Acq storage type is: " <<
                dset.readAcquisition<float>(0, 0).getStorageType() << std::endl;
 
-  for (int ii = 0; ii < num_acq; ++ii)
+  //for (int ii = 0; ii < num_acq; ++ii)
+  for (int ii = 0; ii < 4; ++ii)
   {
     queueAcquisition (dset.readAcquisition<float> (ii, 0), out_mq);
   }
@@ -593,6 +615,7 @@ int main (int argc, char* argv[])
 
   printf ("Starting sending out...\n");
 
+    int msg_count = 0;
     while (!done || !(*out_mq).empty())
     {
       if (out_mq->empty())
@@ -601,10 +624,12 @@ int main (int argc, char* argv[])
         continue;
       }
 
+      msg_count++;
       OUT_MSG msg = out_mq->front();
       out_mq->pop();
-      boost::asio::write (*sock, boost::asio::buffer (msg.data, msg.size));
-      printf ("   ==> %s sent out a frame\n", client_name.c_str());
+      boost::asio::write (*sock, boost::asio::buffer (msg.data, 8 + msg.size));
+      printf ("   ==> %s sent out a frame %d, size %u\n",
+              client_name.c_str(), msg_count, msg.size);
     }
 
     t1.join();
