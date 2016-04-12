@@ -195,7 +195,7 @@ int main(int argc, char** argv)
     stream.label = "K-Space Data";
     stream.storageType = ISMRMRD_CXFLOAT;
     stream.entityType = ISMRMRD_MRACQUISITION;
-    stream.number = 0;
+    stream.number = 100;
 
     h.streams.push_back(stream);
 
