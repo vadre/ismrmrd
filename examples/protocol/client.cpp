@@ -549,7 +549,8 @@ int main (int argc, char* argv[])
 {
   std::string       client_name = "Client 1";
   std::string       host        = "127.0.0.1";
-  std::string       in_fname    = "test.h5";
+  //std::string       in_fname    = "test.h5";
+  std::string       in_fname    = "testdata.h5";
   std::string       in_dset     = "dataset";
   std::string       out_fname   = "FileOut.h5";
   std::string       out_dset    = "dataset";

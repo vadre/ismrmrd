@@ -20,6 +20,8 @@ namespace ICPRECEIVEDDATA
     this->entity_header.storage_type = ISMRMRD::ISMRMRD_CHAR;
     this->entity_header.stream       = 0;
 
+    this->updated                    = false;
+    this->completed                  = false;
     this->processed                  = false;
   }
 
@@ -27,8 +29,7 @@ namespace ICPRECEIVEDDATA
    ****************************************************************************/
   icpStream::icpStream
   (
-    ISMRMRD::EntityHeader& hdr,
-    bool                   processed = false
+    ISMRMRD::EntityHeader& hdr
   )
   {
     this->entity_header.version      = hdr.version;
@@ -36,7 +37,9 @@ namespace ICPRECEIVEDDATA
     this->entity_header.storage_type = hdr.storage_type;
     this->entity_header.stream       = hdr.stream;
 
-    this->processed                  = processed;
+    this->updated                    = false;
+    this->completed                  = false;
+    this->processed                  = false;
   }
 
   /*****************************************************************************
@@ -48,11 +51,16 @@ namespace ICPRECEIVEDDATA
   {
     if (this == &o) return *this;
 
+    std::guard_lock<std::mutex> (o.stream_mutex);
+
     this->entity_header.version       = o.entity_header.version;
     this->entity_header.entity_type   = o.entity_header.entity_type;
     this->entity_header.storage_type  = o.entity_header.storage_type;
     this->entity_header.stream        = o.entity_header.stream;
     this->data                        = o.data;
+
+    this->updated                     = o.updated;
+    this->completed                   = o.completed;
     this->processed                   = o.processed;
 
     return *this;
@@ -60,65 +68,77 @@ namespace ICPRECEIVEDDATA
 
   /*****************************************************************************
    ****************************************************************************/
-  icpCommand::icpCommand ()
-  {
-    this->cmd         = ISMRMRD::ISMRMRD_COMMAND_NO_COMMAND;
-    this->in_progress = false;
-  }
+  //icpCommand::icpCommand ()
+  //{
+    //this->cmd         = ISMRMRD::ISMRMRD_COMMAND_NO_COMMAND;
+    //this->in_progress = false;
+  //}
 
   /*****************************************************************************
    ****************************************************************************/
-  icpCommand::icpCommand
-  (
-    ISMRMRD::CommandType       cmd,
-    std::vector<uint32_t>      streams,
-    std::vector<unsigned char> config,
-    bool                       in_progress
-  )
-  {
-    this->cmd         = cmd;
-    this->streams     = streams;
-    this->config      = config;
-    this->in_progress = in_progress;
-  }
+  //icpCommand::icpCommand
+  //(
+    //ISMRMRD::CommandType       cmd,
+    //std::vector<uint32_t>      streams,
+    //std::vector<unsigned char> config,
+    //bool                       in_progress
+  //)
+  //{
+    //this->cmd         = cmd;
+    //this->streams     = streams;
+    //this->config      = config;
+    //this->in_progress = in_progress;
+  //}
 
   /*****************************************************************************
    ****************************************************************************/
-  icpCommand& icpCommand::operator =
-  (
-    const icpCommand& o
-  )
-  {
-    if (this == &o) return *this;
+  //icpCommand& icpCommand::operator =
+  //(
+    //const icpCommand& o
+  //)
+  //{
+    //if (this == &o) return *this;
 
-    this->cmd           = o.cmd;
-    this->streams       = o.streams;
-    this->config        = o.config;
-    this->in_progress   = o.in_progress;
+    //this->cmd           = o.cmd;
+    //this->streams       = o.streams;
+    //this->config        = o.config;
+    //this->in_progress   = o.in_progress;
 
-    return *this;
-  }
+    //return *this;
+  //}
 
   /*****************************************************************************
    ****************************************************************************/
-  ReceivedData::ReceivedData ()
+  ReceivedData::ReceivedData (DispatcherFuncPtr func_ptr)
   {
     memset (sender_name, 0, ISMRMRD::Max_Client_Name_Length);
+
     session_timestamp = 0;
     respondent_done   = false;
+    dispatcher        = func_ptr;
+    if (!dispatcher)
+    {
+      std::cout << __func__ << ": Invalid dispatcher function pointer!" << '\n';
+    }
   }
 
   /*****************************************************************************
    ****************************************************************************/
   ReceivedData::ReceivedData
   (
-    char* name,
-    uint64_t timestamp
-   )
+    char*             name,
+    uint64_t          timestamp,
+    DispatcherFuncPtr func_ptr
+  )
   {
-    ReceivedData::setSessionTimestamp (timestamp);
     ReceivedData::setSenderName (name);
+    session_timestamp = timestamp;
     respondent_done   = false;
+    dispatcher        = func_ptr;
+    if (!dispatcher)
+    {
+      std::cout << __func__ << ": Invalid dispatcher function pointer!" << '\n';
+    }
   }
 
   /*****************************************************************************
@@ -128,13 +148,16 @@ namespace ICPRECEIVEDDATA
     char* name
   )
   {
-    memset (sender_name, 0, ISMRMRD::Max_Client_Name_Length);
-    if (name)
+    if (strlen (sender_name) <= 0)
     {
-      size_t size = strlen (name);
-      size = (size > ISMRMRD::Max_Client_Name_Length) ?
-              ISMRMRD::Max_Client_Name_Length : size;
-      strncpy (sender_name, name, size);
+      memset (sender_name, 0, ISMRMRD::Max_Client_Name_Length);
+      if (name)
+      {
+        size_t size = strlen (name);
+        size = (size > ISMRMRD::Max_Client_Name_Length) ?
+                ISMRMRD::Max_Client_Name_Length : size;
+        strncpy (sender_name, name, size);
+      }
     }
   }
 
@@ -152,7 +175,10 @@ namespace ICPRECEIVEDDATA
     uint64_t timestamp
   )
   {
-    session_timestamp = timestamp;
+    if (session_timestamp <= 0)
+    {
+      session_timestamp = timestamp;
+    }
   }
 
   /*****************************************************************************
@@ -171,8 +197,7 @@ namespace ICPRECEIVEDDATA
   {
     if (streams.find (hdr.stream) == streams.end())
     {
-      icpStream tmp (hdr, false);
-      //streams [hdr.stream] = tmp;
+      icpStream tmp (hdr);
       streams.insert (std::make_pair (hdr.stream, tmp));
     }
     else if (streams.at (hdr.stream).entity_header.entity_type  !=
@@ -203,24 +228,24 @@ namespace ICPRECEIVEDDATA
 
   /*****************************************************************************
    ****************************************************************************/
-  void ReceivedData::addXMLHeader
-  (
-    ISMRMRD::EntityHeader      entity_header,
-    std::vector<unsigned char> data
-  )
-  {
-    // TODO: Needs synchronization
-    ISMRMRD::deserialize ((const char*) &data[0], xml_header);
-    return;
-  }
+  //void ReceivedData::addXMLHeader
+  //(
+    //ISMRMRD::EntityHeader      entity_header,
+    //std::vector<unsigned char> data
+  //)
+  //{
+    //// TODO: Needs synchronization
+    //ISMRMRD::deserialize ((const char*) &data[0], xml_header);
+    //return;
+  //}
 
   /*****************************************************************************
    ****************************************************************************/
-  ISMRMRD::IsmrmrdHeader ReceivedData::getXMLHeader()
-  {
-    // TODO: Needs synchronization
-    return xml_header;
-  }
+  //ISMRMRD::IsmrmrdHeader ReceivedData::getXMLHeader()
+  //{
+    //// TODO: Needs synchronization
+    //return xml_header;
+  //}
 
   /*****************************************************************************
    ****************************************************************************/
@@ -230,9 +255,12 @@ namespace ICPRECEIVEDDATA
     std::vector<unsigned char> data
   )
   {
-    // TODO: Needs synchronization
     ensureStreamExist (hdr);
-    streams.at (hdr.stream).data.push (data);
+    std::unique_lock<std::mutex> (streams.at (hdr.stream).stream_mutex);
+    std::vector<unsigned char>* tmp = new std::vector<unsigned char> (data);
+    streams.at (hdr.stream).data.push (tmp);
+    streams.at (hdr.stream).updated = true;
+    streams.at (hdr.stream).updated_cv.notify_one();
   }
 
   /*****************************************************************************
@@ -243,8 +271,7 @@ namespace ICPRECEIVEDDATA
     icpStream&  icp_stream
   )
   {
-    // TODO: Needs synchronization
-
+    
     bool success = false;
 
     if (streams.find (stream_num) != streams.end())

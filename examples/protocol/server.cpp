@@ -169,16 +169,14 @@ void queueHandshakeMsg
   e_hdr.storage_type = ISMRMRD::ISMRMRD_CHAR;
   e_hdr.stream = 65536;
   std::vector<unsigned char> ent = e_hdr.serialize();
-  //printf ("ent size = %ld, sizeof = %ld\n", ent.size(), sizeof (ent));
 
   ISMRMRD::Handshake handshake;
   handshake.timestamp = timestamp;
   handshake.conn_status = (uint32_t) status;
   strncpy (client_name, handshake.client_name, strlen (client_name));
   std::vector<unsigned char> hand = handshake.serialize();
-  //printf ("hand size = %ld, sizeof = %ld\n", hand.size(), sizeof (hand));
 
-  //queueMessage (ent.size() + hand.size(), ent, hand, oq);
+  queueMessage (ent.size() + hand.size(), ent, hand, oq);
 }
 
 /*******************************************************************************
@@ -453,9 +451,24 @@ void processImageReconRequest
 {
 
   ISMRMRD::IsmrmrdHeader xml_hdr = in_data.getXMLHeader();
+
   // There is nothing to change in the xml header for this demo but send it back
   std::stringstream str;
-  ISMRMRD::serialize (xml_hdr, str);
+  try
+  {
+    printf ("Num encodings: %lu\n", xml_hdr.encoding.size());
+    printf ("Calling serialize for XML header\n");
+    ISMRMRD::serialize (xml_hdr, str);
+    printf ("Back from serialize for XML header\n");
+  }
+  catch (const std::runtime_error& e)
+  {
+    std::cout << e.what() << std::endl;
+    printf ("Encounterd runtime error serializing XML Header\n");
+    printf ("processImageReconRequest can not continue\n\n");
+    return;
+  }
+
   queueXMLHeaderMsg (str.str(), oq);
 
 
@@ -525,6 +538,7 @@ void processImageReconRequest
       // we need to get the number of coils and set up the buffer accordingly.
       if (num_coils == 0)
       {
+        num_coils = xml_hdr.acquisitionSystemInformation->receiverChannels;
         std::vector<unsigned char> data = icp_stream.data.front();
         if (data.size() == 0)
         {
@@ -785,7 +799,6 @@ void readSocket
     msg_count++;
     printf ("Receiving msg %d\n", msg_count);
     receiveMessage (sock, in_msg);
-    printf ("Received msg %d\n", msg_count);
 
     ISMRMRD::Command cmd;
 
@@ -793,23 +806,32 @@ void readSocket
     {
       case ISMRMRD::ISMRMRD_COMMAND:
 
-        printf ("Received command\n");
+        printf ("Received command\n\n");
         cmd.deserialize (in_msg.data),
         processCommand (cmd, in_data, out_mq, thread_v);
         break;
 
       case ISMRMRD::ISMRMRD_ERROR:
 
-        printf ("Received Error\n");
         // TODO: Error specific processing here...
         // Consider adding to the Received data
+        printf ("Received Error\n\n");
         break;
 
       case ISMRMRD::ISMRMRD_XML_HEADER:
 
-        printf ("Received XML Header\n");
         // TODO: XML Header specific processing here...
-        in_data.addXMLHeader (in_msg.ehdr, in_msg.data);
+        try
+        {
+          printf ("Calling addXmlHeader...\n");
+          in_data.addXMLHeader (in_msg.ehdr, in_msg.data);
+          printf ("Back from addXmlHeader...\n");
+        }
+        catch (const std::runtime_error& e)
+        {
+          std::cout << e.what() << std::endl;
+        }
+        printf ("Received XML Header\n\n");
         break;
 
       case ISMRMRD::ISMRMRD_MRACQUISITION:
@@ -817,15 +839,15 @@ void readSocket
       case ISMRMRD::ISMRMRD_IMAGE:
       case ISMRMRD::ISMRMRD_BLOB:
 
-        printf ("Received stream content\n");
         in_data.addToStream (in_msg.ehdr, in_msg.data);
+        printf ("Received stream content\n\n");
         break;
 
       default:
 
         // TODO: Throw Unexpected entity type error.
-        std::cout << "Warning! unexpected Entity Type received: " <<
-                     in_msg.ehdr.entity_type << std::endl;
+        printf ("Warning! unexpected Entity Type received: %u\n\n",
+                in_msg.ehdr.entity_type);
         break;
 
     } // switch ((*in_msg).ehdr.entity_type)
