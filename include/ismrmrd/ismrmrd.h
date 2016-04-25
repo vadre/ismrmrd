@@ -38,7 +38,7 @@ typedef unsigned __int64 uint64_t;
 
 namespace ISMRMRD {
 
-const uint32_t Max_Client_Name_Length = 64;
+const uint32_t MAX_CLIENT_NAME_LENGTH = 64;
 
 /** Global Constants */
 enum Constant {
@@ -82,8 +82,6 @@ enum CommandType
   ISMRMRD_COMMAND_NO_COMMAND           = 1000,
   ISMRMRD_COMMAND_STOP_FROM_CLIENT     = 1001,
   ISMRMRD_COMMAND_DONE_FROM_SERVER     = 1002,
-  ISMRMRD_COMMAND_IMAGE_RECONSTRUCTION = 1003,
-  ISMRMRD_COMMAND_IMAGE_RECONSTRUCTED  = 1004,
   ISMRMRD_COMMAND_USER_DEFINED_1       = 2001,
   ISMRMRD_COMMAND_USER_DEFINED_2       = 2002,
   ISMRMRD_COMMAND_USER_DEFINED_3       = 2003,
@@ -204,25 +202,18 @@ struct Handshake
                                        provided by client */
     uint32_t         conn_status; /**< ConnectionStatus returnd by server 
                                        in response to clients handshake */
-    char             client_name[Max_Client_Name_Length];
+    char             client_name[MAX_CLIENT_NAME_LENGTH];
 };
 
 struct Command
   : public Entity
 {
-    //explicit Command (int num = 1) : streams (num),
-                                     //data_count (num),
-                                     //config_buf (num) {}
     // Functions inherited from Entity
     virtual std::vector<unsigned char> serialize();
     virtual void deserialize(const std::vector<unsigned char>& buffer);
 
     uint32_t command_id;   /** ID number used to refer to the command */
     uint32_t command_type; /**< CommandType maps to CommandType enum  */
-    uint32_t num_streams;  /** Number of streams associated with this command */
-    std::vector<uint32_t> streams; /**< Associated stream numbers */
-    uint32_t config_size;  /**< Size of configuration buffer */
-    std::vector <unsigned char> config_buf; /**< Configuration buffer */
 };
 
 /** EncodingCounters keeps track of typical loop counters in MR experiment. */
