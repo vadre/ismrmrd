@@ -1507,7 +1507,7 @@ void EntityHeader::deserialize(const std::vector<unsigned char>& buffer)
 
 std::vector<unsigned char> Handshake::serialize()
 {
-  size_t bytes = sizeof (uint64_t) + sizeof (uint32_t) + Max_Client_Name_Length;
+  size_t bytes = sizeof (uint64_t) + sizeof (uint32_t) + MAX_CLIENT_NAME_LENGTH;
   std::vector<unsigned char> buffer;
   buffer.reserve (bytes);
 
@@ -1520,7 +1520,7 @@ std::vector<unsigned char> Handshake::serialize()
              std::back_inserter (buffer));
 
   std::copy ((unsigned char*) &this->client_name,
-             (unsigned char*) &this->client_name + Max_Client_Name_Length,
+             (unsigned char*) &this->client_name + MAX_CLIENT_NAME_LENGTH,
              std::back_inserter (buffer));
 
   if (buffer.size() != bytes)
@@ -1537,11 +1537,11 @@ std::vector<unsigned char> Handshake::serialize()
 void Handshake::deserialize(const std::vector<unsigned char>& buffer)
 {
   if (buffer.size() != sizeof (uint64_t) + sizeof (uint32_t) +
-                               Max_Client_Name_Length)
+                               MAX_CLIENT_NAME_LENGTH)
   {
     printf ("buffer.size(): %lu\n", buffer.size());
     printf ("expected: %lu\n", sizeof (uint64_t) + sizeof (uint32_t) +
-                               Max_Client_Name_Length);
+                               MAX_CLIENT_NAME_LENGTH);
     throw std::runtime_error
       ("Buffer size does not match the size of Handshake");
   }
@@ -1555,42 +1555,24 @@ void Handshake::deserialize(const std::vector<unsigned char>& buffer)
              (unsigned char*) &this->conn_status);
 
   std::copy (&buffer[sizeof (uint64_t) + sizeof (uint32_t)],
-             &buffer[sizeof (uint64_t) + sizeof (uint32_t) + Max_Client_Name_Length],
+             &buffer[sizeof (uint64_t) + sizeof (uint32_t) +
+               MAX_CLIENT_NAME_LENGTH],
              (unsigned char*) &this->client_name);
 }
 
 std::vector<unsigned char> Command::serialize()
 {
-  size_t bytes = (this->num_streams + 4) * sizeof (uint32_t) +
-                 this->config_size;
+  size_t bytes = sizeof (this->command_id) + sizeof (this->command_type);
   std::vector<unsigned char> buffer;
   buffer.reserve (bytes);
 
   std::copy ((unsigned char*) &this->command_id,
-             (unsigned char*) &this->command_id + sizeof (uint32_t),
+             (unsigned char*) &this->command_id + sizeof (this->command_id),
              std::back_inserter (buffer));
 
   std::copy ((unsigned char*) &this->command_type,
-             (unsigned char*) &this->command_type + sizeof (uint32_t),
+             (unsigned char*) &this->command_type + sizeof (this->command_type),
              std::back_inserter (buffer));
-
-  std::copy ((unsigned char*) &this->num_streams,
-             (unsigned char*) &this->num_streams + sizeof (uint32_t),
-             std::back_inserter (buffer));
-
-  std::copy ((unsigned char*) &this->streams,
-             (unsigned char*) &this->streams +
-               (this->num_streams * sizeof (uint32_t)),
-             std::back_inserter (buffer));
-
-  std::copy ((unsigned char*) &this->config_size,
-             (unsigned char*) &this->config_size + sizeof (uint32_t),
-             std::back_inserter (buffer));
-
-  std::copy ((unsigned char*) &this->config_buf,
-             (unsigned char*) &this->config_buf + this->config_size,
-             std::back_inserter (buffer));
-
 
   if (buffer.size() != bytes)
   {
@@ -1598,67 +1580,32 @@ std::vector<unsigned char> Command::serialize()
       ("Serialized buffer size does not match expected Command buffer size");
   }
 
-  return buffer; // Should not be copied on newer compilers due to return
-                 // value optimization.
+  return buffer;
 }
 
 
 void Command::deserialize (const std::vector<unsigned char>& buffer)
 {
-  //if (buffer.size() != sizeof (uint32_t) * 3)
-  //{
-    //throw std::runtime_error
-      //("Buffer size does not match the size of Command");
-  //}
+  if (buffer.size() != sizeof (uint32_t) * 2)
+  {
+    printf ("buffer.size(): %lu\n", buffer.size());
+    printf ("expected: %lu\n", sizeof (uint32_t) * 2);
+    throw std::runtime_error
+      ("Buffer size does not match the expected size of Command");
+  }
 
-  int left  = 0;                  // Offset to the begin byte in the buffer
-  int right = sizeof (uint32_t);  // Offset to the end byte in the buffer
+  int left  = 0;
+  int right = sizeof (this->command_id);
   std::copy (&buffer[left],
              &buffer[right],
              (unsigned char*) &this->command_id);
 
   left   = right;
-  right += sizeof (uint32_t);
+  right += sizeof (this->command_type);
   std::copy (&buffer[left],
              &buffer[right],
              (unsigned char*) &this->command_type);
 
-  left   = right;
-  right += sizeof (uint32_t);
-  std::copy (&buffer[left],
-             &buffer[right],
-             (unsigned char*) &this->num_streams);
-
-  if (this->num_streams > 0)
-  {
-    streams.resize (this->num_streams);
-    for (int ii = 0; ii < this->num_streams; ii++)
-    {
-    
-      left   = right;
-      right += sizeof (uint32_t);
-      uint32_t temp;
-      std::copy (&buffer[left],
-                 &buffer[right],
-                 (unsigned char*) &temp);
-      this->streams[ii] = temp;
-    }
-  }
-
-  left   = right;
-  right += sizeof (uint32_t);
-  std::copy (&buffer[left],
-             &buffer[right],
-             (unsigned char*) &this->config_size);
-
-  if (this->config_size > 0)
-  {
-    left   = right;
-    right += this->config_size;
-    this->config_buf.resize (this->config_size);
-    this->config_buf = std::vector<unsigned char>
-                         (&buffer[left], &buffer[right]);
-  }
 }
 
 
