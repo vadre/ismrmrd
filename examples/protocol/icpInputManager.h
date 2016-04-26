@@ -24,10 +24,6 @@ struct icpStream
 {
   icpStream ();
   icpStream (ISMRMRD::EntityHeader& hdr);
-  icpStream& operator = (const icpStream &other);
-
-  //mutable std::mutex                               stream_mutex;
-  //mutable std::condition_variable                  updated_cv;
 
   ISMRMRD::EntityHeader                    entity_header;
   std::queue<std::vector<unsigned char>>   data;
@@ -53,9 +49,6 @@ public:
   bool addToStream (ISMRMRD::EntityHeader      hdr,
                     std::vector<unsigned char> data);
 
-  void setClientDone();
-  bool isClientDone();
-
   void addXmlHeader (std::vector<unsigned char> data);
   ISMRMRD::IsmrmrdHeader getXmlHeader();
 
@@ -64,8 +57,6 @@ public:
     ISMRMRD::EntityHeader      hdr
   );
 
-
-
 private:
 
   void ensureStreamExist (ISMRMRD::EntityHeader& hdr);
@@ -73,13 +64,11 @@ private:
 
   char              _client_name[ISMRMRD::MAX_CLIENT_NAME_LENGTH];
   uint64_t          _session_timestamp;
-  bool              _client_done;
 
   std::map<uint32_t, icpStream>   _streams;
   ISMRMRD::IsmrmrdHeader          _xml_hdr;
   
 }; /* class icpInputManager */
-
 } /* namespace ICPINPUTMANAGER */
 
 #endif /* ICPINPUTMANAGER_H */

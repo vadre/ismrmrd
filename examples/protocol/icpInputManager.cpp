@@ -1,14 +1,4 @@
-//#include "ismrmrd/ismrmrd.h"
 #include "icpInputManager.h"
-
-//#include <sstream>
-//#include <stdexcept>
-//#include <iostream>
-//#include <algorithm>
-
-//#include <string.h>
-
-//using boost::asio::ip::tcp;
 
 namespace ICPINPUTMANAGER
 {
@@ -43,38 +33,10 @@ namespace ICPINPUTMANAGER
 
   /*****************************************************************************
    ****************************************************************************/
-/*
-  icpStream& icpStream::operator =
-  (
-    const icpStream& o
-  )
-  {
-    if (this == &o) return *this;
-
-    //std::unique_lock<std::mutex> (o.stream_mutex);
-
-    this->entity_header.version       = o.entity_header.version;
-    this->entity_header.entity_type   = o.entity_header.entity_type;
-    this->entity_header.storage_type  = o.entity_header.storage_type;
-    this->entity_header.stream        = o.entity_header.stream;
-    this->data                        = o.data;
-
-    this->updated                     = o.updated;
-    this->completed                   = o.completed;
-    this->processed                   = o.processed;
-
-    return *this;
-  }
-*/
-
-  /*****************************************************************************
-   ****************************************************************************/
   icpInputManager::icpInputManager ()
   {
     memset (_client_name, 0, ISMRMRD::MAX_CLIENT_NAME_LENGTH);
-
     _session_timestamp = 0;
-    _client_done   = false;
   }
 
   /*****************************************************************************
@@ -87,7 +49,6 @@ namespace ICPINPUTMANAGER
   {
     icpInputManager::setClientName (name);
     _session_timestamp = timestamp;
-    _client_done       = false;
   }
 
   /*****************************************************************************
@@ -163,20 +124,6 @@ namespace ICPINPUTMANAGER
 
   /*****************************************************************************
    ****************************************************************************/
-  void icpInputManager::setClientDone()
-  {
-    _client_done = true;
-  }
-
-  /*****************************************************************************
-   ****************************************************************************/
-  bool icpInputManager::isClientDone()
-  {
-    return _client_done;
-  }
-
-  /*****************************************************************************
-   ****************************************************************************/
   bool icpInputManager::addToStream
   (
     ISMRMRD::EntityHeader      hdr,
@@ -184,7 +131,6 @@ namespace ICPINPUTMANAGER
   )
   {
     ensureStreamExist (hdr);
-    //std::unique_lock<std::mutex> lk (streams.at (hdr.stream).stream_mutex);
     _streams.at (hdr.stream).data.push (data);
 
     // Check if stream is ready to be processed
@@ -198,9 +144,6 @@ namespace ICPINPUTMANAGER
       }
     }
 
-    //std::cout << __func__ << ": data.size = " <<
-                 //_streams.at (hdr.stream).data.size() << "\n";
-
     return _streams.at (hdr.stream).completed;
   }
 
@@ -208,7 +151,17 @@ namespace ICPINPUTMANAGER
    ****************************************************************************/
   void icpInputManager::addXmlHeader (std::vector<unsigned char> data)
   {
-    ISMRMRD::deserialize ((const char*) &data[0], _xml_hdr);
+    try
+    {
+      std::string xml (data.begin(), data.end());
+      ISMRMRD::deserialize (xml.c_str(), _xml_hdr);
+    }
+    catch (std::runtime_error& e)
+    {
+      std::cout << "Unable to deserialize XML header: " << e.what() << std::endl;
+      throw;
+    }
+
   }
 
   /*****************************************************************************
@@ -222,18 +175,14 @@ namespace ICPINPUTMANAGER
    ****************************************************************************/
   std::vector<ISMRMRD::Acquisition<float> > icpInputManager::getAcquisitions
   (
-    ISMRMRD::EntityHeader      hdr
+    ISMRMRD::EntityHeader  hdr
   )
   {
     std::vector<ISMRMRD::Acquisition<float> > acqs;
-
     for (uint32_t ii = 0; ii < _streams.at (hdr.stream).data.size(); ii++)
     {
       ISMRMRD::Acquisition<float> acq;
-      //std::vector<unsigned char> data = _streams.at (hdr.stream).data.front();
-      //acq.deserialize (data);
       acq.deserialize (_streams.at (hdr.stream).data.front());
-      _streams.at (hdr.stream).data.pop();
       acqs.push_back (acq);
     }
 

@@ -24,15 +24,15 @@ void handleCommand
 (
   uint32_t                            cmd_type,
   uint32_t                            cmd_id,
-  ICPOUTPUTMANAGER::icpOutputManager& om
+  ICPOUTPUTMANAGER::icpOutputManager* om
 )
 {
-  std::cout << __func__ << '\n';
   switch (cmd_type)
   {
-    case ISMRMRD::ISMRMRD_COMMAND_USER_DEFINED_1:
+    case ISMRMRD::ISMRMRD_COMMAND_STOP_FROM_CLIENT:
 
-      om.setClientDone();
+      // Up to handler
+      std::cout << __func__ << ": Received STOP  from client\n";
       break;
 
     default:
@@ -47,12 +47,12 @@ void handleImageReconstruction
 (
   ISMRMRD::IsmrmrdHeader                     hdr,
   std::vector<ISMRMRD::Acquisition<float> >  acqs,
-  ICPOUTPUTMANAGER::icpOutputManager&        om
+  ICPOUTPUTMANAGER::icpOutputManager*        om
 )
 {
-  std::cout << __func__ << " got " << acqs.size() << " acqs\n";
+  std::cout << __func__ << " received " << acqs.size() << " acquisitions\n";
 
-  om.sendXmlHeader (hdr);
+  om->sendXmlHeader (hdr);
 
   ISMRMRD::EncodingSpace e_space = hdr.encoding[0].encodedSpace;
   ISMRMRD::EncodingSpace r_space = hdr.encoding[0].reconSpace;
@@ -70,8 +70,6 @@ void handleImageReconstruction
 
 
   uint32_t num_coils = acqs[0].getActiveChannels();
-
-  std::cout << __func__ << " got " << num_coils << " coils\n";
 
   std::vector<size_t> dims;
   dims.push_back (nX);
@@ -153,8 +151,9 @@ void handleImageReconstruction
                           r_space.fieldOfView_mm.y,
                           r_space.fieldOfView_mm.z);
 
-  om.sendImage (img_out);
+  om->sendImage (img_out);
 
+  std::cout << __func__ << " done " << "\n";
   return;
 }
 
@@ -163,11 +162,11 @@ void handleImageReconstruction
 void handleAuthentication
 (
   std::string  name,
-  ICPOUTPUTMANAGER::icpOutputManager& om
+  ICPOUTPUTMANAGER::icpOutputManager* om
 )
 {
-  std::cout << __func__ << ": client name = "<< name << '\n';
-  om.clientAccepted (true);
+  std::cout << __func__ << ": client <"<< name << "> accepted\n";
+  om->clientAccepted (true);
   return;
 }
 
@@ -200,21 +199,6 @@ int main
   server.register_image_reconstruction_handler (&handleImageReconstruction);
 
   server.start();
-
-  struct timespec   ts;
-  ts.tv_sec  =    0;
-  ts.tv_nsec = 1000;
-
-  while (!server.isServerDone())
-  {
-    nanosleep (&ts, NULL);
-  }
-
-  server.shutdown();
-  ts.tv_sec  =    1;
-  nanosleep (&ts, NULL);
-
-  std::cout << "\nISMRMRD Processor shutting down now" << "\n\n";
 
   return 0;
 }

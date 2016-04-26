@@ -7,30 +7,12 @@ namespace ICPOUTPUTMANAGER
   /*****************************************************************************
    ****************************************************************************/
   icpOutputManager::icpOutputManager ()
+  : _session_timestamp (0),
+    _client_done (false),
+    _server_done (false),
+    _request_completed (false)
   {
     memset (_client_name, 0, ISMRMRD::MAX_CLIENT_NAME_LENGTH);
-
-    _session_timestamp  = 0;
-    _client_done        = false;
-    _client_accepted    = false;
-    _handshake_received = false;
-  }
-
-  /*****************************************************************************
-   ****************************************************************************/
-  icpOutputManager::icpOutputManager
-  (
-    uint32_t id
-  )
-  {
-    memset (_client_name, 0, ISMRMRD::MAX_CLIENT_NAME_LENGTH);
-
-    _session_timestamp  = 0;
-    _client_done        = false;
-    _client_accepted    = false;
-    _server_done        = false;
-    _handshake_received = false;
-    _id                 = id;
   }
 
   /*****************************************************************************
@@ -66,13 +48,6 @@ namespace ICPOUTPUTMANAGER
 
   /*****************************************************************************
    ****************************************************************************/
-  void icpOutputManager::setHandshakeReceived ()
-  {
-    _handshake_received = true;
-  }
-
-  /*****************************************************************************
-   ****************************************************************************/
   void icpOutputManager::setClientDone()
   {
     _client_done = true;
@@ -96,8 +71,21 @@ namespace ICPOUTPUTMANAGER
    ****************************************************************************/
   bool icpOutputManager::isServerDone()
   {
-    //std::cout << __func__ << ": " << _server_done << '\n';
     return _server_done;
+  }
+
+  /*****************************************************************************
+   ****************************************************************************/
+  void icpOutputManager::setRequestCompleted()
+  {
+    _request_completed = true;
+  }
+
+  /*****************************************************************************
+   ****************************************************************************/
+  bool icpOutputManager::isRequestCompleted()
+  {
+    return _request_completed;
   }
 
   /*****************************************************************************
@@ -107,8 +95,6 @@ namespace ICPOUTPUTMANAGER
     bool accepted
   )
   {
-    _client_accepted = accepted;
-
     ISMRMRD::EntityHeader e_hdr;
     e_hdr.version = my_version;
     e_hdr.entity_type = ISMRMRD::ISMRMRD_HANDSHAKE;
@@ -118,7 +104,7 @@ namespace ICPOUTPUTMANAGER
 
     ISMRMRD::Handshake handshake;
     handshake.timestamp = _session_timestamp;
-    handshake.conn_status = (_client_accepted) ? 
+    handshake.conn_status = (accepted) ? 
                              ISMRMRD::CONNECTION_ACCEPTED :
                              ISMRMRD::CONNECTION_DENIED_UNKNOWN_USER;
     strncpy (handshake.client_name,
@@ -128,16 +114,10 @@ namespace ICPOUTPUTMANAGER
 
     queueMessage (ent.size() + hand.size(), ent, hand);
 
-    int step = 0;
-    std::cout << __func__ << step++ << '\n';
-
-    if (!_client_accepted)
+    if (!accepted)
     {
-      std::cout << __func__ << step++ << '\n';
       sendCommand (ISMRMRD::ISMRMRD_COMMAND_DONE_FROM_SERVER);
-      std::cout << __func__ << step++ << '\n';
     }
-    std::cout << __func__ << ": done \n";
 
     return;
   }
@@ -149,27 +129,19 @@ namespace ICPOUTPUTMANAGER
     ISMRMRD::CommandType cmd_type
   )
   {
-    int step = 0;
-    std::cout << __func__ << step++ << '\n';
-
     ISMRMRD::EntityHeader e_hdr;
     e_hdr.version = my_version;
     e_hdr.entity_type = ISMRMRD::ISMRMRD_COMMAND;
     e_hdr.storage_type = ISMRMRD::ISMRMRD_CHAR;
     e_hdr.stream = 65537; // Todo: define reserved stream number names
     std::vector<unsigned char> ent = e_hdr.serialize();
-    printf ("ent size = %ld\n", ent.size());
-    std::cout << __func__ << step++ << '\n';
 
     ISMRMRD::Command   cmd;
     cmd.command_type = cmd_type;
     cmd.command_id   = 0;
     std::vector<unsigned char> command = cmd.serialize();
-    printf ("command size = %ld\n", command.size());
-    std::cout << __func__ << step++ << '\n';
 
     queueMessage (ent.size() + command.size(), ent, command);
-    std::cout << __func__ << step++ << '\n';
 
     return;
   }
@@ -183,8 +155,10 @@ namespace ICPOUTPUTMANAGER
   {
     std::stringstream str;
     ISMRMRD::serialize (hdr, str);
-    std::vector<unsigned char> data;
-    std::copy (str.str().begin(), str.str().end(), std::back_inserter (data));
+    std::string xml_header = str.str();
+    std::vector<unsigned char> data (xml_header.begin(), xml_header.end());
+    std::cout << __func__ << ": xml serialized size = " << data.size() << "\n";
+    
 
     ISMRMRD::EntityHeader e_hdr;
     e_hdr.version = my_version;
@@ -233,9 +207,6 @@ namespace ICPOUTPUTMANAGER
     msg.size = size;
     msg.data.reserve (size);
 
-    std::cout << "Queueing message of size = " << size << std::endl;
-    printf ("ent size = %ld, data size = %ld\n", ent.size(), data.size());
-
     uint64_t s = size;
     size = (isCpuLittleEndian) ? size : __builtin_bswap64 (size);
 
@@ -252,7 +223,7 @@ namespace ICPOUTPUTMANAGER
                std::back_inserter (msg.data));
 
     _oq.push (msg);
-    std::cout << __func__ << ": num messages = " << _oq.size() << '\n';
+    //std::cout << __func__ << ": num queued messages = " << _oq.size() << '\n';
 
     return;
   }
@@ -261,22 +232,19 @@ namespace ICPOUTPUTMANAGER
    ****************************************************************************/
   void icpOutputManager::send (SOCKET_PTR sock)
   {
-    //std::cout << __func__ << " starting\n";
-
+    if (isRequestCompleted())
+    {
+      setServerDone();
+      sendCommand (ISMRMRD::ISMRMRD_COMMAND_DONE_FROM_SERVER);
+      std::cout << __func__ << ": sending DONE_FROM_SERVER\n";
+    }
     while (_oq.size() > 0)
     {
       OUT_MSG msg;
-      //int step = 0;
-      //printf ("About to send a message\n");
       msg = _oq.front();
-      //std::cout << __func__ << step++ << '\n';
       boost::asio::write (*sock, boost::asio::buffer (msg.data, msg.data.size()));
       _oq.pop();
-      printf ("Sent message size = %u, %lu more messages to send\n",
-              msg.size, _oq.size());
-      //std::cout << __func__ << step++ << '\n';
     }
-    //std::cout << __func__ << " done\n";
 
     return;
   }

@@ -26,7 +26,6 @@ class icpOutputManager
 public:
 
   icpOutputManager ();
-  icpOutputManager (uint32_t id);
 
   void clientAccepted (bool accepted);
 
@@ -43,8 +42,8 @@ public:
   void setServerDone ();
   bool isServerDone ();
 
-  void setHandshakeReceived ();
-  bool isHandshakeReceived ();
+  void setRequestCompleted ();
+  bool isRequestCompleted ();
 
   void send (SOCKET_PTR sock);
 
@@ -57,10 +56,8 @@ private:
   char              _client_name[ISMRMRD::MAX_CLIENT_NAME_LENGTH];
   uint64_t          _session_timestamp;
   bool              _client_done;
-  bool              _client_accepted;
   bool              _server_done;
-  bool              _handshake_received;
-  uint32_t          _id;
+  bool              _request_completed;
 
   std::queue<OUT_MSG> _oq;
 
