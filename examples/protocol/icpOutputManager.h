@@ -55,6 +55,9 @@ private:
 
   char              _client_name[ISMRMRD::MAX_CLIENT_NAME_LENGTH];
   uint64_t          _session_timestamp;
+  USER_DATA         _udata;
+
+  bool              _user_data_registered;
   bool              _client_done;
   bool              _server_done;
   bool              _request_completed;

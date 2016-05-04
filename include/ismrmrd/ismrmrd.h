@@ -38,7 +38,10 @@ typedef unsigned __int64 uint64_t;
 
 namespace ISMRMRD {
 
-const uint32_t MAX_CLIENT_NAME_LENGTH = 64;
+const uint32_t MAX_CLIENT_NAME_LENGTH       =  64;
+const uint32_t MAX_CONFIG_FILENAME_LENGTH   = 512;
+const uint32_t MAX_CONFIG_NUM_ENTITIES      = 128;
+const uint32_t MAX_ERROR_DESCRIPTION_LENGTH = 256;
 
 /** Global Constants */
 enum Constant {
@@ -82,6 +85,7 @@ enum CommandType
   ISMRMRD_COMMAND_NO_COMMAND           = 1000,
   ISMRMRD_COMMAND_STOP_FROM_CLIENT     = 1001,
   ISMRMRD_COMMAND_DONE_FROM_SERVER     = 1002,
+  ISMRMRD_COMMAND_CLOSE_CONNECTION     = 1003,
   ISMRMRD_COMMAND_USER_DEFINED_1       = 2001,
   ISMRMRD_COMMAND_USER_DEFINED_2       = 2002,
   ISMRMRD_COMMAND_USER_DEFINED_3       = 2003,
@@ -93,7 +97,19 @@ enum ErrorType
   ISMRMRD_ERROR_NO_ERROR               = 20000,
   ISMRMRD_ERROR_INPUT_DATA_ERROR       = 20001,
   ISMRMRD_ERROR_INTERNAL_ERROR         = 20002,
-  ISMRMRD_ERROR_UNKNOWN_ERROR          = 20100
+  ISMRMRD_ERROR_UNKNOWN_ERROR          = 20003
+};
+
+enum ReservedStream
+{
+  ISMRMRD_STREAM_ACQUISITION_DATA      = 0,
+  ISMRMRD_STREAM_ISMRMRD_HEADER        = 1,
+  ISMRMRD_STREAM_WAVEFORM              = 2,
+  ISMRMRD_STREAM_IMAGE                 = 3,
+  ISMRMRD_STREAM_BLOB                  = 4,
+  ISMRMRD_STREAM_COMMAND               = 5,
+  ISMRMRD_STREAM_ERROR                 = 6,
+  ISMRMRD_STREAM_HANDSHAKE             = 65536
 };
 
 /** Acquisition Flags */
@@ -162,10 +178,21 @@ enum ImageFlags {
 
 enum ConnectionStatus
 {
-    CONNECTION_REQUEST               = 222,   /**< Client to server */
-    CONNECTION_ACCEPTED              = 322,   /**< Server to client */
-    CONNECTION_DENIED_UNKNOWN_USER   = 332,   /**< Server to client */
-    CONNECTION_DENIED_SERVER_BUSY    = 342    /**< Server to client */
+    CONNECTION_NOT_ASSIGNED          = 200,   /**< Client to server */
+    CONNECTION_REQUEST               = 201,   /**< Client to server */
+    CONNECTION_ACCEPTED              = 202,   /**< Server to client */
+    CONNECTION_DENIED_UNKNOWN_USER   = 301,   /**< Server to client */
+    CONNECTION_DENIED_SERVER_BUSY    = 302    /**< Server to client */
+};
+
+enum ConfigurationType
+{
+    CONFIGURATION_NONE               = 700,
+    CONFIGURATION_FILE               = 701, // Filename in the config buffer
+    CONFIGURATION_ENCLOSED           = 702, // Contents in the config buffer
+    CONFIGURATION_BUILT_IN_1         = 703, // TODO: Should we have built in?
+    CONFIGURATION_BUILT_IN_2         = 704,
+    CONFIGURATION_BUILT_IN_3         = 705
 };
 
 /// Entity type interface
@@ -191,29 +218,120 @@ struct EntityHeader
     uint32_t stream;        /**< which stream this belongs to */
 };
 
-struct Handshake
-  : public Entity
+struct HandshakeHeader
 {
-    // Functions inherited from Entity
-    virtual std::vector<unsigned char> serialize();
-    virtual void deserialize(const std::vector<unsigned char>& buffer);
-
-    uint64_t         timestamp;   /**< Time of communication session start - 
-                                       provided by client */
-    uint32_t         conn_status; /**< ConnectionStatus returnd by server 
-                                       in response to clients handshake */
-    char             client_name[MAX_CLIENT_NAME_LENGTH];
+    uint32_t version;       /**< First unsigned int indicates the version  */
+    uint32_t entity_type;   /**< Entity type code */
+    uint32_t storage_type;  /**< numeric type of each sample */
+    uint32_t stream;        /**< which stream this belongs to */
 };
 
-struct Command
+class Handshake
   : public Entity
 {
+public:
+                     Handshake ();
+    uint32_t         getVersion () const;
+    StorageType      getStorageType () const;
+    uint32_t         getStream () const;
+    void             setTimestamp (uint64_t timestamp_);
+    uint64_t         getTimestamp () const;
+    void             setClintName (std::string name);
+    std::string      getClientName () const;
+    void             setConnectionStatus (uint32_t status);
+    ConnectionStatus getConnectionStatus () const;
+
     // Functions inherited from Entity
     virtual std::vector<unsigned char> serialize();
     virtual void deserialize(const std::vector<unsigned char>& buffer);
 
-    uint32_t command_id;   /** ID number used to refer to the command */
-    uint32_t command_type; /**< CommandType maps to CommandType enum  */
+protected:
+    HandshakeHeader  header_;
+    uint64_t         timestamp_;   /**< Session start set by client */
+    uint32_t         conn_status_; /**< Connection Status set by server */
+    char             client_name_[MAX_CLIENT_NAME_LENGTH];
+};
+
+struct CommandHeader
+{
+    uint32_t version;       /**< First unsigned int indicates the version  */
+    uint32_t entity_type;   /**< Entity type code */
+    uint32_t storage_type;  /**< numeric type of each sample */
+    uint32_t stream;        /**< which stream this belongs to */
+};
+
+class Command
+  : public Entity
+{
+public:
+                          Command ();
+    uint32_t              getVersion () const;
+    StorageType           getStorageType () const;
+    uint32_t              getStream () const;
+    CommandType           getCommandType () const;
+    void                  setCommandType (CommandType command_type);
+    uint32_t              getCommandId () const;
+    void                  setCommandId (uint32_t command_id);
+    ConfigurationType     getConfigType () const;
+    void                  setConfigType (ConfigurationType config_type);
+    std::string           getConfigFile () const;
+    void                  setConfigFile (std::string config_file);
+    std::vector<uint32_t> getConfigEntities () const;
+    void                  setConfigEntities (std::vector<uint32_t> entities);
+    
+    // Functions inherited from Entity
+    virtual std::vector<unsigned char> serialize();
+    virtual void deserialize(const std::vector<unsigned char>& buffer);
+
+protected:
+
+    CommandHeader header_;
+    uint32_t      command_type_; /**< CommandType maps to CommandType enum  */
+    uint32_t      command_id_;   /** ID number used to refer to the command */
+    uint32_t      config_type_;  /**< maps to ConfigurationType enum */
+    char          config_file_[MAX_CONFIG_FILENAME_LENGTH];
+    uint32_t      entities_[MAX_CONFIG_NUM_ENTITIES];
+};
+
+struct ErrorNotificationHeader
+{
+    uint32_t version;       /**< First unsigned int indicates the version  */
+    uint32_t entity_type;   /**< Entity type code */
+    uint32_t storage_type;  /**< numeric type of each sample */
+    uint32_t stream;        /**< which stream this belongs to */
+};
+
+class ErrorNotification
+  : public Entity
+{
+public:
+                          ErrorNotification ();
+    uint32_t              getVersion () const;
+    StorageType           getStorageType () const;
+    uint32_t              getStream () const;
+    ErrorType             getErrorType () const;
+    void                  setErrorType (ErrorType error_type);
+    CommandType           getErrorCommandType () const;
+    void                  setErrorCommandType (CommandType command_type);
+    uint32_t              getErrorCommandId () const;
+    void                  setErrorCommandId (uint32_t command_id);
+    EntityType            getErrorEntityType () const;
+    void                  setErrorEntityType (EntityType entity_type);
+    std::string           getErrorDescription () const;
+    void                  setErrorDescription (std::string description);
+
+    // Functions inherited from Entity
+    virtual std::vector<unsigned char> serialize();
+    virtual void deserialize(const std::vector<unsigned char>& buffer);
+
+protected:
+
+    ErrorNotificationHeader header_;
+    uint32_t      error_type_; /**< maps to ErrorType enum  */
+    uint32_t      error_command_type_; /**< maps to CommandType enum  */
+    uint32_t      error_command_id_;   /** refers to the command id number*/
+    uint32_t      error_entity_type_;  /**< maps to EntityType enum */
+    char          error_description_[MAX_ERROR_DESCRIPTION_LENGTH];
 };
 
 /** EncodingCounters keeps track of typical loop counters in MR experiment. */
@@ -303,6 +421,9 @@ bool operator==(const ImageHeader &h1, const ImageHeader &h2);
 
 /// Allowed data types for Images and NDArrays
 template <typename T> EXPORTISMRMRD StorageType get_storage_type();
+
+/// Existing Entity Types
+template <typename T> EXPORTISMRMRD EntityType get_entity_type();
 
 /// Convenience class for flags
 class EXPORTISMRMRD FlagBit {
@@ -489,6 +610,10 @@ public:
 
     // Image dimensions
     void resize(uint32_t matrix_size_x, uint32_t matrix_size_y, uint32_t matrix_size_z, uint32_t channels);
+
+    uint32_t getStream () const;
+    void setStream (uint32_t stream);
+
     uint32_t getMatrixSizeX() const;
     uint32_t getMatrixSizeY() const;
     uint32_t getMatrixSizeZ() const;

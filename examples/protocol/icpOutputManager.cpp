@@ -8,6 +8,8 @@ namespace ICPOUTPUTMANAGER
    ****************************************************************************/
   icpOutputManager::icpOutputManager ()
   : _session_timestamp (0),
+    _udata (NULL),
+    _user_data_registered (false),
     _client_done (false),
     _server_done (false),
     _request_completed (false)
