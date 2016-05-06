@@ -1,8 +1,6 @@
 /*******************************************************************************
- * Output data manager receives data and/or triggers from the user application
- * and prepares the data to be sent out to a network responder per ISMRMRD
- * Communication Protocol (version 2.x).
- *
+ * Output data manager serializes and queues messages from the user application
+ * and sends them out via socket
  ******************************************************************************/
 
 /**
@@ -21,51 +19,23 @@
 namespace ICPOUTPUTMANAGER
 {
 
-class icpOutputManager
-{
-public:
+  class icpOutputManager
+  {
+  public:
 
-  icpOutputManager ();
+    bool processEntity (ISMRMRD::EntityType type,
+                        ISMRMRD::Entity*    entity);
 
-  void clientAccepted (bool accepted);
+    void send (SOCKET_PTR sock);
 
-  void sendImage (ISMRMRD::Image<float> img);
-  void sendXmlHeader (ISMRMRD::IsmrmrdHeader hdr);
-  void sendCommand (ISMRMRD::CommandType cmd_type);
+  private:
 
-  void setClientName (std::string name);
-  void setSessionTimestamp (uint64_t timestamp);
+    void queueMessage (std::vector<unsigned char>& ent,
+                       std::vector<unsigned char>& data);
 
-  void setClientDone ();
-  bool isClientDone ();
+    std::queue<OUT_MSG> _oq;
 
-  void setServerDone ();
-  bool isServerDone ();
-
-  void setRequestCompleted ();
-  bool isRequestCompleted ();
-
-  void send (SOCKET_PTR sock);
-
-private:
-
-  void queueMessage (uint32_t                    size,
-                     std::vector<unsigned char>& ent,
-                     std::vector<unsigned char>& data);
-
-  char              _client_name[ISMRMRD::MAX_CLIENT_NAME_LENGTH];
-  uint64_t          _session_timestamp;
-  USER_DATA         _udata;
-
-  bool              _user_data_registered;
-  bool              _client_done;
-  bool              _server_done;
-  bool              _request_completed;
-
-  std::queue<OUT_MSG> _oq;
-
-  
-}; /* class icpOutputManager */
+  }; /* class icpOutputManager */
 
 } /* namespace ICPOUTPUTMANAGER */
 

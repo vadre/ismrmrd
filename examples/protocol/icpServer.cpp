@@ -5,82 +5,6 @@
 bool  icpServer::_running  = false;
 
 /*******************************************************************************
- queueResponse is the routine known to caller as the sendMessage callback
- ******************************************************************************/
-template<typename T>
-bool queueResponse
-(
-  T entity
-)
-{
-  bool ret_val = false;
-  ISMRMRD::EntityHeader e_head;
-  std::vector <unsigned char> buffer;
-
-  e_head.version     = my_version;
-  e_head.entity_type = ISMRMRD::get_entity_type<T> ();
-
-  switch (e_head.entity_type)
-  {
-    case ISMRMRD_MRACQUISITION:
-
-      e_head.storage_type = entity.getStorageType();
-      e_head.stream       = entity.getStream();
-      break;
-
-    case ISMRMRD_IMAGE:
-
-      e_head.storage_type = entity.getStorageType();
-      e_head.stream       = entity.getStream();
-      break;
-
-    case ISMRMRD_XML_HEADER:
-
-      e_head.storage_type = ISMRMRD::ISMRMRD_CHAR;
-      e_head.stream       = ISM................................................
-      break;
-
-    case ISMRMRD_HANDSHAKE:
-
-      e_head.storage_type = ISMRMRD::ISMRMRD_CHAR;
-      break;
-
-    case ISMRMRD_COMMAND:
-
-      e_head.storage_type = ISMRMRD::ISMRMRD_CHAR;
-      break;
-
-    /*case ISMRMRD_ERROR:
-      break;
-    case ISMRMRD_WAVEFORM:
-      break;
-    case ISMRMRD_BLOB:
-      break;*/
-
-    default:
-
-      break;
-  }
-
-  if (decltype (T) != decltype (ISMRMRD::Image<float>)  &&
-      decltype (T) != decltype (ISMRMRD::Image<double>) &&
-      decltype (T) != decltype (ISMRMRD::IsmrmrdHeader) &&
-      decltype (T) != decltype (ISMRMRD::Command)       &&
-      decltype (T) != decltype (ISMRMRD::Handshake)     &&
-      decltype (T) != decltype (ISMRMRD::Error))
-  {
-    std::cout << __func__ << "Warning: No processing exists for the Type <"
-              << decltype (T) << ">\n"; 
-    return retval;
-  }
-
-  queueResponseType
-
-
-  return ret_val;
-}
-
-/*******************************************************************************
  ******************************************************************************/
 void icpServer::sendMessage
 (
@@ -216,8 +140,8 @@ uint32_t icpServer::receiveMessage
   return 0;
 }
 
-
 /*******************************************************************************
+ Thread for every connection
  ******************************************************************************/
 void icpServer::readSocket
 (
@@ -234,9 +158,24 @@ void icpServer::readSocket
   ISMRMRD::IsmrmrdHeader       hdr;
   ISMRMRD::Acquisition<float>  acq_float;
   ISMRMRD::Acquisition<double> acq_double;
+  ISMRMRD::Image<float>        image;
+  USER_DATA                    user_data;
 
   ICPOUTPUTMANAGER::icpOutputManager* om =
     new ICPOUTPUTMANAGER::icpOutputManager ();
+
+  if (!getUserDataPointer (&user_data))
+  {
+    std::cout << __func__ << "getUserDataPointer ERROR, thread returns" << "\n";
+    return;
+  }
+
+  if (!setSendMessageCallback (om->processEntity, user_data))
+  {
+    std::cout << __func__ 
+              << "setSendMessageCallback ERROR, thread returns" << "\n";
+    return;
+  }
 
   std::thread writer (&icpServer::sendMessage, this, om, id, sock);
 
@@ -257,7 +196,7 @@ void icpServer::readSocket
         if (_handle_handshake_registered)
         {
           hand.deserialize (in_msg.data);
-          handleHandshake (hand);
+          handleHandshake (hand, user_data);
         }
         break;
 
@@ -275,7 +214,7 @@ void icpServer::readSocket
 
             if (_handle_command_registered)
             {
-              handleCommand (cmd);
+              handleCommand (cmd, user_data);
             }
             break;
         }
@@ -288,7 +227,7 @@ void icpServer::readSocket
           {
             std::string xml (in_msg.data.begin(), in_msg.data.end());
             ISMRMRD::deserialize (xml.c_str(), hdr);
-            handleIsmrmrdHeader (hdr);
+            handleIsmrmrdHeader (hdr, user_data);
           }
           catch (std::runtime_error& e)
           {
@@ -305,12 +244,12 @@ void icpServer::readSocket
           if (in_msg.ehdr.entity_type == ISMRMRD_FLOAT)
           {
             acq_float.deserialize (in_msg.data);
-            handleMrAcquisition (acq_float);
+            handleMrAcquisition (acq_float, user_data);
           }
           else if (in_msg.ehdr.entity_type == ISMRMRD_DOUBLE)
           {
             acq_double.deserialize (in_msg.data);
-            handleMrAcquisition (acq_double);
+            handleMrAcquisition (acq_double, user_data);
           }
         }
         break;
@@ -329,25 +268,27 @@ void icpServer::readSocket
 
             if (_handle_error_registered)
             {
-              handleError (err);
+              handleError (err, user_data);
             }
             break;
         }
         break;
 
-      // TODO:
+      case ISMRMRD::ISMRMRD_IMAGE:
+
+        image.deserialize (in_msg_data);
+        handleImage (image. user_data);
+        break;
+
       //case ISMRMRD::ISMRMRD_WAVEFORM:
-        //break;
-      //case ISMRMRD::ISMRMRD_IMAGE:
         //break;
       //case ISMRMRD::ISMRMRD_BLOB:
         //break;
 
       default:
 
-        // TODO: Throw Unexpected entity type error.
-        printf ("Warning! Dropping unknown message type: %u\n\n",
-                in_msg.ehdr.entity_type);
+        std::cout << "Warning! Dropping unknown entity type: "
+                  << in_msg.ehdr.entity_type << "\n\n";
         break;
 
     } // switch ((*in_msg).ehdr.entity_type)
@@ -356,13 +297,13 @@ void icpServer::readSocket
   std::cout << __func__ << ": Waiting for Writer (" << id << ") to join\n";
   writer.join();
   delete (om);
-  delete (im);
   std::cout << __func__ << ": Writer (" << id << ") joined, exiting\n\n\n";
 
   return;
-}
+} // readSocket
 
 /*******************************************************************************
+ Thread
  ******************************************************************************/
 void icpServer::serverMain ()
 {

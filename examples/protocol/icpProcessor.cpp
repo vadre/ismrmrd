@@ -29,6 +29,15 @@ void handleCommand
   USER_DATA         info
 )
 {
+  INPUT_MANAGER* im;
+  bool ret_val = checkInfo (info, &im);
+
+  if (!ret_val)
+  {
+    std::cout << __func__ << ": ERROR from checkInfo\n";
+    return ret_val;
+  }
+
   switch (msg.cmd_type)
   {
     case ISMRMRD::ISMRMRD_COMMAND_STOP_FROM_CLIENT:
@@ -86,6 +95,11 @@ bool handleMrAcquisition
   else if (im->readyForImageReconstruction())
   {
     imageReconstruction (im);
+    if (im->isClientDone())
+    {
+      sendCommand (ISMRMRD::ISMRMRD_COMMAND_DONE_FROM_SERVER);
+      std::cout << __func__ << ": sending DONE_FROM_SERVER\n";
+    }
   }
   
   return ret_val;
@@ -248,17 +262,20 @@ bool handleHandshake
   INPUT_MANAGER* im;
   bool           ret_val = checkInfo (info, &im);
 
-  if (!ret_val)
+  if (ret_val)
+  {
+    im->setClientName (msg.name);
+    im->setSessionTimestamp (msg.timestamp);
+
+    // Could check if the client name is matching a list of expected clients
+    clientAccepted (im, true);
+  }
+  else
   {
     std::cout << __func__ << ": ERROR from checkInfo()\n";
-    return ret_val;
   }
 
-  im->setClientName (msg.name);
-  im->setSessionTimestamp (msg.timestamp);
-
-  // Could check if the client name is matching a list of expected clients
-  return clientAccepted (im, true);
+  return ret_val;
 }
 
 /*****************************************************************************
@@ -272,20 +289,17 @@ bool clientAccepted
   std::cout << __func__ << "\n";
 
   ISMRMRD::Handshake msg;
-  msg.timestamp = _session_timestamp;
-  msg.conn_status = (accepted) ?
-                    ISMRMRD::CONNECTION_ACCEPTED :
-                    ISMRMRD::CONNECTION_DENIED_UNKNOWN_USER;
+  msg.setTimestamp (im->getSessionTimestamp());
+  msg.stConnectionStatus ((accepted) ?
+                          ISMRMRD::CONNECTION_ACCEPTED :
+  /* for now: */          ISMRMRD::CONNECTION_DENIED_UNKNOWN_USER);
 
-  strncpy (handshake.client_name,
-           _client_name,
-           ISMRMRD::MAX_CLIENT_NAME_LENGTH);
-
+  msg.setClientName (im->getClientName);
   im->sendMessage (msg);
 
   if (!accepted)
   {
-    sendCommand (im, ISMRMRD::ISMRMRD_COMMAND_DONE_FROM_SERVER);
+    sendCommand (im, ISMRMRD::ISMRMRD_COMMAND_DONE_FROM_SERVER, 0);
   }
 
   return;
@@ -296,13 +310,13 @@ bool clientAccepted
 void sendCommand
 (
   INPUT_MANAGER*       im,
-  ISMRMRD::CommandType cmd_type
+  ISMRMRD::CommandType cmd_type,
+  uint32_t             cmd_id
 )
 {
-  ISMRMRD::Command   msg;
-  msg.command_type = cmd_type;
-  msg.command_id   = 0;
-
+  ISMRMRD::Command msg;
+  msg.setCommandType (cmd_type);
+  msg.setCommandId (cmd_id);
   im->sendMessage (msg);
 
   return;
@@ -317,10 +331,9 @@ void sendError
   std::string        descr
 )
 {
-  ISMRMRD::Error     msg;
-  msg.error_type        = type;
-  msg.error_description = descr;
-
+  ISMRMRD::ErrorNotification msg;
+  msg.setErrorType (type);
+  msg.setDescription (descr);
   im->sendMessage (msg);
 
   return;
@@ -340,7 +353,7 @@ bool allocateData
   {
     INPUT_MANAGER* im = new INPUT_MANAGER();
 
-    *data = (void*) im;
+    *data = (USER_DATA) im;
     ret_val = true;
   }
   else

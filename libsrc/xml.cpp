@@ -850,4 +850,60 @@ namespace ISMRMRD
   }
 
 
+  IsmrmrdHeaderWrapper::IsmrmrdHeaderWrapper()
+  {
+    version_      = ISMRMRD_VERSION_MAJOR;
+    entity_type_  = ISMRMRD_XML_HEADER;
+    storage_type_ = ISMRMRD_CHAR;
+    stream_       = ISMRMRD_STREAM_ISMRMRD_HEADER;
+    header_set_   = false;
+  }
+
+  uint32_t IsmrmrdHeaderWrapper::getVersion() const
+  {
+    return version_;
+  }
+
+  StorageType IsmrmrdHeaderWrapper::getStorageType() const
+  {
+    return static_cast<StorageType>(storage_type_);
+  }
+
+  uint32_t IsmrmrdHeaderWrapper::getStream() const
+  {
+    return stream_;
+  }
+
+  void IsmrmrdHeaderWrapper::setHeader (IsmrmrdHeader hdr)
+  {
+    header_ = hdr;
+    header_set_ = true;
+  }
+
+  bool IsmrmrdHeaderWrapper::getHeader (IsmrmrdHeader& hdr) const
+  {
+    hdr = header_;
+    return header_set_;
+  }
+
+  std::vector<unsigned char> IsmrmrdHeaderWrapper::serialize()
+  {
+    std::stringstream sstr;
+    ISMRMRD::serialize (header_, sstr);
+    std::string xml_header = sstr.str();
+    std::vector<unsigned char> ret (xml_header.begin(), xml_header.end());
+    return ret;
+  }
+
+  void IsmrmrdHeaderWrapper::deserialize
+  (
+    const std::vector<unsigned char>& buffer
+  )
+  {
+     std::string xml (buffer.begin(), buffer.end());
+     ISMRMRD::deserialize (xml.c_str(), header_);
+     header_set_ = true;
+  }
+
+
 }

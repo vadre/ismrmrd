@@ -5,212 +5,109 @@ using boost::asio::ip::tcp;
 namespace ICPOUTPUTMANAGER
 {
   /*****************************************************************************
+   processEntity is the routine known to caller as the sendMessage callback
    ****************************************************************************/
-  icpOutputManager::icpOutputManager ()
-  : _session_timestamp (0),
-    _udata (NULL),
-    _user_data_registered (false),
-    _client_done (false),
-    _server_done (false),
-    _request_completed (false)
-  {
-    memset (_client_name, 0, ISMRMRD::MAX_CLIENT_NAME_LENGTH);
-  }
-
-  /*****************************************************************************
-   ****************************************************************************/
-  void icpOutputManager::setClientName
+  bool icpOutputManager::processEntity
   (
-    std::string name
+    ISMRMRD::EntityType type,
+    ISMRMRD::Entity*    entity
   )
   {
-    if (strlen (_client_name) <= 0)
+    bool ret_val = true;
+    ISMRMRD::EntityHeader head;
+    std::stringstream sstr;
+    std::vector <unsigned char> h_buffer;
+    std::vector <unsigned char> e_buffer;
+
+    head.version     = my_version;
+    head.entity_type = type;
+
+    switch (type)
     {
-      if (name.size())
-      {
-        size_t size = (ISMRMRD::MAX_CLIENT_NAME_LENGTH < name.size()) ?
-                      ISMRMRD::MAX_CLIENT_NAME_LENGTH : name.size();
-        strncpy (_client_name, name.c_str(), size);
-      }
-    }
-  }
+      case ISMRMRD::ISMRMRD_MRACQUISITION:
 
-  /*****************************************************************************
-   ****************************************************************************/
-  void icpOutputManager::setSessionTimestamp
-  (
-    uint64_t timestamp
-  )
-  {
-    if (_session_timestamp <= 0)
-    {
-      _session_timestamp = timestamp;
-    }
-  }
+        head.storage_type = 
+          static_cast<ISMRMRD::Acquisition<float>* >(entity)->getStorageType();
+        head.stream       =
+          static_cast<ISMRMRD::Acquisition<float>* >(entity)->getStream();
+        e_buffer          = entity->serialize();
+        break;
 
-  /*****************************************************************************
-   ****************************************************************************/
-  void icpOutputManager::setClientDone()
-  {
-    _client_done = true;
-  }
+      case ISMRMRD::ISMRMRD_IMAGE:
 
-  /*****************************************************************************
-   ****************************************************************************/
-  bool icpOutputManager::isClientDone()
-  {
-    return _client_done;
-  }
+        head.storage_type =
+          static_cast<ISMRMRD::Image<float>* >(entity)->getStorageType();
+        head.stream       =
+          static_cast<ISMRMRD::Image<float>* >(entity)->getStream();
+        e_buffer = entity->serialize();
+        break;
 
-  /*****************************************************************************
-   ****************************************************************************/
-  void icpOutputManager::setServerDone()
-  {
-    _server_done = true;
-  }
+      case ISMRMRD::ISMRMRD_XML_HEADER:
 
-  /*****************************************************************************
-   ****************************************************************************/
-  bool icpOutputManager::isServerDone()
-  {
-    return _server_done;
-  }
+        head.storage_type = ISMRMRD::ISMRMRD_CHAR;
+        head.stream       = ISMRMRD::ISMRMRD_STREAM_ISMRMRD_HEADER;
 
-  /*****************************************************************************
-   ****************************************************************************/
-  void icpOutputManager::setRequestCompleted()
-  {
-    _request_completed = true;
-  }
+        e_buffer =
+          static_cast<ISMRMRD::IsmrmrdHeaderWrapper*>(entity)->serialize();
+        std::cout << __func__ << ": xml serialized size = " 
+                  << e_buffer.size() << "\n";
+        break;
 
-  /*****************************************************************************
-   ****************************************************************************/
-  bool icpOutputManager::isRequestCompleted()
-  {
-    return _request_completed;
-  }
+      case ISMRMRD::ISMRMRD_HANDSHAKE:
 
-  /*****************************************************************************
-   ****************************************************************************/
-  void icpOutputManager::clientAccepted
-  (
-    bool accepted
-  )
-  {
-    ISMRMRD::EntityHeader e_hdr;
-    e_hdr.version = my_version;
-    e_hdr.entity_type = ISMRMRD::ISMRMRD_HANDSHAKE;
-    e_hdr.storage_type = ISMRMRD::ISMRMRD_CHAR;
-    e_hdr.stream = 65536;
-    std::vector<unsigned char> ent = e_hdr.serialize();
+        head.storage_type = ISMRMRD::ISMRMRD_CHAR;
+        head.stream       = ISMRMRD::ISMRMRD_STREAM_HANDSHAKE;
+        e_buffer = entity->serialize();
+        break;
 
-    ISMRMRD::Handshake handshake;
-    handshake.timestamp = _session_timestamp;
-    handshake.conn_status = (accepted) ? 
-                             ISMRMRD::CONNECTION_ACCEPTED :
-                             ISMRMRD::CONNECTION_DENIED_UNKNOWN_USER;
-    strncpy (handshake.client_name,
-             _client_name,
-             ISMRMRD::MAX_CLIENT_NAME_LENGTH);
-    std::vector<unsigned char> hand = handshake.serialize();
+      case ISMRMRD::ISMRMRD_COMMAND:
 
-    queueMessage (ent.size() + hand.size(), ent, hand);
+        head.storage_type = ISMRMRD::ISMRMRD_CHAR;
+        head.stream       = ISMRMRD::ISMRMRD_STREAM_COMMAND;
+        e_buffer = entity->serialize();
+        break;
 
-    if (!accepted)
-    {
-      sendCommand (ISMRMRD::ISMRMRD_COMMAND_DONE_FROM_SERVER);
+      case ISMRMRD::ISMRMRD_ERROR:
+        head.storage_type = ISMRMRD::ISMRMRD_CHAR;
+        head.stream       = ISMRMRD::ISMRMRD_STREAM_ERROR;
+        e_buffer = entity->serialize();
+        break;
+
+      /*case ISMRMRD_WAVEFORM:
+      case ISMRMRD_BLOB:*/
+      default:
+
+        // Still send the data to the user maybe?
+        std::cout << __func__ << "Warning: Entity " << head.entity_type
+                  << " not processed in this version of icpSession\n";
+        ret_val = false;
+
+        break;
     }
 
-    return;
-  }
+    if (ret_val)
+    {
+      h_buffer = head.serialize();
+      queueMessage (h_buffer, e_buffer);
+    }
 
-  /*****************************************************************************
-   ****************************************************************************/
-  void icpOutputManager::sendCommand
-  (
-    ISMRMRD::CommandType cmd_type
-  )
-  {
-    ISMRMRD::EntityHeader e_hdr;
-    e_hdr.version = my_version;
-    e_hdr.entity_type = ISMRMRD::ISMRMRD_COMMAND;
-    e_hdr.storage_type = ISMRMRD::ISMRMRD_CHAR;
-    e_hdr.stream = 65537; // Todo: define reserved stream number names
-    std::vector<unsigned char> ent = e_hdr.serialize();
-
-    ISMRMRD::Command   cmd;
-    cmd.command_type = cmd_type;
-    cmd.command_id   = 0;
-    std::vector<unsigned char> command = cmd.serialize();
-
-    queueMessage (ent.size() + command.size(), ent, command);
-
-    return;
-  }
-
-  /*****************************************************************************
-   ****************************************************************************/
-  void icpOutputManager::sendXmlHeader
-  (
-    ISMRMRD::IsmrmrdHeader hdr
-  )
-  {
-    std::stringstream str;
-    ISMRMRD::serialize (hdr, str);
-    std::string xml_header = str.str();
-    std::vector<unsigned char> data (xml_header.begin(), xml_header.end());
-    std::cout << __func__ << ": xml serialized size = " << data.size() << "\n";
-    
-
-    ISMRMRD::EntityHeader e_hdr;
-    e_hdr.version = my_version;
-    e_hdr.entity_type = ISMRMRD::ISMRMRD_XML_HEADER;
-    e_hdr.storage_type = ISMRMRD::ISMRMRD_CHAR;
-    e_hdr.stream = 1; // TODO: define reserved stream number names
-    std::vector<unsigned char> ent = e_hdr.serialize();
-
-    queueMessage (ent.size() + data.size(), ent, data);
-
-    return;
-  }
-
-  /*****************************************************************************
-   ****************************************************************************/
-  void icpOutputManager::sendImage
-  (
-    ISMRMRD::Image<float> img
-  )
-  {
-    std::vector<unsigned char> image;
-    image = img.serialize();
-
-    ISMRMRD::EntityHeader e_hdr;
-    e_hdr.version = my_version;
-    e_hdr.entity_type = ISMRMRD::ISMRMRD_IMAGE;
-    e_hdr.storage_type = ISMRMRD::ISMRMRD_FLOAT;
-    e_hdr.stream = 1; // TODO: define reserved stream number names
-    std::vector<unsigned char> ent = e_hdr.serialize();
-
-
-    queueMessage (ent.size() + image.size(), ent, image);
-    return;
+    return ret_val;
   }
 
   /*****************************************************************************
    ****************************************************************************/
   void icpOutputManager::queueMessage
   (
-    uint32_t                    size,
     std::vector<unsigned char>& ent,
     std::vector<unsigned char>& data
   )
   {
     OUT_MSG msg;
-    msg.size = size;
-    msg.data.reserve (size);
+    msg.size = ent.size() + data.size();
+    msg.data.reserve (msg.size);
 
-    uint64_t s = size;
-    size = (isCpuLittleEndian) ? size : __builtin_bswap64 (size);
+    uint64_t s = msg.size;
+    s = (isCpuLittleEndian) ? s : __builtin_bswap64 (s);
 
     std::copy ((unsigned char*) &s,
                (unsigned char*) &s + sizeof (s),
@@ -234,12 +131,6 @@ namespace ICPOUTPUTMANAGER
    ****************************************************************************/
   void icpOutputManager::send (SOCKET_PTR sock)
   {
-    if (isRequestCompleted())
-    {
-      setServerDone();
-      sendCommand (ISMRMRD::ISMRMRD_COMMAND_DONE_FROM_SERVER);
-      std::cout << __func__ << ": sending DONE_FROM_SERVER\n";
-    }
     while (_oq.size() > 0)
     {
       OUT_MSG msg;

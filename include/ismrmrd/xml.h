@@ -8,6 +8,7 @@
 #define ISMRMRDXML_H
 
 #include "ismrmrd/export.h"
+#include "ismrmrd/ismrmrd.h"
 
 #include <cstddef>
 #include <new> //For std::badalloc
@@ -333,9 +334,35 @@ namespace ISMRMRD
   };
 
 
-
   EXPORTISMRMRD void deserialize(const char* xml, IsmrmrdHeader& h);
   EXPORTISMRMRD void serialize(const IsmrmrdHeader& h, std::ostream& o);
+
+  class IsmrmrdHeaderWrapper
+     : public Entity
+  {
+    public:
+
+                  IsmrmrdHeaderWrapper();
+    void          setHeader (IsmrmrdHeader hdr);
+    bool          getHeader (IsmrmrdHeader& hdr) const;
+    uint32_t      getVersion() const;
+    StorageType   getStorageType() const;
+    uint32_t      getStream() const;
+
+    // Functions inherited from Entity
+    virtual std::vector<unsigned char> serialize();
+    virtual void deserialize(const std::vector<unsigned char>& buffer);
+
+    private:
+
+    uint32_t      version_;
+    uint32_t      entity_type_;
+    uint32_t      storage_type_;
+    uint32_t      stream_;
+
+    bool          header_set_;
+    IsmrmrdHeader header_;
+  };
 }
 
 /** @} */

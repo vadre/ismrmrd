@@ -1,5 +1,6 @@
 //#include <stdlib.h>
 #include "ismrmrd/ismrmrd.h"
+//#include "ismrmrd/xml.h"
 #include "ismrmrd/version.h"
 
 #include <sstream>
@@ -51,45 +52,45 @@ static size_t sizeof_storage_type(int storage_type)
 */
 
 // Existing Entity Types
-template <> ISMRMRD::EntityType get_entity_type<ISMRMRD::Image<float> >()
+/*template <> EXPORTISMRMRD EntityType get_entity_type<Image<float> >()
 {
-    return ISMRMRD::ISMRMRD_IMAGE;
+    return ISMRMRD_IMAGE;
 }
-template <> ISMRMRD::EntityType get_entity_type<ISMRMRD::Image<double> >()
+template <> EXPORTISMRMRD EntityType get_entity_type<Image<double> >()
 {
-    return ISMRMRD::ISMRMRD_IMAGE;
+    return ISMRMRD_IMAGE;
 }
-template <> ISMRMRD::EntityType get_entity_type<ISMRMRD::Handshake> ()
+template <> EXPORTISMRMRD EntityType get_entity_type<Handshake> ()
 {
-    return ISMRMRD::ISMRMRD_HANDSHAKE;
+    return ISMRMRD_HANDSHAKE;
 }
-template <> ISMRMRD::EntityType get_entity_type<ISMRMRD::Command>()
+template <> EXPORTISMRMRD EntityType get_entity_type<Command>()
 {
-    return ISMRMRD::ISMRMRD_COMMAND;
+    return ISMRMRD_COMMAND;
 }
-template <> ISMRMRD::EntityType get_entity_type<ISMRMRD::Acquisition<float>>()
+template <> EXPORTISMRMRD EntityType get_entity_type<Acquisition<float> >()
 {
-    return ISMRMRD::ISMRMRD_MRACQUISITION;
+    return ISMRMRD_MRACQUISITION;
 }
-template <> ISMRMRD::EntityType get_entity_type<ISMRMRD::Acquisition<double> >()
+template <> EXPORTISMRMRD EntityType get_entity_type<Acquisition<double> >()
 {
-    return ISMRMRD::ISMRMRD_BLOB;
+    return ISMRMRD_BLOB;
 }
-template <> ISMRMRD::EntityType get_entity_type<ISMRMRD::IsmrmrdHeader>()
+template <> EXPORTISMRMRD EntityType get_entity_type<IsmrmrdHeader>()
 {
-    return ISMRMRD::ISMRMRD_XML_HEADER;
+    return ISMRMRD_XML_HEADER;
 }
-/*template <> ISMRMRD::EntityType get_entity_type<ISMRMRD::Waveform>()
+template <> EXPORTISMRMRD EntityType get_entity_type<ErrorNotification>()
 {
-    return ISMRMRD::ISMRMRD_WAVEFORM;
+    return ISMRMRD_ERROR;
 }*/
-/*template <> ISMRMRD::EntityType get_entity_type<ISMRMRD::Error>()
+/*template <> EntityType get_entity_type<Waveform>()
 {
-    return ISMRMRD::ISMRMRD_ERROR;
+    return ISMRMRD_WAVEFORM;
 }
-template <> ISMRMRD::EntityType get_entity_type<ISMRMRD::Blob>()
+template <> EntityType get_entity_type<Blob>()
 {
-    return ISMRMRD::ISMRMRD_BLOB;
+    return ISMRMRD_BLOB;
 }*/
 
 
@@ -610,6 +611,11 @@ template <typename T> void Acquisition<T>::setAllChannelsNotActive() {
         head_.channel_mask[offset] = 0;
     }
 }
+
+/*template <typename T> EntityType Acquisition<T>::getEntityType()
+{
+  return static_cast<EntityType>(this->head_.entity_type);
+}*/
 
 template <typename T> std::vector<unsigned char> Acquisition<T>::serialize()
 {
@@ -1227,6 +1233,11 @@ template <typename T> T& Image<T>::at(uint32_t ix, uint32_t iy, uint32_t iz, uin
     return data_[index];
 }
 
+/*template <typename T> EntityType Image<T>::getEntityType()
+{
+  return static_cast<EntityType>(this->head_.entity_type);
+}*/
+
 template <typename T> std::vector<unsigned char> Image<T>::serialize()
 {
     if (this->head_.entity_type != ISMRMRD_IMAGE) {
@@ -1561,13 +1572,13 @@ void EntityHeader::deserialize(const std::vector<unsigned char>& buffer)
 /******************************************************************************/
 Handshake::Handshake ()
 {
-  header_.version      = ISMRMRD_VERSION_MAJOR;
-  header_.entity_type  = ISMRMRD_HANDSHAKE;
-  header_.storage_type = ISMRMRD_CHAR;
-  header_.stream       = ISMRMRD_STREAM_HANDSHAKE;
-  timestamp            = 0;
-  conn_status          = CONNECTION_NOT_ASSIGNED;
-  memset (client_name, 0, MAX_CLIENT_NAME_LENGTH);
+  head_.version      = ISMRMRD_VERSION_MAJOR;
+  head_.entity_type  = ISMRMRD_HANDSHAKE;
+  head_.storage_type = ISMRMRD_CHAR;
+  head_.stream       = ISMRMRD_STREAM_HANDSHAKE;
+  timestamp_           = 0;
+  conn_status_         = CONNECTION_NOT_ASSIGNED;
+  memset (client_name_, 0, MAX_CLIENT_NAME_LENGTH);
 }
 
 /******************************************************************************/
@@ -1591,19 +1602,24 @@ uint64_t Handshake::getTimestamp() const
   return timestamp_;
 }
 /******************************************************************************/
+void Handshake::setTimestamp (uint64_t timestamp)
+{
+  timestamp_ = timestamp;
+}
+/******************************************************************************/
 ConnectionStatus Handshake::getConnectionStatus() const
 {
   return static_cast<ConnectionStatus>(conn_status_);
 }
 /******************************************************************************/
+void Handshake::setConnectionStatus (ConnectionStatus status)
+{
+  conn_status_ = status;
+}
+/******************************************************************************/
 std::string Handshake::getClientName() const
 {
   return std::string (client_name_);
-}
-/******************************************************************************/
-void Handshake::setTimestamp (uint64_t timestamp)
-{
-  timestamp_ = timestamp;
 }
 /******************************************************************************/
 void Handshake::setClientName (std::string name)
@@ -1616,11 +1632,6 @@ void Handshake::setClientName (std::string name)
   strncpy (client_name_, name.c_str(),
            ((MAX_CLIENT_NAME_LENGTH <= name.size()) ?
            MAX_CLIENT_NAME_LENGTH : name.size()));
-}
-/******************************************************************************/
-void Handshake::setTimestamp (uint32_t status)
-{
-  conn_status_ = status;
 }
 
 /******************************************************************************/
@@ -1639,20 +1650,20 @@ std::vector<unsigned char> Handshake::serialize()
   std::vector<unsigned char> buffer;
   buffer.reserve (bytes);
 
-  std::copy ((unsigned char*) &this->header_,
-             (unsigned char*) &this->header_ + sizeof (this->header_),
+  std::copy ((unsigned char*) &this->head_,
+             (unsigned char*) &this->head_ + sizeof (this->head_),
              std::back_inserter (buffer));
 
-  std::copy ((unsigned char*) &this->timestamp,
-             (unsigned char*) &this->timestamp + sizeof (uint64_t),
+  std::copy ((unsigned char*) &this->timestamp_,
+             (unsigned char*) &this->timestamp_ + sizeof (uint64_t),
              std::back_inserter (buffer));
 
-  std::copy ((unsigned char*) &this->conn_status,
-             (unsigned char*) &this->conn_status + sizeof (uint32_t),
+  std::copy ((unsigned char*) &this->conn_status_,
+             (unsigned char*) &this->conn_status_ + sizeof (uint32_t),
              std::back_inserter (buffer));
 
-  std::copy ((unsigned char*) &this->client_name,
-             (unsigned char*) &this->client_name + MAX_CLIENT_NAME_LENGTH,
+  std::copy ((unsigned char*) &this->client_name_,
+             (unsigned char*) &this->client_name_ + MAX_CLIENT_NAME_LENGTH,
              std::back_inserter (buffer));
 
   if (buffer.size() != bytes)
@@ -1687,31 +1698,31 @@ void Handshake::deserialize(const std::vector<unsigned char>& buffer)
 
   uint16_t left  = 0;
   uint16_t right = sizeof (HandshakeHeader);
-  std::copy (&buffer[left], &buffer[right], (unsigned char*) &this->header_);
+  std::copy (&buffer[left], &buffer[right], (unsigned char*) &this->head_);
 
   left = right;
   right += sizeof (uint64_t);
-  std::copy (&buffer[left], &buffer[right], (unsigned char*) &this->timestamp);
+  std::copy (&buffer[left], &buffer[right], (unsigned char*) &this->timestamp_);
 
   left = right;
   right += sizeof (uint32_t);
   std::copy (&buffer[left], &buffer[right],
-             (unsigned char*) &this->conn_status);
+             (unsigned char*) &this->conn_status_);
 
   left = right;
   right += MAX_CLIENT_NAME_LENGTH;
   std::copy (&buffer[left], &buffer[right],
-             (unsigned char*) &this->client_name);
+             (unsigned char*) &this->client_name_);
 }
 
 /********************************* Command ************************************/
 /******************************************************************************/
 Command::Command ()
 {
-  header_.version      = ISMRMRD_VERSION_MAJOR;
-  header_.entity_type  = ISMRMRD_COMMAND;
-  header_.storage_type = ISMRMRD_CHAR;
-  header_.stream       = ISMRMRD_STREAM_COMMAND;
+  head_.version      = ISMRMRD_VERSION_MAJOR;
+  head_.entity_type  = ISMRMRD_COMMAND;
+  head_.storage_type = ISMRMRD_CHAR;
+  head_.stream       = ISMRMRD_STREAM_COMMAND;
   command_type_        = ISMRMRD_COMMAND_NO_COMMAND;
   command_id_          = 0;
   config_type_         = CONFIGURATION_NONE;
@@ -1783,7 +1794,7 @@ void Command::setConfigFile (std::string config)
 /******************************************************************************/
 std::vector<uint32_t> Command::getConfigEntities () const
 {
-  return std::vector<uint32_t> (entities_, entities + sizeof (entities_) /
+  return std::vector<uint32_t> (entities_, entities_ + sizeof (entities_) /
                                                       sizeof (uint32_t));
 }
 /******************************************************************************/
@@ -1805,17 +1816,17 @@ std::vector<unsigned char> Command::serialize()
   }
 
   size_t bytes = sizeof (CommandHeader) +
-                 sizeof (this->command_type) +
-                 sizeof (this->command_id) +
-                 sizeof (this->config_type) +
+                 sizeof (this->command_type_) +
+                 sizeof (this->command_id_) +
+                 sizeof (this->config_type_) +
                  MAX_CONFIG_FILENAME_LENGTH +
                  MAX_CONFIG_NUM_ENTITIES * sizeof (entities_[0]);
 
   std::vector<unsigned char> buffer;
   buffer.reserve (bytes);
 
-  std::copy ((unsigned char*) &this->header_,
-             (unsigned char*) &this->header_ + sizeof (this->header_),
+  std::copy ((unsigned char*) &this->head_,
+             (unsigned char*) &this->head_ + sizeof (this->head_),
              std::back_inserter (buffer));
 
   std::copy ((unsigned char*) &this->command_type_,
@@ -1837,7 +1848,7 @@ std::vector<unsigned char> Command::serialize()
 
   std::copy ((unsigned char*) &this->entities_,
              (unsigned char*) &this->entities_ +
-             MAX_CONFIG_NUM_ENTITIES *  sizeof (this->entities[0]),
+             MAX_CONFIG_NUM_ENTITIES *  sizeof (this->entities_[0]),
              std::back_inserter (buffer));
 
   if (buffer.size() != bytes)
@@ -1854,9 +1865,9 @@ std::vector<unsigned char> Command::serialize()
 void Command::deserialize (const std::vector<unsigned char>& buffer)
 {
   size_t expected_bytes = sizeof (CommandHeader) +
-                          sizeof (this->command_type) +
-                          sizeof (this->command_id) +
-                          sizeof (this->config_type) +
+                          sizeof (this->command_type_) +
+                          sizeof (this->command_id_) +
+                          sizeof (this->config_type_) +
                           MAX_CONFIG_FILENAME_LENGTH +
                           MAX_CONFIG_NUM_ENTITIES * sizeof (entities_[0]);
 
@@ -1876,7 +1887,7 @@ void Command::deserialize (const std::vector<unsigned char>& buffer)
 
   int left  = 0;
   int right = sizeof (CommandHeader);
-  std::copy (&buffer[left], &buffer[right], (unsigned char*) &this->header_);
+  std::copy (&buffer[left], &buffer[right], (unsigned char*) &this->head_);
 
   left   = right;
   right += sizeof (this->command_type_);
@@ -1908,14 +1919,14 @@ void Command::deserialize (const std::vector<unsigned char>& buffer)
 /******************************************************************************/
 ErrorNotification::ErrorNotification ()
 {
-  header_.version      = ISMRMRD_VERSION_MAJOR;
-  header_.entity_type  = ISMRMRD_ERROR;
-  header_.storage_type = ISMRMRD_CHAR;
-  header_.stream       = ISMRMRD_STREAM_ERROR;
-  error_type_          = ISMRMRD_COMMAND_NO_ERROR;
+  head_.version        = ISMRMRD_VERSION_MAJOR;
+  head_.entity_type    = ISMRMRD_ERROR;
+  head_.storage_type   = ISMRMRD_CHAR;
+  head_.stream         = ISMRMRD_STREAM_ERROR;
+  error_type_          = ISMRMRD_ERROR_NO_ERROR;
   error_command_type_  = ISMRMRD_COMMAND_NO_COMMAND;
   error_command_id_    = 0;
-  error_entity_type    = ISMRMRD_ERROR;
+  error_entity_type_   = ISMRMRD_ERROR;
   memset (error_description_, 0, MAX_ERROR_DESCRIPTION_LENGTH);
 }
 /******************************************************************************/
@@ -1946,10 +1957,10 @@ void ErrorNotification::setErrorType (ErrorType error_type)
 /******************************************************************************/
 CommandType ErrorNotification::getErrorCommandType () const
 {
-  return static_cast<CommandType>(error_command_type);
+  return static_cast<CommandType>(error_command_type_);
 }
 /******************************************************************************/
-void ErrorNotification::setCommandType (CommandType command_type)
+void ErrorNotification::setErrorCommandType (CommandType command_type)
 {
   error_command_type_ = command_type;
 }
@@ -2005,8 +2016,8 @@ std::vector<unsigned char> ErrorNotification::serialize()
   std::vector<unsigned char> buffer;
   buffer.reserve (bytes);
 
-  std::copy ((unsigned char*) &this->header_,
-             (unsigned char*) &this->header_ + sizeof (this->header_),
+  std::copy ((unsigned char*) &this->head_,
+             (unsigned char*) &this->head_ + sizeof (this->head_),
              std::back_inserter (buffer));
 
   std::copy ((unsigned char*) &this->error_type_,
@@ -2070,7 +2081,7 @@ void ErrorNotification::deserialize (const std::vector<unsigned char>& buffer)
 
   int left  = 0;
   int right = sizeof (ErrorNotificationHeader);
-  std::copy (&buffer[left], &buffer[right], (unsigned char*) &this->header_);
+  std::copy (&buffer[left], &buffer[right], (unsigned char*) &this->head_);
 
   left   = right;
   right += sizeof (this->error_type_);

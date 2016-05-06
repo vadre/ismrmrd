@@ -7,45 +7,53 @@ const uint32_t ICP_ERROR_SOCKET_EOF          = 100;
 const uint32_t ICP_ERROR_SOCKET_WRONG_LENGTH = 200;
 const uint32_t ICP_ENTITY_WITH_NO_DATA       = 300;
 
-typedef void (*GET_USER_DATA_FUNC)
+//typedef void (*GET_USER_DATA_FUNC)
+using GET_USER_DATA_FUNC = void (*)
         (
-          USER_DATA*               user_data_ptr,
+          USER_DATA*                 user_data_ptr
         );
 
-typedef void (*SET_SEND_CALLBACK_FUNC)
+//typedef void (*SET_SEND_CALLBACK_FUNC)
+using SET_SEND_CALLBACK_FUNC = void (*)
         (
-          USER_DATA                user_data_ptr,
-          SEND_MSG_CALLBACK        callback
+          SEND_MSG_CALLBACK          callback,
+          USER_DATA                  user_data
         );
 
-typedef void (*HANDSHAKE_HANDLER_FUNC)
+//typedef void (*HANDSHAKE_HANDLER_FUNC)
+using HANDSHAKE_HANDLER_FUNC = void (*)
         (
-          ISMRMRD::Handshake       msg,
-          USER_DATA                user_data,
+          ISMRMRD::Handshake         msg,
+          USER_DATA                  user_data
         );
 
-typedef void (*COMMAND_HANDLER_FUNC)
+//typedef void (*COMMAND_HANDLER_FUNC)
+using COMMAND_HANDLER_FUNC = void (*)
         (
-          ISMRMRD::Command         msg,
-          USER_DATA                user_data,
+          ISMRMRD::Command           msg,
+          USER_DATA                  user_data
         );
 
-typedef void (*ERROR_HANDLER_FUNC)
+//typedef void (*ERROR_HANDLER_FUNC)
+using ERROR_HANDLER_FUNC = void (*)
         (
-          ISMRMRD::Error           msg,
-          USER_DATA                user_data,
+          ISMRMRD::ErrorNotification msg,
+          USER_DATA                  user_data
         );
 
-typedef void (*ISMRMRD_HEADER_HANDLER_FUNC)
+//typedef void (*ISMRMRD_HEADER_HANDLER_FUNC)
+using ISMRMRD_HEADER_HANDLER_FUNC = void (*)
         (
-          ISMRMRD::IsmrmrdHeader   msg,
-          USER_DATA                user_data,
+          ISMRMRD::IsmrmrdHeader     msg,
+          USER_DATA                  user_data
         );
 
-typedef template <typename T> void (*MR_ACQUISITION_HANDLER_FUNC)
+        
+//typedef template <typename T> void (*MR_ACQUISITION_HANDLER_FUNC)
+template <typename T> using MR_ACQUISITION_HANDLER_FUNC = void (*)
         (
-          ISMRMRD::Acquisition<T>  acqs,
-          USER_DATA                user_data,
+          ISMRMRD::Acquisition<T>    acqs,
+          USER_DATA                  user_data
         );
 
 /*******************************************************************************

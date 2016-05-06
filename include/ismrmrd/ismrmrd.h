@@ -199,6 +199,10 @@ enum ConfigurationType
 class EXPORTISMRMRD Entity
 {
  public:
+    /*virtual uint32_t     getVersion ()     = 0;
+    virtual EntityType   getEntityType ()  = 0;
+    virtual StorageType  getStorageType () = 0;
+    virtual uint32_t     getStream ()      = 0;*/
     virtual std::vector<unsigned char> serialize() = 0;
     virtual void deserialize(const std::vector<unsigned char>& buffer) = 0;
 };
@@ -209,6 +213,10 @@ struct EntityHeader
 {
 
     // Functions inherited from Entity
+    /*virtual uint32_t     getVersion ();
+    virtual EntityType   getEntityType ();
+    virtual StorageType  getStorageType ();
+    virtual uint32_t     getStream ();*/
     virtual std::vector<unsigned char> serialize();
     virtual void deserialize(const std::vector<unsigned char>& buffer);
 
@@ -236,17 +244,21 @@ public:
     uint32_t         getStream () const;
     void             setTimestamp (uint64_t timestamp_);
     uint64_t         getTimestamp () const;
-    void             setClintName (std::string name);
+    void             setClientName (std::string name);
     std::string      getClientName () const;
-    void             setConnectionStatus (uint32_t status);
+    void             setConnectionStatus (ConnectionStatus status);
     ConnectionStatus getConnectionStatus () const;
 
     // Functions inherited from Entity
+    /*virtual uint32_t     getVersion ();
+    virtual EntityType   getEntityType ();
+    virtual StorageType  getStorageType ();
+    virtual uint32_t     getStream ();*/
     virtual std::vector<unsigned char> serialize();
     virtual void deserialize(const std::vector<unsigned char>& buffer);
 
 protected:
-    HandshakeHeader  header_;
+    HandshakeHeader  head_;
     uint64_t         timestamp_;   /**< Session start set by client */
     uint32_t         conn_status_; /**< Connection Status set by server */
     char             client_name_[MAX_CLIENT_NAME_LENGTH];
@@ -280,12 +292,16 @@ public:
     void                  setConfigEntities (std::vector<uint32_t> entities);
     
     // Functions inherited from Entity
+    /*virtual uint32_t     getVersion ();
+    virtual EntityType   getEntityType ();
+    virtual StorageType  getStorageType ();
+    virtual uint32_t     getStream ();*/
     virtual std::vector<unsigned char> serialize();
     virtual void deserialize(const std::vector<unsigned char>& buffer);
 
 protected:
 
-    CommandHeader header_;
+    CommandHeader head_;
     uint32_t      command_type_; /**< CommandType maps to CommandType enum  */
     uint32_t      command_id_;   /** ID number used to refer to the command */
     uint32_t      config_type_;  /**< maps to ConfigurationType enum */
@@ -321,12 +337,16 @@ public:
     void                  setErrorDescription (std::string description);
 
     // Functions inherited from Entity
+    /*virtual uint32_t     getVersion ();
+    virtual EntityType   getEntityType ();
+    virtual StorageType  getStorageType ();
+    virtual uint32_t     getStream ();*/
     virtual std::vector<unsigned char> serialize();
     virtual void deserialize(const std::vector<unsigned char>& buffer);
 
 protected:
 
-    ErrorNotificationHeader header_;
+    ErrorNotificationHeader head_;
     uint32_t      error_type_; /**< maps to ErrorType enum  */
     uint32_t      error_command_type_; /**< maps to CommandType enum  */
     uint32_t      error_command_id_;   /** refers to the command id number*/
@@ -423,7 +443,7 @@ bool operator==(const ImageHeader &h1, const ImageHeader &h2);
 template <typename T> EXPORTISMRMRD StorageType get_storage_type();
 
 /// Existing Entity Types
-template <typename T> EXPORTISMRMRD EntityType get_entity_type();
+//template <typename T> EXPORTISMRMRD EntityType get_entity_type();
 
 /// Convenience class for flags
 class EXPORTISMRMRD FlagBit {
@@ -588,6 +608,10 @@ public:
 
 
     // Functions inherited from Entity
+    /*virtual uint32_t     getVersion ();
+    virtual EntityType   getEntityType ();
+    virtual StorageType  getStorageType ();
+    virtual uint32_t     getStream ();*/
     virtual std::vector<unsigned char> serialize();
     virtual void deserialize(const std::vector<unsigned char>& buffer);
 
@@ -748,6 +772,10 @@ public:
     T &at(uint32_t x, uint32_t y = 0, uint32_t z = 0, uint32_t channel = 0);
 
     // Functions inherited from Entity
+    /*virtual uint32_t     getVersion ();
+    virtual EntityType   getEntityType ();
+    virtual StorageType  getStorageType ();
+    virtual uint32_t     getStream ();*/
     virtual std::vector<unsigned char> serialize();
     virtual void deserialize(const std::vector<unsigned char>& buffer);
 

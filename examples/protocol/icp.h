@@ -21,7 +21,9 @@ const bool isCpuLittleEndian = 1 == *(char*)(&__one__);
 
 
 typedef void* USER_DATA;
-typedef template<typaname T> bool (*f) (T)  SEND_MSG_CALLBACK;
+
+typedef bool (*SEND_MSG_CALLBACK) (ISMRMRD::EntityType, ISMRMRD::Entity* ent);
+
 typedef std::shared_ptr<boost::asio::ip::tcp::socket> SOCKET_PTR;
 
 struct INPUT_MESSAGE_STRUCTURE

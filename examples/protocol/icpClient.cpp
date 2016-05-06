@@ -107,7 +107,7 @@ bool processCommand
 {
   bool success = true;
   // Not expecting any commands here yet
-  std::cout << "Received command: " << cmd.command_type << std::endl;
+  std::cout << "Received command: " << cmd.getCommandType() << std::endl;
 
   return success;
 }
@@ -195,15 +195,15 @@ void readSocket
 
         handshake.deserialize (in_msg.data);
         std::cout << "\nHandshake returned  :\n";
-        std::cout << "Client name         :" << handshake.client_name << "\n";
-        std::cout << "Timestamp           :" << handshake.timestamp   << "\n";
-        std::cout << "Status              :" << handshake.conn_status << "\n\n";
+        std::cout << "Client name         :" << handshake.getClientName() << "\n";
+        std::cout << "Timestamp           :" << handshake.getTimestamp()   << "\n";
+        std::cout << "Status              :" << handshake.getConnectionStatus() << "\n\n";
         break;
 
       case ISMRMRD::ISMRMRD_COMMAND:
 
         cmd.deserialize (in_msg.data);
-        if (cmd.command_type == ISMRMRD::ISMRMRD_COMMAND_DONE_FROM_SERVER)
+        if (cmd.getCommandType() == ISMRMRD::ISMRMRD_COMMAND_DONE_FROM_SERVER)
         {
           done = true;
           std::cout << "Received DONE from server\n";
@@ -324,15 +324,12 @@ void queueHandshake
 
   ISMRMRD::Handshake handshake;
   gettimeofday(&tv, NULL);
-  handshake.timestamp = (uint64_t)(tv.tv_sec);
-  memset (handshake.client_name, 0, ISMRMRD::MAX_CLIENT_NAME_LENGTH);
-  strncpy (handshake.client_name, client_name.c_str(),
-           ((ISMRMRD::MAX_CLIENT_NAME_LENGTH <= client_name.size()) ?
-           ISMRMRD::MAX_CLIENT_NAME_LENGTH : client_name.size()));
+  handshake.setTimestamp ((uint64_t)(tv.tv_sec));
+  handshake.setClientName (client_name);
 
   std::cout << "\nPrepairing Handshake:\n";
-  std::cout << "Client_name         :" << handshake.client_name << "\n";
-  std::cout << "Timestamp           :" << handshake.timestamp << "\n";
+  std::cout << "Client_name         :" << handshake.getClientName() << "\n";
+  std::cout << "Timestamp           :" << handshake.getTimestamp() << "\n";
 
   std::vector<unsigned char> hand = handshake.serialize();
 
@@ -449,8 +446,8 @@ void prepareDataQueue
   std::cout << "Queued " << num_acq << " acquisitions\n";
 
   ISMRMRD::Command cmd;
-  cmd.command_id = 2;
-  cmd.command_type = ISMRMRD::ISMRMRD_COMMAND_STOP_FROM_CLIENT;
+  cmd.setCommandId (2);
+  cmd.setCommandType (ISMRMRD::ISMRMRD_COMMAND_STOP_FROM_CLIENT);
   queueCommand (cmd, out_mq);
 
   std::cout << "Finished queueing data and sent STOP_FROM_CLIENT command\n";

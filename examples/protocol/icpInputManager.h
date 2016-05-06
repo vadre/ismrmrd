@@ -20,55 +20,43 @@
 namespace ICPINPUTMANAGER
 {
 
-struct icpStream
-{
-  icpStream ();
-  icpStream (ISMRMRD::EntityHeader& hdr);
+  class icpInputManager
+  {
+  public:
 
-  ISMRMRD::EntityHeader                    entity_header;
-  std::queue<std::vector<unsigned char>>   data;
-  bool                                     completed;
-  bool                                     processed;
-};
+    icpInputManager ();
+    icpInputManager (char*             name,
+                     uint64_t          timestamp = 0);
 
+    void  setClientName (char* name);
+    char* getClientName();
 
-class icpInputManager
-{
-public:
+    void     setSessionTimestamp (uint64_t timestamp);
+    uint64_t getSessionTimestamp ();
 
-  icpInputManager ();
-  icpInputManager (char*             name,
-                   uint64_t          timestamp = 0);
-
-  void  setClientName (char* name);
-  char* getClientName();
-
-  void     setSessionTimestamp (uint64_t timestamp);
-  uint64_t getSessionTimestamp ();
-
-  bool addToStream (ISMRMRD::EntityHeader      hdr,
-                    std::vector<unsigned char> data);
-
-  void addXmlHeader (std::vector<unsigned char> data);
-  ISMRMRD::IsmrmrdHeader getXmlHeader();
-
-  std::vector<ISMRMRD::Acquisition<float> > getAcquisitions
-  (
-    ISMRMRD::EntityHeader      hdr
-  );
-
-private:
-
-  void ensureStreamExist (ISMRMRD::EntityHeader& hdr);
-  void deleteStream (uint32_t stream);
-
-  char              _client_name[ISMRMRD::MAX_CLIENT_NAME_LENGTH];
-  uint64_t          _session_timestamp;
-
-  std::map<uint32_t, icpStream>   _streams;
-  ISMRMRD::IsmrmrdHeader          _xml_hdr;
+    bool setSendMessageCallback (SEND_MSG_CALLBACK func_ptr);
+    SEND_MSG_CALLBACK sendMessage;
   
-}; /* class icpInputManager */
+
+    bool addIsmrmrdHeader (ISMRMRD::IsmrmrdHeader hdr);
+    ISMRMRD::IsmrmrdHeader getXmlHeader();
+
+    bool addMrAcquisition (ISMRMRD::Entity* acq);
+    std::vector<ISMRMRD::Entity*> getAcquisitions ();
+
+    void cleanup ();
+
+  private:
+
+    char              _client_name[ISMRMRD::MAX_CLIENT_NAME_LENGTH];
+    uint64_t          _session_timestamp;
+    bool              _send_msg_callback_registered;
+
+    ISMRMRD::IsmrmrdHeader          _xml_hdr;
+    std::vector<ISMRMRD::Entity*> _mr_acquisitions;
+  
+  }; /* class icpInputManager */
+
 } /* namespace ICPINPUTMANAGER */
 
 #endif /* ICPINPUTMANAGER_H */
