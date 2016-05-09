@@ -19,10 +19,7 @@ const size_t   ENTITY_HEADER_SIZE         = sizeof (uint32_t) * 4;
 const int __one__ = 1;
 const bool isCpuLittleEndian = 1 == *(char*)(&__one__);
 
-
 typedef void* USER_DATA;
-
-typedef bool (*SEND_MSG_CALLBACK) (ISMRMRD::EntityType, ISMRMRD::Entity* ent);
 
 typedef std::shared_ptr<boost::asio::ip::tcp::socket> SOCKET_PTR;
 

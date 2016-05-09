@@ -26,19 +26,10 @@ void circshift(T *out, const T *in, int xdim, int ydim, int xshift, int yshift)
 void handleCommand
 (
   ISMRMRD::Command  msg,
-  USER_DATA         info
+  INPUT_MANAGER*    im
 )
 {
-  INPUT_MANAGER* im;
-  bool ret_val = checkInfo (info, &im);
-
-  if (!ret_val)
-  {
-    std::cout << __func__ << ": ERROR from checkInfo\n";
-    return ret_val;
-  }
-
-  switch (msg.cmd_type)
+  switch (msg.getCommandType())
   {
     case ISMRMRD::ISMRMRD_COMMAND_STOP_FROM_CLIENT:
 
@@ -54,19 +45,17 @@ void handleCommand
 
 /*******************************************************************************
  ******************************************************************************/
-void handleError
+void handleErrorNotification
 (
-  ISMRMRD::Error    msg,
-  USER_DATA         info
+  ISMRMRD::ErrorNotification msg,
+  INPUT_MANAGER*             im
 )
 {
-  switch (msg.error_type)
-  {
-
-    default:
-      std::cout << ": Error from client: " << msg.description << "\n";
-      break;
-  }
+  std::cout << __func__ <<":\nType: " << msg.getErrorType()
+            << ", Error Command: " << msg.getErrorCommandType()
+            << ", Error Command ID: " << msg.getErrorCommandId()
+            << ", Error Entity: " << msg.getErrorEntityType()
+            << ",\nError Description: " << msg.getErrorDescription() << "\n";
   return;
 }
 
@@ -75,19 +64,10 @@ void handleError
 template <typename T>
 bool handleMrAcquisition
 (
-  ISMRMRD::Acqusition<T> acq,
-  USER_DATA              info,
+  ISMRMRD::Acquisition<T> acq,
+  INPUT_MANAGER*         im
 )
 {
-  INPUT_MANAGER* im;
-  bool ret_val = checkInfo (info, &im);
-
-  if (!ret_val)
-  {
-    std::cout << __func__ << ": ERROR from checkInfo\n";
-    return ret_val;
-  }
-
   if (!im->addMrAcquisition (acq))
   {
     std::cout << __func__ << ": ERROR from INPUT_MANAGER->addAcquisition\n";
@@ -418,11 +398,91 @@ bool setMessageSendCallback
     ret_val = false;
   }
   else
-  }
+  {
     im->setSendMessageCallback (cb_func);
   }
 
   return ret_val;
+}
+
+/*******************************************************************************
+ ******************************************************************************/
+bool entityReceive
+(
+  ISMRMRD::Entity*     ent,
+  ISMRMRD::EntityType  type,
+  ISMRMRD::StorageType storage,
+  USER_DATA            info
+)
+{
+  std::cout << __func__ << "\n";
+
+  INPUT_MANAGER* im;
+  bool           ret_val = checkInfo (info, &im);
+
+  if (!retval)
+  {
+    std::cout << __func__ << ": ERROR from checkInfo()\n";
+  }
+  else if (!ent)
+  {
+    std::cout << __func__ << ": Entity pointer NULL\n";
+    ret_val = false;
+  }
+  else
+  {
+    switch (type)
+    {
+      case ISMRMRD::ISMRMRD_MRACQUISITION:
+        switch (storage)
+        {
+          case ISMRMRD::ISMRMRD_FLOAT:
+
+            handleMrAcquisition<float>
+              (static_cast<ISMRMRD::Acquisition<float>* >(ent), im);
+            break;
+
+          case ISMRMRD::ISMRMRD_DOUBLE:
+
+            handleMrAcquisition<double>
+              (static_cast<ISMRMRD::Acquisition<double>* >(ent), im);
+            break;
+
+          default:
+
+            std::cout << "Warning! Unexpected storage type: " << storage 
+                      << ", dropping...\n";
+            break;
+        }
+        break;
+
+      case ISMRMRD::ISMRMRD_COMMAND:
+
+        handleCommand (static_cast<ISMRMRD::Command*>(ent), im);
+        break;
+
+      case ISMRMRD::ISMRMRD_HANDSHAKE:
+
+        handleHandshake (static_cast<ISMRMRD::Handshake*>(ent), im);
+        break;
+
+      case ISMRMRD::ISMRMRD_ERRORNOTIFICATION:
+
+        handleErrorNotification
+          (static_cast<ISMRMRD::ErrorNotification*>(ent), im);
+        break;
+
+      case ISMRMRD::ISMRMRD_ISMRMRDHEADERWRAPPER:
+
+        handleIsmrmrdHeader
+          (static_cast<ISMRMRD::IsmrmrdHeaderWrapper*>(ent)->getHeader(), im);
+        break;
+
+      default:
+
+        std::cout << "Unexpected entity type: " << type << ", ignoring...\n"
+    }
+  }
 }
 
 /*******************************************************************************
@@ -451,11 +511,7 @@ int main
   
   server.registerUserDataAllocator    (&allocateData);
   server.registerCallbackSetter       (&setMessageSendCallback);
-  server.registerHandshakeHandler     (&handleHandshake);
-  server.registerCommandHandler       (&handleCommand);
-  server.registerErrorHandler         (&handleError);
-  server.registerIsmrmrdHeaderHandler (&handleIsmrmrdHeader);
-  server.registerMrAcquisitionHandler (&handleMrAcquisition);
+  server.registerMessageReceiver      (&entityReceive);
 
   server.start();
 

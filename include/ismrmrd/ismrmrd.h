@@ -70,14 +70,15 @@ enum StorageType {
 };
 
 enum EntityType {
-    ISMRMRD_HANDSHAKE = 0,     /**< first package sent                    */
-    ISMRMRD_COMMAND = 1,       /**< commands used to control recon system */
-    ISMRMRD_MRACQUISITION = 2, /**< MR raw data                           */
-    ISMRMRD_WAVEFORM = 3,      /**< Gradient, physiology, etc. waveform   */
-    ISMRMRD_IMAGE = 4,         /**< Reconstructed image                   */
-    ISMRMRD_XML_HEADER = 5,    /**< The XML header describing the data    */
-    ISMRMRD_ERROR = 6,         /**< Something went wrong                  */
-    ISMRMRD_BLOB = 7           /**< Some binary object, with description  */
+    ISMRMRD_HANDSHAKE = 0,          /**< first package sent                   */
+    ISMRMRD_COMMAND = 1,            /**< commands to control recon system     */
+    ISMRMRD_MRACQUISITION = 2,      /**< MR raw data                          */
+    ISMRMRD_WAVEFORM = 3,           /**< Gradient, physiology, etc. waveform  */
+    ISMRMRD_IMAGE = 4,              /**< Reconstructed image                  */
+    ISMRMRD_HEADER = 5,             /**< The XML header describing the data   */
+    ISMRMRD_HEADER_WRAPPER = 6,     /**< The wrapper containing XML header    */
+    ISMRMRD_ERROR_NOTIFICATION = 7, /**< Something went wrong                 */
+    ISMRMRD_BLOB = 8                /**< Some binary object, with description */
 };
 
 enum CommandType
@@ -622,6 +623,7 @@ protected:
     std::vector<float> traj_;
     std::vector<std::complex< T > > data_;
 };
+
 
 /// MR Image type
 template <typename T>

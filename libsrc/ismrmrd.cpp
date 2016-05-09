@@ -1376,6 +1376,7 @@ template <typename T> T& NDArray<T>::at(uint32_t x, uint32_t y, uint32_t z,
 template EXPORTISMRMRD class Acquisition<int16_t>;
 template EXPORTISMRMRD class Acquisition<int32_t>;
 template EXPORTISMRMRD class Acquisition<float>;
+template EXPORTISMRMRD class Acquisition<double>;
 
 // Images
 template EXPORTISMRMRD class Image<uint16_t>;
@@ -1920,13 +1921,13 @@ void Command::deserialize (const std::vector<unsigned char>& buffer)
 ErrorNotification::ErrorNotification ()
 {
   head_.version        = ISMRMRD_VERSION_MAJOR;
-  head_.entity_type    = ISMRMRD_ERROR;
+  head_.entity_type    = ISMRMRD_ERROR_NOTIFICATION;
   head_.storage_type   = ISMRMRD_CHAR;
   head_.stream         = ISMRMRD_STREAM_ERROR;
   error_type_          = ISMRMRD_ERROR_NO_ERROR;
   error_command_type_  = ISMRMRD_COMMAND_NO_COMMAND;
   error_command_id_    = 0;
-  error_entity_type_   = ISMRMRD_ERROR;
+  error_entity_type_   = ISMRMRD_ERROR_NOTIFICATION;
   memset (error_description_, 0, MAX_ERROR_DESCRIPTION_LENGTH);
 }
 /******************************************************************************/
@@ -2000,7 +2001,7 @@ std::string ErrorNotification::getErrorDescription () const
 /******************************************************************************/
 std::vector<unsigned char> ErrorNotification::serialize()
 {
-  if (this->head_.entity_type != ISMRMRD_ERROR)
+  if (this->head_.entity_type != ISMRMRD_ERROR_NOTIFICATION)
   {
     throw std::runtime_error
       ("Entity type does not match ErrorNotification class");
@@ -2073,7 +2074,7 @@ void ErrorNotification::deserialize (const std::vector<unsigned char>& buffer)
   }
 
   ErrorNotificationHeader* h_ptr = (ErrorNotificationHeader*)&buffer[0];
-  if (h_ptr->entity_type != ISMRMRD_ERROR)
+  if (h_ptr->entity_type != ISMRMRD_ERROR_NOTIFICATION)
   {
     throw std::runtime_error
       ("Entity type does not match the ErrorNotification class");

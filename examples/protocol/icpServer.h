@@ -1,3 +1,6 @@
+#ifndef ICP_SERVER_H
+#define ICP_SERVER_H
+
 #include "icpInputManager.h"
 #include "icpOutputManager.h"
 #include <boost/asio.hpp>
@@ -7,54 +10,14 @@ const uint32_t ICP_ERROR_SOCKET_EOF          = 100;
 const uint32_t ICP_ERROR_SOCKET_WRONG_LENGTH = 200;
 const uint32_t ICP_ENTITY_WITH_NO_DATA       = 300;
 
-//typedef void (*GET_USER_DATA_FUNC)
-using GET_USER_DATA_FUNC = void (*)
-        (
-          USER_DATA*                 user_data_ptr
-        );
+using GET_USER_DATA_FUNC = bool (*) (USER_DATA*);
 
-//typedef void (*SET_SEND_CALLBACK_FUNC)
-using SET_SEND_CALLBACK_FUNC = void (*)
-        (
-          SEND_MSG_CALLBACK          callback,
-          USER_DATA                  user_data
-        );
+using SET_SEND_CALLBACK_FUNC = bool (*) (
+        bool (ICPOUTPUTMANAGER::icpOutputManager::*callback)
+          (ISMRMRD::EntityType, ISMRMRD::Entity*), USER_DATA);
 
-//typedef void (*HANDSHAKE_HANDLER_FUNC)
-using HANDSHAKE_HANDLER_FUNC = void (*)
-        (
-          ISMRMRD::Handshake         msg,
-          USER_DATA                  user_data
-        );
-
-//typedef void (*COMMAND_HANDLER_FUNC)
-using COMMAND_HANDLER_FUNC = void (*)
-        (
-          ISMRMRD::Command           msg,
-          USER_DATA                  user_data
-        );
-
-//typedef void (*ERROR_HANDLER_FUNC)
-using ERROR_HANDLER_FUNC = void (*)
-        (
-          ISMRMRD::ErrorNotification msg,
-          USER_DATA                  user_data
-        );
-
-//typedef void (*ISMRMRD_HEADER_HANDLER_FUNC)
-using ISMRMRD_HEADER_HANDLER_FUNC = void (*)
-        (
-          ISMRMRD::IsmrmrdHeader     msg,
-          USER_DATA                  user_data
-        );
-
-        
-//typedef template <typename T> void (*MR_ACQUISITION_HANDLER_FUNC)
-template <typename T> using MR_ACQUISITION_HANDLER_FUNC = void (*)
-        (
-          ISMRMRD::Acquisition<T>    acqs,
-          USER_DATA                  user_data
-        );
+using ENTITY_RECEIVER_FUNC = bool (*) (ISMRMRD::Entity*, ISMRMRD::EntityType,
+                                       ISMRMRD::StorageType, USER_DATA);
 
 /*******************************************************************************
  ******************************************************************************/
@@ -66,13 +29,9 @@ public:
   ~icpServer ();
   void start ();
 
-  void registerUserDataAllocator      (GET_USER_DATA_FUNC           func_ptr);
-  void registerCallbackSetter         (SET_SEND_CALLBACK_FUNC       func_ptr);
-  void registerIsmrmrdHeaderHandler   (ISMRMRD_HEADER_HANDLER_FUNC  func_ptr);
-  void registerHandshakeHandler       (HANDSHAKE_HANDLER_FUNC       func_ptr);
-  void registerCommandHandler         (COMMAND_HANDLER_FUNC         func_ptr);
-  void registerErrorHandler           (ERROR_HANDLER_FUNC           func_ptr);
-  void registerMrAcquisitionHandler   (MR_ACQUISITION_HANDLER_FUNC  func_ptr);
+  bool registerUserDataAllocator   (GET_USER_DATA_FUNC      func_ptr);
+  bool registerCallbackSetter      (SET_SEND_CALLBACK_FUNC  func_ptr);
+  bool registerEntityReceiver      (ENTITY_RECEIVER_FUNC    func_ptr);
 
 private:
 
@@ -82,30 +41,24 @@ private:
 
   bool                         _user_data_allocator_registered;
   bool                         _send_callback_setter_registered;
-  bool                         _handle_handshake_registered;
-  bool                         _handle_command_registered;
-  bool                         _handle_error_registered;
-  bool                         _handle_mracquisition_registered;
-  bool                         _handle_ismrmrd_header_registered;
+  bool                         _entity_receiver_registered;
 
 
   GET_USER_DATA_FUNC            getUserDataPointer;
   SET_SEND_CALLBACK_FUNC        setSendMessageCallback;
-  HANDSHAKE_HANDLER_FUNC        handleHandshake;
-  COMMAND_HANDLER_FUNC          handleCommand;
-  ERROR_HANDLER_FUNC            handleError;
-  MR_ACQUISITION_HANDLER_FUNC   handleMrAcquisition;
-  ISMRMRD_HEADER_HANDLER_FUNC   handleIsmrmrdHeader;
+  ENTITY_RECEIVER_FUNC          forwardEntity;
 
 
-  void readSocket       (SOCKET_PTR sock, uint32_t id);
-  bool receiveMessage   (SOCKET_PTR sock, IN_MSG& in_msg);
-  int  receiveFrameInfo (SOCKET_PTR sock, IN_MSG& in_msg);
-  void serverMain       ();
-  void sendMessage
+  void      readSocket       (SOCKET_PTR sock, uint32_t id);
+  uint32_t  receiveMessage   (SOCKET_PTR sock, IN_MSG& in_msg);
+  uint32_t  receiveFrameInfo (SOCKET_PTR sock, IN_MSG& in_msg);
+  void      serverMain       ();
+  void      sendMessage
   (
     ICPOUTPUTMANAGER::icpOutputManager* om,
     uint32_t id,
     SOCKET_PTR sock
   );
 };
+
+#endif // ICP_SERVER_H */

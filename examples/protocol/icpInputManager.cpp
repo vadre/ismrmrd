@@ -26,7 +26,8 @@ namespace ICPINPUTMANAGER
    ****************************************************************************/
   bool icpInputManager::setSendMessageCallback
   (
-    SEND_MSG_CALLBACK func_ptr
+    bool (*func_ptr) (ISMRMRD::EntityType, ISMRMRD::Entity*)
+    //SEND_MSG_CALLBACK func_ptr
   )
   {
     if (func_ptr)
@@ -75,6 +76,29 @@ namespace ICPINPUTMANAGER
     {
       _session_timestamp = timestamp;
     }
+  }
+
+  /*****************************************************************************
+   ****************************************************************************/
+  void icpInputManager::setClientDone ()
+  {
+    _client_done = true;
+  }
+
+  /*****************************************************************************
+   ****************************************************************************/
+  bool icpInputManager::isClientDone ()
+  {
+    return _client_done;
+  }
+
+  /*****************************************************************************
+   ****************************************************************************/
+  bool icpInputManager::readyForImageReconstruction ()
+  {
+    bool ret_val = false;
+    if (...........................................................
+    return ret_val;
   }
 
   /*****************************************************************************

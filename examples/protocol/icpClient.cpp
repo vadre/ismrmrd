@@ -214,12 +214,12 @@ void readSocket
         }
         break;
 
-      case ISMRMRD::ISMRMRD_ERROR:
+      case ISMRMRD::ISMRMRD_ERROR_NOTIFICATION:
 
         // TODO: Error specific processing here...
         break;
 
-      case ISMRMRD::ISMRMRD_XML_HEADER:
+      case ISMRMRD::ISMRMRD_HEADER_WRAPPER:
 
         xml_head_string = std::string (in_msg.data.begin(), in_msg.data.end());
         ISMRMRD::deserialize (xml_head_string.c_str(), xmlHeader);
@@ -350,7 +350,7 @@ void queueXmlHeader
   ISMRMRD::EntityHeader e_hdr;
 
   e_hdr.version      = my_version;
-  e_hdr.entity_type  = ISMRMRD::ISMRMRD_XML_HEADER;
+  e_hdr.entity_type  = ISMRMRD::ISMRMRD_HEADER_WRAPPER;
   e_hdr.storage_type = ISMRMRD::ISMRMRD_CHAR;
   e_hdr.stream       = 1;
 

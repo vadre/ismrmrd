@@ -23,10 +23,13 @@ namespace ICPOUTPUTMANAGER
   {
   public:
 
+         icpOutputManager();
     bool processEntity (ISMRMRD::EntityType type,
                         ISMRMRD::Entity*    entity);
 
     void send (SOCKET_PTR sock);
+    void setSessionClosing();
+    bool isSessionClosing();
 
   private:
 
@@ -34,6 +37,7 @@ namespace ICPOUTPUTMANAGER
                        std::vector<unsigned char>& data);
 
     std::queue<OUT_MSG> _oq;
+    bool _session_closed;
 
   }; /* class icpOutputManager */
 

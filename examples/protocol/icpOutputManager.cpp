@@ -5,6 +5,12 @@ using boost::asio::ip::tcp;
 namespace ICPOUTPUTMANAGER
 {
   /*****************************************************************************
+   ****************************************************************************/
+  icpOutputManager::icpOutputManager ()
+  : _session_closed (false)
+  {}
+
+  /*****************************************************************************
    processEntity is the routine known to caller as the sendMessage callback
    ****************************************************************************/
   bool icpOutputManager::processEntity
@@ -42,7 +48,7 @@ namespace ICPOUTPUTMANAGER
         e_buffer = entity->serialize();
         break;
 
-      case ISMRMRD::ISMRMRD_XML_HEADER:
+      case ISMRMRD::ISMRMRD_HEADER_WRAPPER:
 
         head.storage_type = ISMRMRD::ISMRMRD_CHAR;
         head.stream       = ISMRMRD::ISMRMRD_STREAM_ISMRMRD_HEADER;
@@ -67,7 +73,7 @@ namespace ICPOUTPUTMANAGER
         e_buffer = entity->serialize();
         break;
 
-      case ISMRMRD::ISMRMRD_ERROR:
+      case ISMRMRD::ISMRMRD_ERROR_NOTIFICATION:
         head.storage_type = ISMRMRD::ISMRMRD_CHAR;
         head.stream       = ISMRMRD::ISMRMRD_STREAM_ERROR;
         e_buffer = entity->serialize();
@@ -140,6 +146,20 @@ namespace ICPOUTPUTMANAGER
     }
 
     return;
+  }
+
+  /*****************************************************************************
+   ****************************************************************************/
+  void icpOutputManager::setSessionClosing ()
+  {
+    _session_closed = true;
+  }
+
+  /*****************************************************************************
+   ****************************************************************************/
+  bool icpOutputManager::isSessionClosing ()
+  {
+    return _session_closed;
   }
 
 } /* namespace ICPOUTPUTMANAGER */

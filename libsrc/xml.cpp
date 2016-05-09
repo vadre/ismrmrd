@@ -850,13 +850,16 @@ namespace ISMRMRD
   }
 
 
-  IsmrmrdHeaderWrapper::IsmrmrdHeaderWrapper()
+  IsmrmrdHeaderWrapper::IsmrmrdHeaderWrapper
+  (
+    IsmrmrdHeader hdr
+  )
   {
     version_      = ISMRMRD_VERSION_MAJOR;
-    entity_type_  = ISMRMRD_XML_HEADER;
+    entity_type_  = ISMRMRD_HEADER_WRAPPER;
     storage_type_ = ISMRMRD_CHAR;
     stream_       = ISMRMRD_STREAM_ISMRMRD_HEADER;
-    header_set_   = false;
+    header_       = hdr;
   }
 
   uint32_t IsmrmrdHeaderWrapper::getVersion() const
@@ -877,13 +880,11 @@ namespace ISMRMRD
   void IsmrmrdHeaderWrapper::setHeader (IsmrmrdHeader hdr)
   {
     header_ = hdr;
-    header_set_ = true;
   }
 
-  bool IsmrmrdHeaderWrapper::getHeader (IsmrmrdHeader& hdr) const
+  IsmrmrdHeader IsmrmrdHeaderWrapper::getHeader () const
   {
-    hdr = header_;
-    return header_set_;
+    return header_;
   }
 
   std::vector<unsigned char> IsmrmrdHeaderWrapper::serialize()
@@ -902,7 +903,6 @@ namespace ISMRMRD
   {
      std::string xml (buffer.begin(), buffer.end());
      ISMRMRD::deserialize (xml.c_str(), header_);
-     header_set_ = true;
   }
 
 
