@@ -5,13 +5,19 @@ namespace ICPINPUTMANAGER
   /*****************************************************************************
    ****************************************************************************/
   icpInputManager::icpInputManager ()
+  :  _session_timestamp (0),
+     _send_msg_callback_registered (false),
+     _xml_header_received (false),
+     _client_done (false),
+     _server_done (false)
   {
-    memset (_client_name, 0, ISMRMRD::MAX_CLIENT_NAME_LENGTH);
-    _session_timestamp = 0;
+    //std::memset (_client_name, 0, ISMRMRD::MAX_CLIENT_NAME_LENGTH);
+   
   }
 
   /*****************************************************************************
    ****************************************************************************/
+  /*
   icpInputManager::icpInputManager
   (
     char*             name,
@@ -21,7 +27,7 @@ namespace ICPINPUTMANAGER
     icpInputManager::setClientName (name);
     _session_timestamp = timestamp;
   }
-
+  */
   /*****************************************************************************
    ****************************************************************************/
   bool icpInputManager::setSendMessageCallback
@@ -42,10 +48,10 @@ namespace ICPINPUTMANAGER
    ****************************************************************************/
   void icpInputManager::setClientName
   (
-    char* name
+    std::string name
   )
   {
-    if (strlen (_client_name) <= 0)
+    /*if (strlen (_client_name) <= 0)
     {
       memset (_client_name, 0, ISMRMRD::MAX_CLIENT_NAME_LENGTH);
       if (name)
@@ -56,11 +62,13 @@ namespace ICPINPUTMANAGER
         strncpy (_client_name, name, size);
       }
     }
+    */
+    _client_name = name;
   }
 
   /*****************************************************************************
    ****************************************************************************/
-  char* icpInputManager::getClientName ()
+  std::string icpInputManager::getClientName ()
   {
     return _client_name;
   }
@@ -94,11 +102,45 @@ namespace ICPINPUTMANAGER
 
   /*****************************************************************************
    ****************************************************************************/
-  bool icpInputManager::readyForImageReconstruction ()
+  void icpInputManager::setServerDone ()
   {
-    bool ret_val = false;
-    if (...........................................................
-    return ret_val;
+    _server_done = true;
+  }
+
+  /*****************************************************************************
+   ****************************************************************************/
+  bool icpInputManager::isServerDone ()
+  {
+    return _server_done;
+  }
+
+  /*****************************************************************************
+   ****************************************************************************/
+  void icpInputManager::setXmlHeaderReceived ()
+  {
+    _xml_header_received = true;
+  }
+
+  /*****************************************************************************
+   ****************************************************************************/
+  bool icpInputManager::isXmlHeaderReceived ()
+  {
+    return _xml_header_received;
+  }
+
+  /*****************************************************************************
+   ****************************************************************************/
+  bool icpInputManager::readyForImageReconstruction
+  (
+    uint32_t size,
+    uint32_t encoding
+  )
+  {
+    if (icpInputManager::isXmlHeaderReceived())
+    {
+      return (size == _xml_hdr.encoding[encoding].encodedSpace.matrixSize.y);
+    }
+    return false;
   }
 
   /*****************************************************************************
@@ -109,20 +151,48 @@ namespace ICPINPUTMANAGER
   )
   {
     _xml_hdr = hdr;
-    return true;
+    icpInputManager::setXmlHeaderReceived();
+    return _xml_header_received;
   }
 
   /*****************************************************************************
    ****************************************************************************/
+  /*
   bool icpInputManager::addMrAcquisition
   (
-    ISMRMRD::Entity* acq
+    //ISMRMRD::StorageType storage,
+    ISMRMRD::StorageType storage,
+    ISMRMRD::Entity*     acq
   )
   {
+    ISMRMRD::Acquisition<float>* acq_float;
+    //ISMRMRD::Acquisition<double>* acq_double;
+    //ICP_ISMRMRD_MR_ACQUISITION container;
+
+    switch (storage)
+    {
+      case ISMRMRD::ISMRMRD_FLOAT:
+
+        acq_float = new ISMRMRD::Acquisition<float>;
+        //container = makeAcqContainer<float>(ent);
+        break;
+
+      case ISMRMRD::ISMRMRD_DOUBLE:
+
+        //container = makeAcqContainer<double>(ent);
+        break;
+
+      default:
+
+        std::cout << "Warning! Unexpected acquisition storage type: "
+                  << storage << ", dropping...\n";
+        break;
+    }
+
     _mr_acquisitions.push_back (acq);
     return true;
   }
-
+  */
   /*****************************************************************************
    ****************************************************************************/
   uint64_t icpInputManager::getSessionTimestamp ()
@@ -132,24 +202,28 @@ namespace ICPINPUTMANAGER
 
   /*****************************************************************************
    ****************************************************************************/
-  ISMRMRD::IsmrmrdHeader icpInputManager::getXmlHeader()
+  ISMRMRD::IsmrmrdHeader icpInputManager::getIsmrmrdHeader()
   {
     return _xml_hdr;
   }
 
   /*****************************************************************************
    ****************************************************************************/
+  /*
   std::vector<ISMRMRD::Entity*> icpInputManager::getAcquisitions ()
   {
     
     return _mr_acquisitions;
   }
-
+  */
   /*****************************************************************************
    ****************************************************************************/
   void icpInputManager::cleanup ()
   {
-    _mr_acquisitions.clear();
+    acqs_16.deleteData();
+    acqs_32.deleteData();
+    acqs_flt.deleteData();
+    acqs_dbl.deleteData();
   }
 
 } /* namespace ICPRECEIVEDDATA */

@@ -1,37 +1,58 @@
-
-#include "icpServer.h"
-#include "fftw3.h"
-
-typedef ICPINPUTMANAGER::icpInputManager INPUT_MANAGER;
+#include "icpProcessor.h"
 
 /*******************************************************************************
  ******************************************************************************/
-template <typename T>
-void circshift(T *out, const T *in, int xdim, int ydim, int xshift, int yshift)
+bool checkInfo
+(
+  USER_DATA       info,
+  INPUT_MANAGER** im
+)
 {
-  for (int i =0; i < ydim; i++)
+  bool ret_val = false;
+
+  if (!im)
   {
-    int ii = (i + yshift) % ydim;
-    for (int j = 0; j < xdim; j++)
-    {
-      int jj = (j + xshift) % xdim;
-      out[ii * xdim + jj] = in[i * xdim + j];
-    }
+    std::cout << __func__ << ": ERROR! InputManager double pointer invalid\n";
+    return ret_val;
   }
+
+  if (!info)
+  {
+    std::cout << __func__ << ": ERROR! USER_DATA pointer invalid\n";
+    return ret_val;
+  }
+
+  INPUT_MANAGER* im_ptr = static_cast<INPUT_MANAGER*> (info);
+  // TODO: boundary check
+  *im = im_ptr;
+  ret_val = true;
+
+  return ret_val;
 }
 
-#define fftshift(out, in, x, y) circshift(out, in, x, y, (x/2), (y/2))
 /*******************************************************************************
  ******************************************************************************/
 void handleCommand
 (
   ISMRMRD::Command  msg,
-  INPUT_MANAGER*    im
+  USER_DATA         info
 )
 {
+  INPUT_MANAGER* im;
+  if (!checkInfo (info, &im))
+  {
+    throw std::runtime_error ("handleCommand: User data pointer invalid");
+  }
+
   switch (msg.getCommandType())
   {
     case ISMRMRD::ISMRMRD_COMMAND_STOP_FROM_CLIENT:
+
+      std::cout << __func__ << ": Received STOP  from client\n";
+      im->setClientDone();
+      break;
+
+    case ISMRMRD::ISMRMRD_COMMAND_CLOSE_CONNECTION:
 
       std::cout << __func__ << ": Received STOP  from client\n";
       im->setClientDone();
@@ -48,9 +69,15 @@ void handleCommand
 void handleErrorNotification
 (
   ISMRMRD::ErrorNotification msg,
-  INPUT_MANAGER*             im
+  USER_DATA                  info
 )
 {
+  INPUT_MANAGER* im;
+  if (!checkInfo (info, &im))
+  {
+    throw std::runtime_error ("handleCommand: User data pointer invalid");
+  }
+
   std::cout << __func__ <<":\nType: " << msg.getErrorType()
             << ", Error Command: " << msg.getErrorCommandType()
             << ", Error Command ID: " << msg.getErrorCommandId()
@@ -61,49 +88,24 @@ void handleErrorNotification
 
 /*******************************************************************************
  ******************************************************************************/
-template <typename T>
-bool handleMrAcquisition
-(
-  ISMRMRD::Acquisition<T> acq,
-  INPUT_MANAGER*         im
-)
-{
-  if (!im->addMrAcquisition (acq))
-  {
-    std::cout << __func__ << ": ERROR from INPUT_MANAGER->addAcquisition\n";
-  }
-  else if (im->readyForImageReconstruction())
-  {
-    imageReconstruction (im);
-    if (im->isClientDone())
-    {
-      sendCommand (ISMRMRD::ISMRMRD_COMMAND_DONE_FROM_SERVER);
-      std::cout << __func__ << ": sending DONE_FROM_SERVER\n";
-    }
-  }
-  
-  return ret_val;
-}
-
-/*******************************************************************************
- ******************************************************************************/
-template <typename T>
 void imageReconstruction
 (
-  INPUT_MANAGER*         im,
+  std::vector<ISMRMRD::Acquisition<float> > acqs,
+  uint32_t                              encoding,
+  INPUT_MANAGER*                        im
 )
 {
   std::cout << __func__ << " starting\n";
 
   ISMRMRD::IsmrmrdHeader hdr = im->getIsmrmrdHeader();
-  std::vector<ISMRMRD::Acquisition<T> > acqs = im->getMrAcquisitions();
 
   std::cout << "Received " << acqs.size() << " acquisitions\n";
 
-  im->sendMessage (hdr);
+  ISMRMRD::IsmrmrdHeaderWrapper wrapper (hdr);
+  im->sendMessage (ISMRMRD::ISMRMRD_HEADER_WRAPPER, &wrapper);
 
-  ISMRMRD::EncodingSpace e_space = hdr.encoding[0].encodedSpace;
-  ISMRMRD::EncodingSpace r_space = hdr.encoding[0].reconSpace;
+  ISMRMRD::EncodingSpace e_space = hdr.encoding[encoding].encodedSpace;
+  ISMRMRD::EncodingSpace r_space = hdr.encoding[encoding].reconSpace;
 
   if (e_space.matrixSize.z != 1)
   {
@@ -123,7 +125,7 @@ void imageReconstruction
   dims.push_back (nX);
   dims.push_back (nY);
   dims.push_back (num_coils);
-  ISMRMRD::NDArray<std::complex<T> > buffer (dims);
+  ISMRMRD::NDArray<std::complex<float> > buffer (dims);
 
   //Now loop through and copy data
   unsigned int number_of_acquisitions = acqs.size();
@@ -137,7 +139,7 @@ void imageReconstruction
     for (uint16_t coil = 0; coil < num_coils; coil++)
     {
       memcpy (&buffer.at (0, acqs[ii].getEncodingCounters().kspace_encode_step_1, coil),
-              &acqs[ii].at (0, coil), sizeof (std::complex<T>) * nX);
+              &acqs[ii].at (0, coil), sizeof (std::complex<float>) * nX);
     }
   }
 
@@ -158,7 +160,7 @@ void imageReconstruction
     fftwf_plan p = fftwf_plan_dft_2d (nY, nX, tmp ,tmp, FFTW_BACKWARD, FFTW_ESTIMATE);
 
     //FFTSHIFT
-    fftshift (reinterpret_cast<std::complex<T>*>(tmp),
+    fftshift (reinterpret_cast<std::complex<float>*>(tmp),
               &buffer.at (0, 0, coil), nX, nY);
 
     //Execute the FFT
@@ -166,14 +168,14 @@ void imageReconstruction
 
     //FFTSHIFT
     fftshift (&buffer.at (0, 0, coil),
-              reinterpret_cast<std::complex<T>*>(tmp), nX, nY);
+              reinterpret_cast<std::complex<float>*>(tmp), nX, nY);
 
     //Clean up.
     fftwf_destroy_plan(p);
     fftwf_free(tmp);
   }
 
-  ISMRMRD::Image<T> img_out (r_space.matrixSize.x, r_space.matrixSize.y, 1, 1);
+  ISMRMRD::Image<float> img_out (r_space.matrixSize.x, r_space.matrixSize.y, 1, 1);
 
   //f there is oversampling in the readout direction remove it
   //Take the sqrt of the sum of squares
@@ -199,15 +201,32 @@ void imageReconstruction
                           r_space.fieldOfView_mm.y,
                           r_space.fieldOfView_mm.z);
 
-  im->sendMessage (img_out);
+  im->sendMessage (ISMRMRD::ISMRMRD_IMAGE, &img_out);
 
   std::cout << __func__ << " done " << "\n";
   return;
 }
 
+//template<> void imageReconstruction<uint16_t>
+  //(std::vector<ISMRMRD::Acquisition<uint16_t>>, uint32_t, INPUT_MANAGER*);
+//template<> void imageReconstruction<int16_t>
+  //(std::vector<ISMRMRD::Acquisition<int16_t>>, uint32_t, INPUT_MANAGER*);
+//template<> void imageReconstruction<uint32_t>
+  //(std::vector<ISMRMRD::Acquisition<uint32_t>>, uint32_t, INPUT_MANAGER*);
+//template<> void imageReconstruction<int32_t>
+  //(std::vector<ISMRMRD::Acquisition<int32_t>>, uint32_t, INPUT_MANAGER*);
+//template<> void imageReconstruction<float>
+  //(std::vector<ISMRMRD::Acquisition<float>>, uint32_t, INPUT_MANAGER*);
+//template<> void imageReconstruction<double>
+  //(std::vector<ISMRMRD::Acquisition<double>>, uint32_t, INPUT_MANAGER*);
+//template<> void imageReconstruction<std::complex<float>>
+  //(std::vector<ISMRMRD::Acquisition<std::complex<float>>>, uint32_t, INPUT_MANAGER*);
+//template<> void imageReconstruction<std::complex<double>>
+  //(std::vector<ISMRMRD::Acquisition<std::complex<double>>>, uint32_t, INPUT_MANAGER*);
+
 /*******************************************************************************
  ******************************************************************************/
-handleIsmrmrdHeader
+void handleIsmrmrdHeader
 (
   ISMRMRD::IsmrmrdHeader  msg,
   USER_DATA               info
@@ -216,71 +235,12 @@ handleIsmrmrdHeader
   std::cout << __func__ << ": Received IsmrmrdHeader\n";
 
   INPUT_MANAGER* im;
-  bool           ret_val = checkInfo (info, &im);
-
-  if (!ret_val)
+  if (!checkInfo (info, &im))
   {
-    std::cout << __func__ << ": ERROR from checkInfo()\n";
-    return ret_val;
+    throw std::runtime_error ("handleIsmrmrdHeader: User data pointer invalid");
   }
 
-  im->addIsmrmrdHeader (hdr);
-
-  return ret_val;
-}
-
-/*******************************************************************************
- ******************************************************************************/
-bool handleHandshake
-(
-  ISMRMRD::Handshake  msg,
-  USER_DATA           info
-)
-{
-  std::cout << __func__ << ": client <"<< msg.name << "> accepted\n";
-
-  INPUT_MANAGER* im;
-  bool           ret_val = checkInfo (info, &im);
-
-  if (ret_val)
-  {
-    im->setClientName (msg.name);
-    im->setSessionTimestamp (msg.timestamp);
-
-    // Could check if the client name is matching a list of expected clients
-    clientAccepted (im, true);
-  }
-  else
-  {
-    std::cout << __func__ << ": ERROR from checkInfo()\n";
-  }
-
-  return ret_val;
-}
-
-/*****************************************************************************
- ****************************************************************************/
-bool clientAccepted
-(
-  INPUT_MANAGER* im,
-  bool           accepted
-)
-{
-  std::cout << __func__ << "\n";
-
-  ISMRMRD::Handshake msg;
-  msg.setTimestamp (im->getSessionTimestamp());
-  msg.stConnectionStatus ((accepted) ?
-                          ISMRMRD::CONNECTION_ACCEPTED :
-  /* for now: */          ISMRMRD::CONNECTION_DENIED_UNKNOWN_USER);
-
-  msg.setClientName (im->getClientName);
-  im->sendMessage (msg);
-
-  if (!accepted)
-  {
-    sendCommand (im, ISMRMRD::ISMRMRD_COMMAND_DONE_FROM_SERVER, 0);
-  }
+  im->addIsmrmrdHeader (msg);
 
   return;
 }
@@ -297,7 +257,59 @@ void sendCommand
   ISMRMRD::Command msg;
   msg.setCommandType (cmd_type);
   msg.setCommandId (cmd_id);
-  im->sendMessage (msg);
+  im->sendMessage (ISMRMRD::ISMRMRD_COMMAND, &msg);
+
+  return;
+}
+
+/*****************************************************************************
+ ****************************************************************************/
+void clientAccepted
+(
+  INPUT_MANAGER* im,
+  bool           accepted
+)
+{
+  std::cout << __func__ << "\n";
+
+  ISMRMRD::Handshake msg;
+  msg.setTimestamp (im->getSessionTimestamp());
+  msg.setConnectionStatus ((accepted) ?
+                           ISMRMRD::CONNECTION_ACCEPTED :
+  /* for now: */           ISMRMRD::CONNECTION_DENIED_UNKNOWN_USER);
+
+  msg.setClientName (im->getClientName());
+  im->sendMessage (ISMRMRD::ISMRMRD_HANDSHAKE, &msg);
+
+  if (!accepted)
+  {
+    sendCommand (im, ISMRMRD::ISMRMRD_COMMAND_DONE_FROM_SERVER, 0);
+  }
+
+  return;
+}
+
+/*******************************************************************************
+ ******************************************************************************/
+void handleHandshake
+(
+  ISMRMRD::Handshake  msg,
+  USER_DATA           info
+)
+{
+  std::cout << __func__ << ": client <"<< msg.getClientName() << "> accepted\n";
+
+  INPUT_MANAGER* im;
+  if (!checkInfo (info, &im))
+  {
+    throw std::runtime_error ("handleIsmrmrdHeader: User data pointer invalid");
+  }
+
+  im->setClientName (msg.getClientName());
+  im->setSessionTimestamp (msg.getTimestamp());
+
+  // Could check if the client name is matching a list of expected clients
+  clientAccepted (im, true);
 
   return;
 }
@@ -313,71 +325,35 @@ void sendError
 {
   ISMRMRD::ErrorNotification msg;
   msg.setErrorType (type);
-  msg.setDescription (descr);
-  im->sendMessage (msg);
+  msg.setErrorDescription (descr);
+  im->sendMessage (ISMRMRD::ISMRMRD_ERROR_NOTIFICATION, &msg);
 
   return;
 }
 
 /*******************************************************************************
  ******************************************************************************/
-bool allocateData
+void allocateData
 (
-  USER_DATA*  data,
+  USER_DATA*  data
 )
 {
   std::cout << __func__ << "\n";
-  bool ret_val = false;
 
-  if (data)
+  if (!data)
   {
-    INPUT_MANAGER* im = new INPUT_MANAGER();
-
-    *data = (USER_DATA) im;
-    ret_val = true;
-  }
-  else
-  {
-    std::cout << __func__ << ": ERROR! Invalid USER_DATA pointer\n";
+    throw std::runtime_error ("allocateData: Invalid USER_DATA pointer");
   }
 
-  return ret_val;
+  INPUT_MANAGER* im = new INPUT_MANAGER();
+  *data = (USER_DATA) im;
+
+  return;
 }
 
 /*******************************************************************************
  ******************************************************************************/
-
-bool checkInfo
-(
-  USED_DATA       info,
-  INPUT_MANAGER** im
-)
-{
-  bool ret_val = false;
-
-  if (!im_ptr)
-  {
-    std::cout << __func__ << ": ERROR! Info pointer invalid\n";
-    return ret_val;
-  }
-
-  INPUT_MANAGER* im_ptr = static_cast<INPUT_MANAGER> (info);
-  if (im_ptr->checkBounds ("ICP_UPPER_BOUND", "ICP_LOWER_BOUND"))
-  {
-    std::cout << __func__ << ": ERROR! Info data invalid\n";
-  }
-  else
-  {
-    *im = im_ptr;
-    ret_val = true;
-  }
-
-  return ret_val;
-}
-
-/*******************************************************************************
- ******************************************************************************/
-bool setMessageSendCallback
+void setMessageSendCallback
 (
   SEND_MSG_CALLBACK cb_func,
   USER_DATA         info
@@ -386,101 +362,183 @@ bool setMessageSendCallback
   std::cout << __func__ << "\n";
 
   INPUT_MANAGER* im;
-  bool           ret_val = checkInfo (info, &im);
-
-  if (!retval)
+  if (!checkInfo (info, &im))
   {
-    std::cout << __func__ << ": ERROR from checkInfo()\n";
-  }
-  else if (!cb_func)
-  {
-    std::cout << __func__ << ": Callback pointer invalid\n";
-    ret_val = false;
-  }
-  else
-  {
-    im->setSendMessageCallback (cb_func);
+    throw std::runtime_error ("setMessageSendCallback: Invalid USER_DATA pointer");
   }
 
-  return ret_val;
+  if (!cb_func)
+  {
+    throw std::runtime_error ("setMessageSendCallback: NULL callback pointer");
+  }
+
+  im->setSendMessageCallback (cb_func);
+
+  return;
 }
 
 /*******************************************************************************
  ******************************************************************************/
-bool entityReceive
+void handleAcquisition16
 (
-  ISMRMRD::Entity*     ent,
-  ISMRMRD::EntityType  type,
-  ISMRMRD::StorageType storage,
-  USER_DATA            info
+  ISMRMRD::Acquisition<int16_t> acq,
+  USER_DATA info
 )
 {
   std::cout << __func__ << "\n";
 
   INPUT_MANAGER* im;
-  bool           ret_val = checkInfo (info, &im);
 
-  if (!retval)
+  if (!checkInfo (info, &im))
   {
     std::cout << __func__ << ": ERROR from checkInfo()\n";
+    throw std::runtime_error ("User data pointer invalid");
+    return;
   }
-  else if (!ent)
+
+  uint32_t encoding = acq.getEncodingSpaceRef();
+  std::vector<ISMRMRD::Acquisition<int16_t>> vec;
+
+  im->acqs_16.addAcq (acq);
+  if (im->readyForImageReconstruction (im->acqs_16.getSize(), encoding))
   {
-    std::cout << __func__ << ": Entity pointer NULL\n";
-    ret_val = false;
-  }
-  else
-  {
-    switch (type)
+    if (im->acqs_16.getAcqs (std::ref (vec)))
     {
-      case ISMRMRD::ISMRMRD_MRACQUISITION:
-        switch (storage)
-        {
-          case ISMRMRD::ISMRMRD_FLOAT:
+      //imageReconstruction<int16_t> (vec, encoding, im);
+      if (im->isClientDone())
+      {
+        sendCommand (im, ISMRMRD::ISMRMRD_COMMAND_DONE_FROM_SERVER, 0);
+        std::cout << __func__ << ": sending DONE_FROM_SERVER\n";
+      }
+    }
+    else
+    {
+      throw std::runtime_error ("Error: acq 16 vector empty");
+    }
+  }
+}
 
-            handleMrAcquisition<float>
-              (static_cast<ISMRMRD::Acquisition<float>* >(ent), im);
-            break;
+/*******************************************************************************
+ ******************************************************************************/
+void handleAcquisition32
+(
+  ISMRMRD::Acquisition<int32_t> acq,
+  USER_DATA info
+)
+{
+  std::cout << __func__ << "\n";
 
-          case ISMRMRD::ISMRMRD_DOUBLE:
+  INPUT_MANAGER* im;
 
-            handleMrAcquisition<double>
-              (static_cast<ISMRMRD::Acquisition<double>* >(ent), im);
-            break;
+  if (!checkInfo (info, &im))
+  {
+    std::cout << __func__ << ": ERROR from checkInfo()\n";
+    throw std::runtime_error ("User data pointer invalid");
+    return;
+  }
 
-          default:
+  uint32_t encoding = acq.getEncodingSpaceRef();
+  std::vector<ISMRMRD::Acquisition<int32_t>> vec;
 
-            std::cout << "Warning! Unexpected storage type: " << storage 
-                      << ", dropping...\n";
-            break;
-        }
-        break;
+  im->acqs_32.addAcq (acq);
+  if (im->readyForImageReconstruction (im->acqs_32.getSize(), encoding))
+  {
+    if (im->acqs_32.getAcqs (std::ref (vec)))
+    {
+      //TODO: Template not working - need to check the NDArray 
+      //imageReconstruction<int32_t> (vec, encoding, im);
+      if (im->isClientDone())
+      {
+        sendCommand (im, ISMRMRD::ISMRMRD_COMMAND_DONE_FROM_SERVER, 0);
+        std::cout << __func__ << ": sending DONE_FROM_SERVER\n";
+      }
+    }
+    else
+    {
+      throw std::runtime_error ("Error: acq 32 vector empty");
+    }
+  }
+}
 
-      case ISMRMRD::ISMRMRD_COMMAND:
+/*******************************************************************************
+ ******************************************************************************/
+void handleAcquisitionFlt
+(
+  ISMRMRD::Acquisition<float> acq,
+  USER_DATA info
+)
+{
+  std::cout << __func__ << "\n";
 
-        handleCommand (static_cast<ISMRMRD::Command*>(ent), im);
-        break;
+  INPUT_MANAGER* im;
 
-      case ISMRMRD::ISMRMRD_HANDSHAKE:
+  if (!checkInfo (info, &im))
+  {
+    std::cout << __func__ << ": ERROR from checkInfo()\n";
+    throw std::runtime_error ("User data pointer invalid");
+    return;
+  }
 
-        handleHandshake (static_cast<ISMRMRD::Handshake*>(ent), im);
-        break;
+  uint32_t encoding = acq.getEncodingSpaceRef();
+  std::vector<ISMRMRD::Acquisition<float>> vec;
 
-      case ISMRMRD::ISMRMRD_ERRORNOTIFICATION:
+  im->acqs_flt.addAcq (acq);
+  if (im->readyForImageReconstruction (im->acqs_flt.getSize(), encoding))
+  {
+    if (im->acqs_flt.getAcqs (std::ref (vec)))
+    {
+      //TODO: Template not working - need to check the NDArray 
+      imageReconstruction (vec, encoding, im);
+      if (im->isClientDone())
+      {
+        sendCommand (im, ISMRMRD::ISMRMRD_COMMAND_DONE_FROM_SERVER, 0);
+        std::cout << __func__ << ": sending DONE_FROM_SERVER\n";
+      }
+    }
+    else
+    {
+      throw std::runtime_error ("Error: acq float vector empty");
+    }
+  }
+}
 
-        handleErrorNotification
-          (static_cast<ISMRMRD::ErrorNotification*>(ent), im);
-        break;
+/*******************************************************************************
+ ******************************************************************************/
+void handleAcquisitionDbl
+(
+  ISMRMRD::Acquisition<double> acq,
+  USER_DATA info
+)
+{
+  std::cout << __func__ << "\n";
 
-      case ISMRMRD::ISMRMRD_ISMRMRDHEADERWRAPPER:
+  INPUT_MANAGER* im;
+  if (!checkInfo (info, &im))
+  {
+    std::cout << __func__ << ": ERROR from checkInfo()\n";
+    throw std::runtime_error ("User data pointer invalid");
+    return;
+  }
 
-        handleIsmrmrdHeader
-          (static_cast<ISMRMRD::IsmrmrdHeaderWrapper*>(ent)->getHeader(), im);
-        break;
+  uint32_t encoding = acq.getEncodingSpaceRef();
+  std::vector<ISMRMRD::Acquisition<double>> vec;
 
-      default:
-
-        std::cout << "Unexpected entity type: " << type << ", ignoring...\n"
+  im->acqs_dbl.addAcq (acq);
+  if (im->readyForImageReconstruction (im->acqs_dbl.getSize(), encoding))
+  {
+    if (im->acqs_dbl.getAcqs (std::ref (vec)))
+    {
+      //TODO: Template not working - need to check the NDArray 
+      //imageReconstruction<double> (vec, encoding, im);//Template not linking 
+      if (im->isClientDone()) //TODO: Check if more data for other tasks received
+      {
+        sendCommand (im, ISMRMRD::ISMRMRD_COMMAND_DONE_FROM_SERVER, 0);
+        std::cout << __func__ << ": sending DONE_FROM_SERVER\n";
+      }
+    }
+    else
+    {
+      throw std::runtime_error ("Error: acq double vector empty");
     }
   }
 }
@@ -509,9 +567,40 @@ int main
 
   icpServer server (port);
   
-  server.registerUserDataAllocator    (&allocateData);
-  server.registerCallbackSetter       (&setMessageSendCallback);
-  server.registerMessageReceiver      (&entityReceive);
+  server.registerUserDataAllocator    ((GET_USER_DATA_FUNC) &allocateData);
+  server.registerCallbackSetter       ((SET_SEND_CALLBACK_FUNC) &setMessageSendCallback);
+
+  server.registerHandler              ((CB_HANDSHK) handleHandshake,
+                                       ISMRMRD::ISMRMRD_HANDSHAKE,
+                                       ISMRMRD::ISMRMRD_CHAR);
+
+  server.registerHandler              ((CB_ERRNOTE) handleErrorNotification,
+                                       ISMRMRD::ISMRMRD_ERROR_NOTIFICATION,
+                                       ISMRMRD::ISMRMRD_CHAR);
+
+  server.registerHandler              ((CB_COMMAND) handleCommand,
+                                       ISMRMRD::ISMRMRD_COMMAND,
+                                       ISMRMRD::ISMRMRD_CHAR);
+
+  server.registerHandler              ((CB_XMLHEAD) handleIsmrmrdHeader,
+                                       ISMRMRD::ISMRMRD_HEADER,
+                                       ISMRMRD::ISMRMRD_CHAR);
+
+  server.registerHandler              ((CB_ACQ_16) handleAcquisition16,
+                                       ISMRMRD::ISMRMRD_MRACQUISITION,
+                                       ISMRMRD::ISMRMRD_SHORT);
+
+  server.registerHandler              ((CB_ACQ_32) handleAcquisition32,
+                                       ISMRMRD::ISMRMRD_MRACQUISITION,
+                                       ISMRMRD::ISMRMRD_INT);
+
+  server.registerHandler              ((CB_ACQ_FLT) handleAcquisitionFlt,
+                                       ISMRMRD::ISMRMRD_MRACQUISITION,
+                                       ISMRMRD::ISMRMRD_FLOAT);
+
+  server.registerHandler              ((CB_ACQ_DBL) handleAcquisitionDbl,
+                                       ISMRMRD::ISMRMRD_MRACQUISITION,
+                                       ISMRMRD::ISMRMRD_DOUBLE);
 
   server.start();
 

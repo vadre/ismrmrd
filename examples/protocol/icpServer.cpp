@@ -1,5 +1,4 @@
 #include "icpServer.h"
-#include <functional>
 
 /*******************************************************************************
  ******************************************************************************/
@@ -157,11 +156,21 @@ void icpServer::readSocket
   ISMRMRD::ErrorNotification   err;
   ISMRMRD::IsmrmrdHeader       hdr;
   ISMRMRD::IsmrmrdHeaderWrapper wrapper (hdr);
-  ISMRMRD::Acquisition<float>  acq_float;
-  ISMRMRD::Acquisition<double> acq_double;
-  ISMRMRD::Image<float>        image_float;
-  ISMRMRD::Image<double>       image_double;
   USER_DATA                    user_data;
+
+  ISMRMRD::Acquisition<int16_t> a16;
+  ISMRMRD::Acquisition<int32_t> a32;
+  ISMRMRD::Acquisition<float>   aflt;
+  ISMRMRD::Acquisition<double>  adbl;
+
+  ISMRMRD::Image<uint16_t>              ui16;
+  ISMRMRD::Image<int16_t>               i16;
+  ISMRMRD::Image<uint32_t>              ui32;
+  ISMRMRD::Image<int32_t>               i32;
+  ISMRMRD::Image<float>                 iflt;
+  ISMRMRD::Image<double>                idbl;
+  ISMRMRD::Image<std::complex<float> >  icflt;
+  ISMRMRD::Image<std::complex<double> > icdbl;
 
   if (!getUserDataPointer (&user_data))
   {
@@ -181,10 +190,10 @@ void icpServer::readSocket
     return;
   }
 
-  if (!_entity_receiver_registered)
+  if (!callbacks.size())
   {
     std::cout << __func__
-              << "EntityReceiver not registered, thread exits" << "\n";
+              << "No handlers registered, thread exits" << "\n";
     delete (om);
     return;
   }
@@ -201,96 +210,113 @@ void icpServer::readSocket
       break;
     }
 
+    uint32_t cb_index = in_msg.ehdr.entity_type * 100 +
+                     in_msg.ehdr.storage_type; //TODO
+
     switch (in_msg.ehdr.entity_type)
     {
       case ISMRMRD::ISMRMRD_HANDSHAKE:
 
         hand.deserialize (in_msg.data);
-        forwardEntity (&hand, ISMRMRD::ISMRMRD_HANDSHAKE,
-                       ISMRMRD::ISMRMRD_CHAR, user_data);
+        call (cb_index, hand, user_data);
         break;
 
       case ISMRMRD::ISMRMRD_COMMAND:
 
         cmd.deserialize (in_msg.data);
-        switch (cmd.getCommandType())
+        call (cb_index, cmd, user_data);
+        if (cmd.getCommandType() == ISMRMRD::ISMRMRD_COMMAND_CLOSE_CONNECTION)
         {
-          //case SOME_SERVER_INTENDED_COMMAND_TYPE:
-
-            //do_something (cmd);
-            //break;
-
-          default:
-
-            forwardEntity (&cmd, ISMRMRD::ISMRMRD_COMMAND,
-                           ISMRMRD::ISMRMRD_CHAR, user_data);
-            break;
+          om->setSessionClosing();
         }
+        break;
 
       case ISMRMRD::ISMRMRD_HEADER:
 
-        try
-        {
-          std::string xml (in_msg.data.begin(), in_msg.data.end());
-          ISMRMRD::deserialize (xml.c_str(), hdr);
-        }
-        catch (std::runtime_error& e)
-        {
-          std::cout << "Unable to deserialize XML header: " << e.what() << "\n";
-          throw;
-        }
-        wrapper.setHeader (hdr);
-        forwardEntity (&wrapper, ISMRMRD::ISMRMRD_HEADER_WRAPPER,
-                       ISMRMRD::ISMRMRD_CHAR, user_data);
+        wrapper.deserialize (in_msg.data);
+        cb_index = ISMRMRD::ISMRMRD_HEADER * 100 + in_msg.ehdr.storage_type;
+        call (cb_index, wrapper.getHeader(), user_data);
         break;
 
       case ISMRMRD::ISMRMRD_MRACQUISITION:
 
-        if (in_msg.ehdr.storage_type == ISMRMRD::ISMRMRD_FLOAT)
+        if (in_msg.ehdr.storage_type == ISMRMRD::ISMRMRD_SHORT)
         {
-          acq_float.deserialize (in_msg.data);
-          forwardEntity (&acq_float, ISMRMRD::ISMRMRD_MRACQUISITION,
-                         ISMRMRD::ISMRMRD_FLOAT, user_data);
+          a16.deserialize (in_msg.data);
+          call (cb_index, a16, user_data);
+        }
+        else if (in_msg.ehdr.storage_type == ISMRMRD::ISMRMRD_INT)
+        {
+          a32.deserialize (in_msg.data);
+          call (cb_index, a32, user_data);
+        }
+        else if (in_msg.ehdr.storage_type == ISMRMRD::ISMRMRD_FLOAT)
+        {
+          aflt.deserialize (in_msg.data);
+          call (cb_index, aflt, user_data);
         }
         else if (in_msg.ehdr.storage_type == ISMRMRD::ISMRMRD_DOUBLE)
         {
-          acq_double.deserialize (in_msg.data);
-          forwardEntity (&acq_double, ISMRMRD::ISMRMRD_MRACQUISITION,
-                         ISMRMRD::ISMRMRD_DOUBLE, user_data);
+          adbl.deserialize (in_msg.data);
+          call (cb_index, adbl, user_data);
+        }
+        else
+        {
+          throw std::runtime_error ("Unexpected MR Acquisition Storage type");
         }
         break;
 
       case ISMRMRD::ISMRMRD_ERROR_NOTIFICATION:
 
         err.deserialize (in_msg.data);
-        switch (err.getErrorType())
-        {
-          //case SOME_SERVER_INTENDED_ERROR_TYPE:
-
-            //do_something (err);
-            //break;
-
-          default:
-
-            forwardEntity (&err, ISMRMRD::ISMRMRD_ERROR_NOTIFICATION,
-                           ISMRMRD::ISMRMRD_CHAR, user_data);
-            break;
-        }
+        call (cb_index, err, user_data);
         break;
 
       case ISMRMRD::ISMRMRD_IMAGE:
 
-        if (in_msg.ehdr.storage_type == ISMRMRD::ISMRMRD_FLOAT)
+        if (in_msg.ehdr.storage_type == ISMRMRD::ISMRMRD_USHORT)
         {
-          image_float.deserialize (in_msg.data);
-          forwardEntity (&image_float, ISMRMRD::ISMRMRD_IMAGE,
-                         ISMRMRD::ISMRMRD_FLOAT, user_data);
+          ui16.deserialize (in_msg.data);
+          call (cb_index, ui16, user_data);
+        }
+        else if (in_msg.ehdr.storage_type == ISMRMRD::ISMRMRD_SHORT)
+        {
+          i16.deserialize (in_msg.data);
+          call (cb_index, i16, user_data);
+        }
+        else if (in_msg.ehdr.storage_type == ISMRMRD::ISMRMRD_UINT)
+        {
+          ui32.deserialize (in_msg.data);
+          call (cb_index, ui32, user_data);
+        }
+        else if (in_msg.ehdr.storage_type == ISMRMRD::ISMRMRD_INT)
+        {
+          i32.deserialize (in_msg.data);
+          call (cb_index, i32, user_data);
+        }
+        else if (in_msg.ehdr.storage_type == ISMRMRD::ISMRMRD_FLOAT)
+        {
+          iflt.deserialize (in_msg.data);
+          call (cb_index, iflt, user_data);
         }
         else if (in_msg.ehdr.storage_type == ISMRMRD::ISMRMRD_DOUBLE)
         {
-          image_double.deserialize (in_msg.data);
-          forwardEntity (&image_double, ISMRMRD::ISMRMRD_IMAGE,
-                         ISMRMRD::ISMRMRD_DOUBLE, user_data);
+          idbl.deserialize (in_msg.data);
+          call (cb_index, idbl, user_data);
+        }
+        else if (in_msg.ehdr.storage_type == ISMRMRD::ISMRMRD_CXFLOAT)
+        {
+          icflt.deserialize (in_msg.data);
+          call (cb_index, icflt, user_data);
+        }
+        else if (in_msg.ehdr.storage_type == ISMRMRD::ISMRMRD_CXDOUBLE)
+        {
+          icdbl.deserialize (in_msg.data);
+          call (cb_index, icdbl, user_data);
+        }
+        else
+        {
+          throw std::runtime_error ("Unexpected MR Acquisition Storage type");
         }
         break;
 
@@ -369,17 +395,62 @@ bool icpServer::registerUserDataAllocator
 
 /*******************************************************************************
  ******************************************************************************/
-bool icpServer::registerEntityReceiver
+/*
+template <typename F, typename E, typename S>
+void icpServer::registerHandler
 (
-  ENTITY_RECEIVER_FUNC  func_ptr
+  F func,
+  E etype,
+  S stype
 )
 {
-  if (func_ptr)
+  if (!func)
   {
-    forwardEntity               = func_ptr;
-    _entity_receiver_registered = true;
+    throw std::runtime_error ("registerHandler: NULL function pointer");
   }
-  return _entity_receiver_registered;
+
+  std::unique_ptr<F> f1(new F(func));
+  uint32_t index = etype * 100 + stype; //TODO
+  callbacks.insert (CB_MAP::value_type(index, std::move(func)));
+
+  return;
+}
+*/
+template<> void icpServer::registerHandler (CB_ACQ_16, uint32_t, uint32_t);
+
+template<> void icpServer::registerHandler (CB_ACQ_32, uint32_t, uint32_t);
+
+template<> void icpServer::registerHandler (CB_ACQ_FLT, uint32_t, uint32_t);
+
+template<> void icpServer::registerHandler (CB_ACQ_DBL, uint32_t, uint32_t);
+
+/*
+template<> void icpServer::registerHandler (ISMRMRD::Acquisition<int16_t>,
+                                            uint32_t, uint32_t);
+
+template<> void icpServer::registerHandler (ISMRMRD::Acquisition<int32_t>,
+                                            uint32_t, uint32_t);
+
+template<> void icpServer::registerHandler (ISMRMRD::Acquisition<float>,
+                                            uint32_t, uint32_t);
+
+template<> void icpServer::registerHandler (ISMRMRD::Acquisition<double>,
+                                            uint32_t, uint32_t);
+*/
+
+/*******************************************************************************
+ ******************************************************************************/
+template<typename ...A>
+void icpServer::call (uint32_t index, A&& ... args)
+{
+  //TODO needs synchronization
+  using func_t = CB_STRUCT <A...>;
+  using cb_t   = std::function <void (A...)>;
+
+  const CB_BASE& base = *callbacks[index];
+  const cb_t& func = static_cast <const func_t&> (base).callback;
+
+  func (std::forward <A> (args)...);
 }
 
 /*******************************************************************************
@@ -411,9 +482,7 @@ icpServer::icpServer
   _main_thread (),
   _user_data_allocator_registered (false),
   _send_callback_setter_registered (false),
-  _entity_receiver_registered (false),
   getUserDataPointer (NULL),
-  setSendMessageCallback (NULL),
-  forwardEntity (NULL)
+  setSendMessageCallback (NULL)
 {}
 

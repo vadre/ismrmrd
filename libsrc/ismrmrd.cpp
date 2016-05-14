@@ -51,50 +51,6 @@ static size_t sizeof_storage_type(int storage_type)
 }
 */
 
-// Existing Entity Types
-/*template <> EXPORTISMRMRD EntityType get_entity_type<Image<float> >()
-{
-    return ISMRMRD_IMAGE;
-}
-template <> EXPORTISMRMRD EntityType get_entity_type<Image<double> >()
-{
-    return ISMRMRD_IMAGE;
-}
-template <> EXPORTISMRMRD EntityType get_entity_type<Handshake> ()
-{
-    return ISMRMRD_HANDSHAKE;
-}
-template <> EXPORTISMRMRD EntityType get_entity_type<Command>()
-{
-    return ISMRMRD_COMMAND;
-}
-template <> EXPORTISMRMRD EntityType get_entity_type<Acquisition<float> >()
-{
-    return ISMRMRD_MRACQUISITION;
-}
-template <> EXPORTISMRMRD EntityType get_entity_type<Acquisition<double> >()
-{
-    return ISMRMRD_BLOB;
-}
-template <> EXPORTISMRMRD EntityType get_entity_type<IsmrmrdHeader>()
-{
-    return ISMRMRD_XML_HEADER;
-}
-template <> EXPORTISMRMRD EntityType get_entity_type<ErrorNotification>()
-{
-    return ISMRMRD_ERROR;
-}*/
-/*template <> EntityType get_entity_type<Waveform>()
-{
-    return ISMRMRD_WAVEFORM;
-}
-template <> EntityType get_entity_type<Blob>()
-{
-    return ISMRMRD_BLOB;
-}*/
-
-
-
 // Allowed data types for Images and NDArrays
 template <> EXPORTISMRMRD StorageType get_storage_type<char>()
 {
