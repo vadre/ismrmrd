@@ -37,4 +37,3 @@ void clientAccepted (MY_DATA* im, bool accepted);
 void handleHandshake (ISMRMRD::Handshake  msg, USER_DATA info);
 void sendError (MY_DATA* im, ISMRMRD::ErrorType type, std::string descr);
 bool allocateData (ICP_SERVER_HANDLE handle, USER_DATA* ud, icpServer* server);
-//bool setMessageSendCallback (SEND_MSG_CALLBACK cb_func, USER_DATA info);

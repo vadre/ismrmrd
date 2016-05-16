@@ -345,35 +345,6 @@ bool allocateData
 
 /*******************************************************************************
  ******************************************************************************/
-/*bool setMessageSendCallback
-(
-  SEND_MSG_CALLBACK cb_func,
-  ............
-  ICPOUTPUTMANAGER::icpOutputManager& o,
-  USER_DATA         info
-)
-{
-  std::cout << __func__ << ", info " << info << ", func "
-            << reinterpret_cast<void*>(cb_func) << "\n";
-
-  MY_DATA* md;
-  if (!checkInfo (info, &md))
-  {
-    throw std::runtime_error ("setMessageSendCallback: Invalid USER_DATA pointer");
-  }
-
-  if (!cb_func)
-  {
-    throw std::runtime_error ("setMessageSendCallback: NULL callback pointer");
-  }
-
-  md->setSendMessageCallback (cb_func);
-
-  return true;
-}
-*/
-/*******************************************************************************
- ******************************************************************************/
 void handleAcquisition16
 (
   ISMRMRD::Acquisition<int16_t> acq,
