@@ -1,10 +1,12 @@
 #ifndef ICP_SERVER_H
 #define ICP_SERVER_H
 
-#include "icpOutputManager.h"
 #include <boost/asio.hpp>
+#include "icp.h"
+#include "ismrmrd/xml.h"
 #include <thread>
 #include <map>
+#include <queue>
 #include <functional>
 #include <memory>
 #include <utility>
@@ -13,12 +15,14 @@ const uint32_t ICP_ERROR_SOCKET_EOF          = 100;
 const uint32_t ICP_ERROR_SOCKET_WRONG_LENGTH = 200;
 const uint32_t ICP_ENTITY_WITH_NO_DATA       = 300;
 
-using GET_USER_DATA_FUNC = bool (*) (USER_DATA*);
-using SEND_MSG_CALLBACK  = bool (*)(ISMRMRD::EntityType, ISMRMRD::Entity*);
+//using SEND_MSG_CALLBACK  = bool (*)(ISMRMRD::EntityType, ISMRMRD::Entity*);
 
-using SET_SEND_CALLBACK_FUNC =
-   bool (*) (bool (ICPOUTPUTMANAGER::icpOutputManager::*callback)
-             (ISMRMRD::EntityType, ISMRMRD::Entity*), USER_DATA);
+/*******************************************************************************
+ * Entity handlers management
+ ******************************************************************************/
+//using SET_SEND_CALLBACK_FUNC =
+   //bool (*) (bool (ICPOUTPUTMANAGER::icpOutputManager::*callback)
+             //(ISMRMRD::EntityType, ISMRMRD::Entity*), USER_DATA);
 
 struct CB_BASE
 {
@@ -32,11 +36,7 @@ struct CB_STRUCT : public CB_BASE
   CB callback;
   CB_STRUCT (CB p_callback) : callback (p_callback) {}
 };
-
 using CB_MAP = std::map<uint32_t, std::unique_ptr<CB_BASE> >;
-
-using CB_ALLOCATE = CB_STRUCT <USER_DATA*>;
-using CB_SEND_CB  = CB_STRUCT <SEND_MSG_CALLBACK,             USER_DATA>;
 
 using CB_ACQ_16   = CB_STRUCT <ISMRMRD::Acquisition<int16_t>, USER_DATA>;
 using CB_ACQ_32   = CB_STRUCT <ISMRMRD::Acquisition<int32_t>, USER_DATA>;
@@ -47,18 +47,41 @@ using CB_ERRNOTE  = CB_STRUCT <ISMRMRD::ErrorNotification,    USER_DATA>;
 using CB_COMMAND  = CB_STRUCT <ISMRMRD::Command,              USER_DATA>;
 using CB_XMLHEAD  = CB_STRUCT <ISMRMRD::IsmrmrdHeader,        USER_DATA>;
 
+//using CB_ALLOCATE = CB_STRUCT <USER_DATA*>;
+//using CB_SEND_CB  = CB_STRUCT <SEND_MSG_CALLBACK,             USER_DATA>;
+
+/*******************************************************************************
+ * Thread data management
+ ******************************************************************************/
+struct ICP_SERVER_THREAD_DATA
+{
+  std::string         client_name; //For debug only
+  uint64_t            timestamp;   //For debug only
+  uint32_t            id;          //For debug only
+  SOCKET_PTR          sock;
+  std::queue<OUT_MSG> oq;
+  bool                session_closed;
+  USER_DATA           user_data;
+};
+//using ICP_SERVER_HANDLE = static_cast<void*>ICP_SERVER_THREAD_DATA*;
+using ICP_SERVER_HANDLE =  ICP_SERVER_THREAD_DATA*;
+
 /*******************************************************************************
  ******************************************************************************/
 class icpServer
 {
 public:
 
+  using GET_USER_DATA_FUNC = bool (*) (ICP_SERVER_HANDLE, USER_DATA*, icpServer*);
+
   icpServer (uint16_t p);
   ~icpServer ();
   void start ();
 
-  bool registerUserDataAllocator   (GET_USER_DATA_FUNC      func_ptr);
-  bool registerCallbackSetter      (SET_SEND_CALLBACK_FUNC  func_ptr);
+  bool forwardMessage (ICP_SERVER_HANDLE, ISMRMRD::EntityType, ISMRMRD::Entity*);
+  bool registerUserDataAllocator (GET_USER_DATA_FUNC func_ptr);
+  void closeConnection (ICP_SERVER_HANDLE);
+  //bool registerCallbackSetter      (SET_SEND_CALLBACK_FUNC  func_ptr);
   template <typename F, typename E, typename S>
   void registerHandler            (F func, E etype, S stype);
 
@@ -69,23 +92,27 @@ private:
   std::thread                  _main_thread;
 
   bool                         _user_data_allocator_registered;
-  bool                         _send_callback_setter_registered;
-  CB_MAP                       callbacks;
+  //bool                         _send_callback_setter_registered;
+  CB_MAP                       _callbacks;
 
   GET_USER_DATA_FUNC            getUserDataPointer;
-  SET_SEND_CALLBACK_FUNC        setSendMessageCallback;
+  //SET_SEND_CALLBACK_FUNC        setSendMessageCallback;
+  void      serverMain       ();                                    //thread
+  void      receive          (SOCKET_PTR sock, uint32_t id);        //threads
+  void      transmit         (ICP_SERVER_THREAD_DATA* thread_data); //threads
 
-  void      readSocket       (SOCKET_PTR sock, uint32_t id);
   uint32_t  receiveMessage   (SOCKET_PTR sock, IN_MSG& in_msg);
   uint32_t  receiveFrameInfo (SOCKET_PTR sock, IN_MSG& in_msg);
-  void      serverMain       ();
+
+  void      queueMessage     (ICP_SERVER_THREAD_DATA* thread_data,
+                              std::vector<unsigned char>& ent,
+                              std::vector<unsigned char>& data);
   template<typename ...A>
   void      call             (uint32_t index, A&& ... args);
-  void      sendMessage (ICPOUTPUTMANAGER::icpOutputManager* om,
-                         uint32_t id, SOCKET_PTR sock);
 };
 
 /*******************************************************************************
+ * Template
  ******************************************************************************/
 template <typename F, typename E, typename S>
 void icpServer::registerHandler
@@ -97,7 +124,7 @@ void icpServer::registerHandler
 {
   std::unique_ptr<F> f_uptr(new F(func));
   uint32_t index = etype * 100 + stype; //TODO
-  callbacks.insert (CB_MAP::value_type(index, std::move(f_uptr)));
+  _callbacks.insert (CB_MAP::value_type(index, std::move(f_uptr)));
 
   return;
 }

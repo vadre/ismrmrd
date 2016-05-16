@@ -5,27 +5,33 @@
 bool  icpServer::_running  = false;
 
 /*******************************************************************************
+ * Thread TODO: needs synchronization
  ******************************************************************************/
-void icpServer::sendMessage
+void icpServer::transmit
 (
-  ICPOUTPUTMANAGER::icpOutputManager* om,
-  uint32_t                            id,
-  SOCKET_PTR                          sock
+  ICP_SERVER_THREAD_DATA*  thread_data
 )
 {
-  std::cout << __func__ << ": Writer thread (" << id << ") started\n";
+  std::cout << __func__ << ": Writer thread (" << thread_data->id << ") started\n";
 
   struct timespec  ts;
   ts.tv_sec  =     0;
   ts.tv_nsec =     10000000;
 
-  while (!om->isSessionClosing())
+  while (!thread_data->session_closed || thread_data->oq.size() > 0)
   {
-    om->send (sock);
+    while (thread_data->oq.size() > 0)
+    {
+      OUT_MSG msg;
+      msg = thread_data->oq.front();
+      boost::asio::write (*thread_data->sock,
+                          boost::asio::buffer (msg.data, msg.data.size()));
+      thread_data->oq.pop();
+    }
     nanosleep (&ts, NULL);
   }
   
-  //std::cout << "Writer (" << id << "): Done!\n";
+  std::cout << "Writer (" << thread_data->id << "): Done!\n";
   return;
 }
 
@@ -141,22 +147,159 @@ uint32_t icpServer::receiveMessage
 }
 
 /*******************************************************************************
+ ******************************************************************************/
+bool icpServer::forwardMessage
+(
+  ICP_SERVER_HANDLE   handle,
+  ISMRMRD::EntityType type,
+  ISMRMRD::Entity*    entity
+)
+{
+  bool ret_val = true;
+  ISMRMRD::EntityHeader head;
+  std::stringstream sstr;
+  std::vector <unsigned char> h_buffer;
+  std::vector <unsigned char> e_buffer;
+
+  head.version     = my_version;
+  head.entity_type = type;
+
+  switch (type)
+  {
+    case ISMRMRD::ISMRMRD_MRACQUISITION:
+
+      head.storage_type =
+        static_cast<ISMRMRD::Acquisition<float>* >(entity)->getStorageType();
+      head.stream       =
+        static_cast<ISMRMRD::Acquisition<float>* >(entity)->getStream();
+      e_buffer          = entity->serialize();
+      break;
+
+    case ISMRMRD::ISMRMRD_IMAGE:
+
+      head.storage_type =
+        static_cast<ISMRMRD::Image<float>* >(entity)->getStorageType();
+      head.stream       =
+        static_cast<ISMRMRD::Image<float>* >(entity)->getStream();
+      e_buffer = entity->serialize();
+      break;
+
+    case ISMRMRD::ISMRMRD_HEADER_WRAPPER:
+
+      head.storage_type = ISMRMRD::ISMRMRD_CHAR;
+      head.stream       = ISMRMRD::ISMRMRD_STREAM_ISMRMRD_HEADER;
+
+      e_buffer =
+        static_cast<ISMRMRD::IsmrmrdHeaderWrapper*>(entity)->serialize();
+      std::cout << __func__ << ": xml serialized size = "
+                << e_buffer.size() << "\n";
+      break;
+
+    case ISMRMRD::ISMRMRD_HANDSHAKE:
+
+      head.storage_type = ISMRMRD::ISMRMRD_CHAR;
+      head.stream       = ISMRMRD::ISMRMRD_STREAM_HANDSHAKE;
+      e_buffer = entity->serialize();
+      break;
+
+    case ISMRMRD::ISMRMRD_COMMAND:
+
+      head.storage_type = ISMRMRD::ISMRMRD_CHAR;
+      head.stream       = ISMRMRD::ISMRMRD_STREAM_COMMAND;
+      e_buffer = entity->serialize();
+      break;
+
+    case ISMRMRD::ISMRMRD_ERROR_NOTIFICATION:
+      head.storage_type = ISMRMRD::ISMRMRD_CHAR;
+      head.stream       = ISMRMRD::ISMRMRD_STREAM_ERROR;
+      e_buffer = entity->serialize();
+      break;
+
+    /*case ISMRMRD_WAVEFORM:
+    case ISMRMRD_BLOB:*/
+    default:
+
+      // Still send the data to the user maybe?
+      std::cout << __func__ << "Warning: Entity " << head.entity_type
+                << " not processed in this version of icpSession\n";
+      ret_val = false;
+
+      break;
+  }
+
+  if (ret_val)
+  {
+    h_buffer = head.serialize();
+    queueMessage (handle, h_buffer, e_buffer);
+  }
+
+  return ret_val;
+}
+
+/*****************************************************************************
+ ****************************************************************************/
+void icpServer::queueMessage
+(
+  ICP_SERVER_THREAD_DATA*     thread_data,
+  std::vector<unsigned char>& ent,
+  std::vector<unsigned char>& data
+)
+{
+  OUT_MSG msg;
+  msg.size = ent.size() + data.size();
+  msg.data.reserve (msg.size);
+
+  uint64_t s = msg.size;
+  s = (isCpuLittleEndian) ? s : __builtin_bswap64 (s);
+
+  std::copy ((unsigned char*) &s,
+             (unsigned char*) &s + sizeof (s),
+             std::back_inserter (msg.data));
+
+  std::copy ((unsigned char*) &ent[0],
+             (unsigned char*) &ent[0] + ent.size(),
+             std::back_inserter (msg.data));
+
+  std::copy ((unsigned char*) &data[0],
+             (unsigned char*) &data[0] + data.size(),
+             std::back_inserter (msg.data));
+
+  thread_data->oq.push (msg);
+  std::cout << __func__ << ": num queued messages for id "
+            << thread_data->id << " = " << thread_data->oq.size() << '\n';
+
+  return;
+}
+
+/*******************************************************************************
  Thread for every connection
  ******************************************************************************/
-void icpServer::readSocket
+void icpServer::closeConnection
+(
+  ICP_SERVER_HANDLE handle
+)
+{
+  ICP_SERVER_THREAD_DATA* data = handle;
+  data->session_closed = true;
+}
+
+/*******************************************************************************
+ Thread for every connection
+ ******************************************************************************/
+void icpServer::receive
 (
   SOCKET_PTR sock,
   uint32_t   id
 )
 {
-  std::cout << __func__ << " : Reader thread (" << id << ") started\n";
+  std::cout << __func__ << " : Receiver thread (" << id << ") started\n";
 
   ISMRMRD::Handshake           hand;
   ISMRMRD::Command             cmd;
   ISMRMRD::ErrorNotification   err;
   ISMRMRD::IsmrmrdHeader       hdr;
   ISMRMRD::IsmrmrdHeaderWrapper wrapper (hdr);
-  USER_DATA                    user_data;
+  USER_DATA*                   ud_ptr_ptr = new USER_DATA;
 
   ISMRMRD::Acquisition<int16_t> a16;
   ISMRMRD::Acquisition<int32_t> a32;
@@ -172,35 +315,35 @@ void icpServer::readSocket
   ISMRMRD::Image<std::complex<float> >  icflt;
   ISMRMRD::Image<std::complex<double> > icdbl;
 
-  if (!getUserDataPointer (&user_data))
+
+  ICP_SERVER_THREAD_DATA *thread_data = new ICP_SERVER_THREAD_DATA;
+
+  if (getUserDataPointer ((ICP_SERVER_HANDLE)thread_data, ud_ptr_ptr, this))
+  {
+    thread_data->id = id;
+    thread_data->sock = sock;
+    thread_data->session_closed = false;
+    thread_data->user_data = *ud_ptr_ptr;
+  }
+  else
   {
     std::cout << __func__ << "getUserDataPointer ERROR, thread exits" << "\n";
     return;
   }
+  
+  USER_DATA user_data = *ud_ptr_ptr;
 
-  ICPOUTPUTMANAGER::icpOutputManager* om =
-    new ICPOUTPUTMANAGER::icpOutputManager ();
-
-  if (!setSendMessageCallback
-        (&ICPOUTPUTMANAGER::icpOutputManager::processEntity, user_data))
-  {
-    std::cout << __func__ 
-              << "setSendMessageCallback ERROR, thread exits" << "\n";
-    delete (om);
-    return;
-  }
-
-  if (!callbacks.size())
+  if (!_callbacks.size())
   {
     std::cout << __func__
               << "No handlers registered, thread exits" << "\n";
-    delete (om);
+    delete (thread_data);
     return;
   }
 
-  std::thread writer (&icpServer::sendMessage, this, om, id, sock);
+  std::thread writer (&icpServer::transmit, this, thread_data);
 
-  while (!om->isSessionClosing())
+  while (!thread_data->session_closed)
   {
     IN_MSG in_msg;
     uint32_t read_status = receiveMessage (sock, in_msg);
@@ -227,11 +370,11 @@ void icpServer::readSocket
         call (cb_index, cmd, user_data);
         if (cmd.getCommandType() == ISMRMRD::ISMRMRD_COMMAND_CLOSE_CONNECTION)
         {
-          om->setSessionClosing();
+          thread_data->session_closed = true;
         }
         break;
 
-      case ISMRMRD::ISMRMRD_HEADER:
+      case ISMRMRD::ISMRMRD_HEADER_WRAPPER:
 
         wrapper.deserialize (in_msg.data);
         cb_index = ISMRMRD::ISMRMRD_HEADER * 100 + in_msg.ehdr.storage_type;
@@ -334,13 +477,13 @@ void icpServer::readSocket
     } // switch ((*in_msg).ehdr.entity_type)
   } // while (!in_data.isRespondentDone())
 
-  std::cout << __func__ << ": Waiting for Writer (" << id << ") to join\n";
+  std::cout << __func__ << ": Waiting for Transmit (" << id << ") to join\n";
   writer.join();
-  delete (om);
-  std::cout << __func__ << ": Writer (" << id << ") joined, exiting\n\n\n";
+  delete (thread_data);
+  std::cout << __func__ << ": Transmit (" << id << ") joined, exiting\n\n\n";
 
   return;
-} // readSocket
+} // receive
 
 /*******************************************************************************
  Thread
@@ -357,25 +500,10 @@ void icpServer::serverMain ()
     SOCKET_PTR sock (new tcp::socket (io_service));
     a.accept (*sock);
     std::cout << __func__ << ": Connection #" << id << '\n';
-    std::thread (&icpServer::readSocket, this, sock, id).detach();
+    std::thread (&icpServer::receive, this, sock, id).detach();
   }
 
   return;
-}
-
-/*******************************************************************************
- ******************************************************************************/
-bool icpServer::registerCallbackSetter
-(
-  SET_SEND_CALLBACK_FUNC func_ptr
-)
-{
-  if (func_ptr)
-  {
-    setSendMessageCallback           = func_ptr;
-    _send_callback_setter_registered = true;
-  }
-  return _send_callback_setter_registered;
 }
 
 /*******************************************************************************
@@ -395,62 +523,37 @@ bool icpServer::registerUserDataAllocator
 
 /*******************************************************************************
  ******************************************************************************/
-/*
-template <typename F, typename E, typename S>
-void icpServer::registerHandler
-(
-  F func,
-  E etype,
-  S stype
-)
-{
-  if (!func)
-  {
-    throw std::runtime_error ("registerHandler: NULL function pointer");
-  }
-
-  std::unique_ptr<F> f1(new F(func));
-  uint32_t index = etype * 100 + stype; //TODO
-  callbacks.insert (CB_MAP::value_type(index, std::move(func)));
-
-  return;
-}
-*/
+template<> void icpServer::registerHandler (CB_HANDSHK, uint32_t, uint32_t);
+template<> void icpServer::registerHandler (CB_ERRNOTE, uint32_t, uint32_t);
+template<> void icpServer::registerHandler (CB_COMMAND, uint32_t, uint32_t);
+template<> void icpServer::registerHandler (CB_XMLHEAD, uint32_t, uint32_t);
 template<> void icpServer::registerHandler (CB_ACQ_16, uint32_t, uint32_t);
-
 template<> void icpServer::registerHandler (CB_ACQ_32, uint32_t, uint32_t);
-
 template<> void icpServer::registerHandler (CB_ACQ_FLT, uint32_t, uint32_t);
-
 template<> void icpServer::registerHandler (CB_ACQ_DBL, uint32_t, uint32_t);
-
-/*
-template<> void icpServer::registerHandler (ISMRMRD::Acquisition<int16_t>,
-                                            uint32_t, uint32_t);
-
-template<> void icpServer::registerHandler (ISMRMRD::Acquisition<int32_t>,
-                                            uint32_t, uint32_t);
-
-template<> void icpServer::registerHandler (ISMRMRD::Acquisition<float>,
-                                            uint32_t, uint32_t);
-
-template<> void icpServer::registerHandler (ISMRMRD::Acquisition<double>,
-                                            uint32_t, uint32_t);
-*/
 
 /*******************************************************************************
  ******************************************************************************/
 template<typename ...A>
 void icpServer::call (uint32_t index, A&& ... args)
 {
-  //TODO needs synchronization
-  using func_t = CB_STRUCT <A...>;
-  using cb_t   = std::function <void (A...)>;
+  if (_callbacks.find (index) != _callbacks.end())
+  {
+    //TODO needs synchronization
+    using func_t = CB_STRUCT <A...>;
+    using cb_t   = std::function <void (A...)>;
 
-  const CB_BASE& base = *callbacks[index];
-  const cb_t& func = static_cast <const func_t&> (base).callback;
+    const CB_BASE& base = *_callbacks[index];
+    const cb_t& func = static_cast <const func_t&> (base).callback;
 
-  func (std::forward <A> (args)...);
+    func (std::forward <A> (args)...);
+  }
+  else
+  {
+    std::cout << "Warning: Entity handler for entity "
+              << (uint32_t)(index / 100) << ", storage " << index % 100
+              << ", not registered\n";
+  }
 }
 
 /*******************************************************************************
@@ -481,8 +584,6 @@ icpServer::icpServer
 : _port (p),
   _main_thread (),
   _user_data_allocator_registered (false),
-  _send_callback_setter_registered (false),
-  getUserDataPointer (NULL),
-  setSendMessageCallback (NULL)
+  getUserDataPointer (NULL)
 {}
 
