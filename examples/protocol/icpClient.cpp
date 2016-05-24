@@ -1,591 +1,336 @@
+// client.cpp
 #include "icpClient.h"
 
 /*******************************************************************************
  ******************************************************************************/
-bool  icpClient::_running  = false;
-
-/*******************************************************************************
- ******************************************************************************/
-void icpClient::setSessionClosed ()
-{
-  _session_closed = true;
-}
-
-/*****************************************************************************
- ****************************************************************************/
-bool icpClient::isSessionClosed ()
-{
-  return _session_closed;
-}
-
-/*******************************************************************************
- ******************************************************************************/
-void icpClient::transmit
+void icpClient::handleCommand
 (
-  SOCKET_PTR sock
+  ISMRMRD::Command  msg
 )
 {
-  std::cout << __func__ << ": Writer thread started\n";
-
-  struct timespec  ts;
-  ts.tv_sec  =     0;
-  ts.tv_nsec =     10000000;
-
-  while (!isSessionClosed())
+  switch (msg.getCommandType())
   {
-    while (_oq.size() > 0)
-    {
-      OUT_MSG msg;
-      msg = _oq.front();
-      boost::asio::write (*sock, boost::asio::buffer (msg.data, msg.data.size()));
-      _oq.pop();
-    }
-    nanosleep (&ts, NULL);
-  }
-  
-  //std::cout << "Writer (" << id << "): Done!\n";
-  return;
-}
+    case ISMRMRD::ISMRMRD_COMMAND_DONE_FROM_SERVER:
 
-/*******************************************************************************
- ******************************************************************************/
-uint32_t icpClient::receiveFrameInfo
-(
-  SOCKET_PTR sock,
-  IN_MSG&    in_msg
-)
-{
-  boost::system::error_code  error;
-
-  int bytes_read =
-    boost::asio::read (*sock,
-                       boost::asio::buffer (&in_msg.size,
-                                            DATAFRAME_SIZE_FIELD_SIZE),
-                       error);
-  if (error)
-  {
-    std::cout << "Frame size read status: " << error << "\n";
-  }
-
-  if (bytes_read == 0)
-  {
-    std::cout << __func__ << "Received EOF from client\n";
-    return ICP_ERROR_SOCKET_EOF;
-  }
-  else if (bytes_read != DATAFRAME_SIZE_FIELD_SIZE)
-  {
-    std::cout << __func__ << "Error: Read " << bytes_read << ", expected "
-              << DATAFRAME_SIZE_FIELD_SIZE << " bytes\n";
-    return ICP_ERROR_SOCKET_WRONG_LENGTH;
-  }
-
-
-
-  std::vector<unsigned char> buffer (ENTITY_HEADER_SIZE);
-  bytes_read =
-    boost::asio::read (*sock,
-                       boost::asio::buffer (&buffer[0], ENTITY_HEADER_SIZE),
-                       error);
-  if (error)
-  {
-    std::cout << "Entity Header read status: " << error << "\n";
-  }
-
-  if (bytes_read == 0)
-  {
-    std::cout << __func__ << "Received EOF from client\n";
-    return ICP_ERROR_SOCKET_EOF;
-  }
-  else if (bytes_read != ENTITY_HEADER_SIZE)
-  {
-    std::cout << "Error: Read " << bytes_read << ", expected "
-              << ENTITY_HEADER_SIZE << " bytes\n";
-    return ICP_ERROR_SOCKET_WRONG_LENGTH;
-  }
-
-  in_msg.ehdr.deserialize (buffer);
-  in_msg.data_size = in_msg.size - ENTITY_HEADER_SIZE;
-
-  return 0;
-}
-
-/*******************************************************************************
- ******************************************************************************/
-uint32_t icpClient::receiveMessage
-(
-  SOCKET_PTR sock,
-  IN_MSG&    in_msg
-)
-{
-  boost::system::error_code  error;
-  uint32_t ret_val = icpClient::receiveFrameInfo (sock, in_msg);
-
-  if (ret_val)
-  {
-    return ret_val;
-  }
-
-  if (in_msg.data_size <= 0)
-  {
-    // Special case?
-    std::cout << "Error! Data_size  = " << in_msg.data_size << "\n";
-    std::cout << "       EntityType = " << in_msg.ehdr.entity_type << "\n";
-    return ICP_ENTITY_WITH_NO_DATA;
-  }
-
-  in_msg.data.resize (in_msg.data_size);
-  int bytes_read = boost::asio::read (*sock,
-                                      boost::asio::buffer (&in_msg.data[0],
-                                      in_msg.data_size),
-                                      error);
-  if (error)
-  {
-    std::cout << "Error: message data read status: " << error << "\n";
-  }
-
-  if (bytes_read == 0)
-  {
-    std::cout << __func__ << "Received EOF from client\n";
-    return ICP_ERROR_SOCKET_EOF;
-  }
-  else if (bytes_read != in_msg.data.size())
-  {
-    std::cout << "Error: Read " << bytes_read << ", expected "
-              << in_msg.data_size << " bytes\n";
-    return ICP_ERROR_SOCKET_WRONG_LENGTH;
-  }
-
-  return 0;
-}
-
-/*******************************************************************************
- ******************************************************************************/
-bool icpClient::registerUserDataAllocator
-(
-  GET_USER_DATA_FUNC func_ptr
-)
-{
-  if (func_ptr)
-  {
-    getUserDataPointer              = func_ptr;
-    _user_data_allocator_registered = true;
-  }
-  return _user_data_allocator_registered;
-}
-
-/*****************************************************************************
- ****************************************************************************/
-template<> void icpClient::registerHandler (CB_HANDSHK, uint32_t, uint32_t);
-template<> void icpClient::registerHandler (CB_ERRNOTE, uint32_t, uint32_t);
-template<> void icpClient::registerHandler (CB_COMMAND, uint32_t, uint32_t);
-template<> void icpClient::registerHandler (CB_XMLHEAD, uint32_t, uint32_t);
-template<> void icpClient::registerHandler (CB_IMG_FLT, uint32_t, uint32_t);
-
-/*****************************************************************************
- ****************************************************************************/
-void icpClient::queueMessage
-(
-  std::vector<unsigned char>& ent,
-  std::vector<unsigned char>& data
-)
-{
-  OUT_MSG msg;
-  msg.size = ent.size() + data.size();
-  msg.data.reserve (msg.size);
-
-  uint64_t s = msg.size;
-  s = (isCpuLittleEndian) ? s : __builtin_bswap64 (s);
-
-  std::copy ((unsigned char*) &s,
-             (unsigned char*) &s + sizeof (s),
-             std::back_inserter (msg.data));
-
-  std::copy ((unsigned char*) &ent[0],
-             (unsigned char*) &ent[0] + ent.size(),
-             std::back_inserter (msg.data));
-
-  std::copy ((unsigned char*) &data[0],
-             (unsigned char*) &data[0] + data.size(),
-             std::back_inserter (msg.data));
-
-  _oq.push (msg);
-  //std::cout << __func__ << ": num queued messages = " << _oq.size() << '\n';
-
-  return;
-}
-
-/*****************************************************************************
- forwardMessage is the routine known to caller as the sendMessage callback
- ****************************************************************************/
-bool icpClient::forwardMessage
-(
-  ISMRMRD::EntityType type,
-  ISMRMRD::Entity*    entity
-)
-{
-  bool ret_val = true;
-  ISMRMRD::EntityHeader head;
-  std::stringstream sstr;
-  std::vector <unsigned char> h_buffer;
-  std::vector <unsigned char> e_buffer;
-
-  head.version     = my_version;
-  head.entity_type = type;
-
-  switch (type)
-  {
-    case ISMRMRD::ISMRMRD_MRACQUISITION:
-
-      head.storage_type =
-        static_cast<ISMRMRD::Acquisition<float>* > (entity)->getStorageType();
-      head.stream       =
-        static_cast<ISMRMRD::Acquisition<float>* > (entity)->getStream();
-      e_buffer          = entity->serialize();
+      std::cout << __func__ << ": Received DONE from server\n";
+      _server_done = true;
+      if (_task_done)
+      {
+        std::cout << "Sending CLOSE_CONNECTION command\n";
+        sendCommand (ISMRMRD::ISMRMRD_COMMAND_CLOSE_CONNECTION, 0);
+        sleep (1);
+        std::cout << "Client " << _client_name << " shutting down\n";
+        _session->shutdown();
+      }
       break;
 
-    case ISMRMRD::ISMRMRD_IMAGE:
-
-      head.storage_type =
-        static_cast<ISMRMRD::Image<float>* >(entity)->getStorageType();
-      head.stream       =
-        static_cast<ISMRMRD::Image<float>* >(entity)->getStream();
-      e_buffer = entity->serialize();
-      break;
-
-    case ISMRMRD::ISMRMRD_HEADER_WRAPPER:
-
-      head.storage_type = ISMRMRD::ISMRMRD_CHAR;
-      head.stream       = ISMRMRD::ISMRMRD_STREAM_ISMRMRD_HEADER;
-
-      e_buffer =
-        static_cast<ISMRMRD::IsmrmrdHeaderWrapper*>(entity)->serialize();
-      break;
-
-    case ISMRMRD::ISMRMRD_HANDSHAKE:
-
-      head.storage_type = ISMRMRD::ISMRMRD_CHAR;
-      head.stream       = ISMRMRD::ISMRMRD_STREAM_HANDSHAKE;
-      e_buffer = entity->serialize();
-      break;
-
-    case ISMRMRD::ISMRMRD_COMMAND:
-
-      head.storage_type = ISMRMRD::ISMRMRD_CHAR;
-      head.stream       = ISMRMRD::ISMRMRD_STREAM_COMMAND;
-      e_buffer = entity->serialize();
-      break;
-
-    case ISMRMRD::ISMRMRD_ERROR_NOTIFICATION:
-      head.storage_type = ISMRMRD::ISMRMRD_CHAR;
-      head.stream       = ISMRMRD::ISMRMRD_STREAM_ERROR;
-      e_buffer = entity->serialize();
-      break;
-
-    /*case ISMRMRD_WAVEFORM:
-    case ISMRMRD_BLOB:*/
     default:
-
-      // Still send the data to the user maybe?
-      std::cout << __func__ << "Warning: Entity " << head.entity_type
-                << " not processed in this version of icpSession\n";
-      ret_val = false;
+      std::cout << __func__ << ": Received unexpected command "
+                << msg.getCommandType() << " from server\n";
       break;
   }
-
-  if (ret_val)
-  {
-    h_buffer = head.serialize();
-    queueMessage (h_buffer, e_buffer);
-  }
-
-  return ret_val;
+  return;
 }
 
 /*******************************************************************************
- Thread
  ******************************************************************************/
-void icpClient::receive
+void icpClient::handleErrorNotification
 (
-  SOCKET_PTR sock
+  ISMRMRD::ErrorNotification msg,
 )
 {
-  std::cout << __func__ << " : Reader thread started\n";
+  std::cout << __func__ <<":\nType: " << msg.getErrorType()
+            << ", Error Command: " << msg.getErrorCommandType()
+            << ", Error Command ID: " << msg.getErrorCommandId()
+            << ", Error Entity: " << msg.getErrorEntityType()
+            << ",\nError Description: " << msg.getErrorDescription() << "\n";
+  return;
+}
 
-  ISMRMRD::Handshake           hand;
-  ISMRMRD::Command             cmd;
-  ISMRMRD::ErrorNotification   err;
-  ISMRMRD::IsmrmrdHeader       hdr;
-  ISMRMRD::IsmrmrdHeaderWrapper wrapper (hdr);
-
-  ISMRMRD::Acquisition<int16_t> a16;
-  ISMRMRD::Acquisition<int32_t> a32;
-  ISMRMRD::Acquisition<float>   aflt;
-  ISMRMRD::Acquisition<double>  adbl;
-
-  ISMRMRD::Image<uint16_t>              ui16;
-  ISMRMRD::Image<int16_t>               i16;
-  ISMRMRD::Image<uint32_t>              ui32;
-  ISMRMRD::Image<int32_t>               i32;
-  ISMRMRD::Image<float>                 iflt;
-  ISMRMRD::Image<double>                idbl;
-  ISMRMRD::Image<std::complex<float> >  icflt;
-  ISMRMRD::Image<std::complex<double> > icdbl;
-
-  _user_data = new USER_DATA;
-  if (!getUserDataPointer (_user_data, this))
-  {
-    std::cout << __func__ << "getUserDataPointer ERROR, thread exits" << "\n";
-    delete _user_data;
-    return;
-  }
- 
-  if (!_callbacks.size())
-  {
-    std::cout << "No handlers registered, thread exits" << "\n";
-    return;
-  }
-
-  std::thread writer (&icpClient::transmit, this, sock);
-
-  std::thread input (beginDataInput, *_user_data);
-  //if (!beginDataInput(*_user_data))
-  //{
-    //std::cout << "beginDataInput ERROR, thread exits" << "\n";
-    //return;
-  //}
-
-  while (!isSessionClosed())
-  {
-    IN_MSG in_msg;
-    uint32_t read_status = receiveMessage (sock, in_msg);
-    if (read_status)
-    {
-      std::cout << __func__ << "receiveMessage ERROR <" << read_status << ">\n";
-      break;
-    }
-
-    uint32_t cb_index = in_msg.ehdr.entity_type * 100 +
-                     in_msg.ehdr.storage_type; //TODO
-
-    switch (in_msg.ehdr.entity_type)
-    {
-      case ISMRMRD::ISMRMRD_HANDSHAKE:
-
-        hand.deserialize (in_msg.data);
-        call (cb_index, hand, *_user_data);
-        break;
-
-      case ISMRMRD::ISMRMRD_COMMAND:
-
-        cmd.deserialize (in_msg.data);
-        call (cb_index, cmd, *_user_data);
-        //if (cmd.getCommandType() == ISMRMRD::ISMRMRD_COMMAND_DONE_FROM_SERVER)
-        //{
-          //setServerDone();
-        //}
-        break;
-
-      case ISMRMRD::ISMRMRD_HEADER_WRAPPER:
-
-        wrapper.deserialize (in_msg.data);
-        cb_index = ISMRMRD::ISMRMRD_HEADER * 100 + in_msg.ehdr.storage_type;
-        call (cb_index, wrapper.getHeader(), *_user_data);
-        break;
-
-      case ISMRMRD::ISMRMRD_MRACQUISITION:
-
-        if (in_msg.ehdr.storage_type == ISMRMRD::ISMRMRD_SHORT)
-        {
-          a16.deserialize (in_msg.data);
-          call (cb_index, a16, *_user_data);
-        }
-        else if (in_msg.ehdr.storage_type == ISMRMRD::ISMRMRD_INT)
-        {
-          a32.deserialize (in_msg.data);
-          call (cb_index, a32, *_user_data);
-        }
-        else if (in_msg.ehdr.storage_type == ISMRMRD::ISMRMRD_FLOAT)
-        {
-          aflt.deserialize (in_msg.data);
-          call (cb_index, aflt, *_user_data);
-        }
-        else if (in_msg.ehdr.storage_type == ISMRMRD::ISMRMRD_DOUBLE)
-        {
-          adbl.deserialize (in_msg.data);
-          call (cb_index, adbl, *_user_data);
-        }
-        else
-        {
-          throw std::runtime_error ("Unexpected MR Acquisition Storage type");
-        }
-        break;
-
-      case ISMRMRD::ISMRMRD_ERROR_NOTIFICATION:
-
-        err.deserialize (in_msg.data);
-        call (cb_index, err, *_user_data);
-        break;
-
-      case ISMRMRD::ISMRMRD_IMAGE:
-
-        if (in_msg.ehdr.storage_type == ISMRMRD::ISMRMRD_USHORT)
-        {
-          ui16.deserialize (in_msg.data);
-          call (cb_index, ui16, *_user_data);
-        }
-        else if (in_msg.ehdr.storage_type == ISMRMRD::ISMRMRD_SHORT)
-        {
-          i16.deserialize (in_msg.data);
-          call (cb_index, i16, *_user_data);
-        }
-        else if (in_msg.ehdr.storage_type == ISMRMRD::ISMRMRD_UINT)
-        {
-          ui32.deserialize (in_msg.data);
-          call (cb_index, ui32, *_user_data);
-        }
-        else if (in_msg.ehdr.storage_type == ISMRMRD::ISMRMRD_INT)
-        {
-          i32.deserialize (in_msg.data);
-          call (cb_index, i32, *_user_data);
-        }
-        else if (in_msg.ehdr.storage_type == ISMRMRD::ISMRMRD_FLOAT)
-        {
-          iflt.deserialize (in_msg.data);
-          call (cb_index, iflt, *_user_data);
-        }
-        else if (in_msg.ehdr.storage_type == ISMRMRD::ISMRMRD_DOUBLE)
-        {
-          idbl.deserialize (in_msg.data);
-          call (cb_index, idbl, *_user_data);
-        }
-        else if (in_msg.ehdr.storage_type == ISMRMRD::ISMRMRD_CXFLOAT)
-        {
-          icflt.deserialize (in_msg.data);
-          call (cb_index, icflt, *_user_data);
-        }
-        else if (in_msg.ehdr.storage_type == ISMRMRD::ISMRMRD_CXDOUBLE)
-        {
-          icdbl.deserialize (in_msg.data);
-          call (cb_index, icdbl, *_user_data);
-        }
-        else
-        {
-          throw std::runtime_error ("Unexpected MR Acquisition Storage type");
-        }
-        break;
-
-      //case ISMRMRD::ISMRMRD_WAVEFORM:
-        //break;
-      //case ISMRMRD::ISMRMRD_BLOB:
-        //break;
-
-      default:
-
-        std::cout << "Warning! Dropping unknown entity type: "
-                  << in_msg.ehdr.entity_type << "\n\n";
-        break;
-
-    } // switch ((*in_msg).ehdr.entity_type)
-  } // while (!in_data.isRespondentDone())
-
-  std::cout << __func__ << ": Waiting for Input to join\n";
-  input.join();
-  std::cout << __func__ << ": Waiting for Writer to join\n";
-  writer.join();
-  std::cout << __func__ << ": Writer joined, exiting\n\n\n";
+/*******************************************************************************
+ ******************************************************************************/
+void icpClient::handleIsmrmrdHeader
+(
+  ISMRMRD::IsmrmrdHeader  msg,
+)
+{
+  std::cout << __func__ << ": Received IsmrmrdHeader\n";
+  _header_received = true;
+  _header = msg;
 
   return;
-} // receive
+}
 
-/*******************************************************************************
- ******************************************************************************/
-bool icpClient::registerInputProvider
+/*****************************************************************************
+ ****************************************************************************/
+void icpClient::sendCommand
 (
-  BEGIN_INPUT_CALLBACK_FUNC func_ptr
+  ISMRMRD::CommandType cmd_type,
 )
 {
-  if (func_ptr)
-  {
-    beginDataInput              = func_ptr;
-    _data_input_func_registered = true;
-  }
-  return _data_input_func_registered;
+  ISMRMRD::Command msg;
+  msg.setCommandType (cmd_type);
+  msg.setCommandId (cmd_id);
+  g_client_ptr->forwardMessage (ISMRMRD::ISMRMRD_COMMAND, &msg);
+
+  return;
+}
+
+/*****************************************************************************
+ ****************************************************************************/
+void icpClient::handleHandshake
+(
+  ISMRMRD::Handshake  msg
+)
+{
+  std::cout << __func__ << " response for " << _client_name << ":\n";
+  std::cout << "Name  : " << msg.getClientName() << "\n";
+  std::cout << "Status: " << msg.getConnectionStatus() << "\n";
+  return;
+}
+
+/*****************************************************************************
+ ****************************************************************************/
+void icpClient::sendError
+(
+  ISMRMRD::ErrorType type,
+  std::string        descr
+)
+{
+  ISMRMRD::ErrorNotification msg;
+  msg.setErrorType (type);
+  msg.setErrorDescription (descr);
+  g_client_ptr->forwardMessage (ISMRMRD::ISMRMRD_ERROR_NOTIFICATION, &msg);
+
+  return;
 }
 
 /*******************************************************************************
  ******************************************************************************/
-template<typename ...A>
-void icpClient::call (uint32_t index, A&& ... args)
+void icpClient::handleImage
+(
+  ISMRMRD::Entity* ent,
+)
 {
-  if (_callbacks.find (index) != _callbacks.end())
+  std::cout << __func__ << "\n";
+
+  ISMRMRD::Dataset dset (_out_fname.c_str(), _out_dset.c_str());
+
+  if (_header-received) // For debug only
   {
-    //TODO needs synchronization
-    using func_t = CB_STRUCT <A...>;
-    using cb_t   = std::function <void (A...)>;
+    std::stringstream sstr;
+    ISMRMRD::serialize (_header, sstr);
+    dset.writeHeader ((std::string) sstr.str ());
+  }
 
-    const CB_BASE& base = *_callbacks[index];
-    const cb_t& func = static_cast <const func_t&> (base).callback;
+  uint32_t storage =
+    static_cast<ISMRMRD::Image<int16_t>*>(ent).getHead().getStorageType();
+  writeImage (dset, ent, storage);
+  std::cout << "\nFinished processing image" << std::endl;
 
-    func (std::forward <A> (args)...);
+  _task_done = true;
+  if (_server_done)
+  {
+    std::cout << "Sending CLOSE_CONNECTION command\n";
+    sendCommand (ISMRMRD::ISMRMRD_COMMAND_CLOSE_CONNECTION, 0);
+    sleep (1);
+    std::cout << "Client " << _client_name << " shutting down\n";
+    _session->shutdown();
+  }
+
+  return;
+}
+/*******************************************************************************
+ ******************************************************************************/
+void icpClient::writeImage
+(
+  ISMRMRD::Dataset& dset,
+  ISMRMRD::Entity*  ent,
+  uint32_t          storage
+)
+{
+  if (storage == )
+  {
+    ISMRMRD::Image<int16_t>* img = static_cast<ISMRMRD::Image<int16_t>*>(ent);
+    dset.appendImage ("cpp", *img);
+  }
+  else if (storage == )
+  {
+    ISMRMRD::Image<uint16_t>* img = static_cast<ISMRMRD::Image<uint16_t>*>(ent);
+    dset.appendImage ("cpp", *img);
+  }
+  else if (storage == )
+  {
+    ISMRMRD::Image<int32_t>* img = static_cast<ISMRMRD::Image<int32_t>*>(ent);
+    dset.appendImage ("cpp", *img);
+  }
+  else if (storage == )
+  {
+    ISMRMRD::Image<uint32_t>* img = static_cast<ISMRMRD::Image<uint32_t>*>(ent);
+    dset.appendImage ("cpp", *img);
+  }
+  else if (storage == )
+  {
+    ISMRMRD::Image<float>* img = static_cast<ISMRMRD::Image<float>*>(ent);
+    dset.appendImage ("cpp", *img);
+  }
+  else if (storage == )
+  {
+    ISMRMRD::Image<double>* img = static_cast<ISMRMRD::Image<double>*>(ent);
+    dset.appendImage ("cpp", *img);
+  }
+  else if (storage == )
+  {
+    ISMRMRD::Image<std::complex<float>>* img =
+      static_cast<ISMRMRD::Image<std::complex<float>>*>(ent);
+    dset.appendImage ("cpp", *img);
+  }
+  else if (storage == )
+  {
+    ISMRMRD::Image<std::complex<double>>* img =
+      static_cast<ISMRMRD::Image<std::complex<float>>*>(ent);
+    dset.appendImage ("cpp", *img);
   }
   else
   {
-    std::cout << "Warning: Entity handler for entity "
-              << (uint32_t)(index / 100) << ", storage " << index % 100
-              << ", not registered\n";
+    std::cout << __func__ << ": Error! Unexpected image storage type\n";
   }
-}
 
-/*******************************************************************************
- ******************************************************************************/
-void icpClient::connect ()
-{
-  if (!_running)
-  {
-    std::cout << "Connecting to <" << _host << "> on port " << _port << "\n\n";
-    boost::asio::io_service io_service;
-    SOCKET_PTR sock (new tcp::socket (io_service));
-    tcp::endpoint endpoint 
-      (boost::asio::ip::address::from_string (_host), _port);
-
-    boost::system::error_code error = boost::asio::error::host_not_found;
-    (*sock).connect(endpoint, error);
-    if (error)
-    {
-      throw boost::system::system_error(error);
-    }
-   
-    _receive_thread = std::thread (&icpClient::receive, this, sock);
-    _running = true;
-  }
   return;
 }
 
 /*******************************************************************************
  ******************************************************************************/
-icpClient::~icpClient ()
+void icpClient::sendHandshake
+(
+)
 {
-  if (_receive_thread.joinable())
+  ISMRMRD::Handshake msg;
+  msg.setTimestamp ((uint64_t)std::time(nullptr));
+  msg.setConnectionStatus (ISMRMRD::CONNECTION_REQUEST);
+  msg.setClientName (_client_name);
+  _session->forward (ISMRMRD::ISMRMRD_HANDSHAKE, &msg);
+
+  return;
+}
+
+/*******************************************************************************
+ ******************************************************************************/
+void icpClient::beginInput
+(
+)
+{
+  sleep (1);
+  sendHandshake ();
+  sendCommand (ISMRMRD::ISMRMRD_COMMAND_CONFIG_IMREC_ONE, 0);
+
+  ISMRMRD::Dataset dset (_in_fname.c_str(), _in_dset.c_str());
+  std::string xml_head = dset.readHeader();
+
+  ISMRMRD::IsmrmrdHeader xmlHeader;
+  ISMRMRD::deserialize (xml_head.c_str(), xmlHeader);
+  ISMRMRD::IsmrmrdHeaderWrapper wrapper (xmlHeader);
+  _session->forward (ISMRMRD::ISMRMRD_HEADER_WRAPPER, &wrapper); 
+
+  sendAcquisitions (dset);
+
+  ISMRMRD::Command cmd;
+  cmd.setCommandId (2);
+  cmd.setCommandType (ISMRMRD::ISMRMRD_COMMAND_STOP_FROM_CLIENT);
+  _session->forward (ISMRMRD::ISMRMRD_COMMAND, &cmd);
+
+  std::cout << "Finished input (" << num_acq << "), sent STOP_FROM_CLIENT\n";
+
+  return;
+}
+
+/*******************************************************************************
+ ******************************************************************************/
+void sendAcquisitions
+(
+  ISMRMRD::Dataset& dset
+)
+{
+  uint32_t num_acq = dset.getNumberOfAcquisitions (0);
+  uint32_t storage =
+    dset.readAcquisition<int16_t> (0, 0).getHead().getStorageType();
+
+  //TODO: Per storage type: int16_t, int32_t, float, and stream
+  if (storage == ISMRMRD::ISMRMRD_SHORT)
   {
-    _receive_thread.join();
+    for (int ii = 0; ii < num_acq; ii++)
+    {
+      ISMRMRD::Acquisition<int16_t> acq = dset.readAcquisition<int16_t> (ii, 0);
+      _session->forward (ISMRMRD::ISMRMRD_MRACQUISITION, &acq);
+    }
   }
-  _oq = std::queue<OUT_MSG>(); 
-  _callbacks.clear();
+  else if (storage == ISMRMRD::ISMRMRD_INT)
+  {
+    for (int ii = 0; ii < num_acq; ii++)
+    {
+      ISMRMRD::Acquisition<int32_t> acq = dset.readAcquisition<int32_t> (ii, 0);
+      _session->forward (ISMRMRD::ISMRMRD_MRACQUISITION, &acq);
+    }
+  }
+  else if (storage == ISMRMRD::ISMRMRD_SHORT)
+  {
+    for (int ii = 0; ii < num_acq; ii++)
+    {
+      ISMRMRD::Acquisition<float> acq = dset.readAcquisition<float> (ii, 0);
+      _session->forward (ISMRMRD::ISMRMRD_MRACQUISITION, &acq);
+    }
+  }
+  else
+  {
+    std::cout << __func__ << ": Unexpected storage type " << storage << "\n";
+  }
+
+  return;
+}
+
+/*******************************************************************************
+ ******************************************************************************/
+void icpClient::run
+(
+)
+{
+  std::thread (&icpClient::beginInput, this).detach();
+  _session->beginReceiving();
 }
 
 /*******************************************************************************
  ******************************************************************************/
 icpClient::icpClient
 (
-  std::string host,
-  uint16_t    port
+  ICP_SESSION      session,
+  std::string      client_name,
+  std::string      in_fname,
+  std::string      out_fname,
+  std::string      in_dataset,
+  std::string      out_dataset
 )
-: _host (host),
-  _port (port),
-  _user_data_allocator_registered (false),
-  _data_input_func_registered (false),
-  _session_closed (false),
-  getUserDataPointer (NULL),
-  beginDataInput (NULL)
-{}
+: _session         (session),
+  _client_name     (client_name),
+  _in_fname        (in_fname),
+  _out_fname       (out_fname),
+  _in_dset         (in_dataset),
+  _out_dset        (out_dataset),
+  _server_done     (false),
+  _task_done       (false),
+  _header_received (false)
+{
+  auto fp1 = std::bind (&icpClient::handleHandshake, *this, _1, _2);
+  _session->registerHandler ((CB_HANDSHK) fp1, ISMRMRD::ISMRMRD_HANDSHAKE);
 
+  auto fp2 = std::bind (&icpClient::handleErrorNotification, *this, _1, _2);
+  _session->registerHandler ((CB_ERRNOTE) fp2, ISMRMRD::ISMRMRD_ERROR_NOTIFICATION);
+
+  auto fp3 = std::bind (&icpClient::handleCommand, *this, _1, _2);
+  _session->registerHandler ((CB_COMMAND) fp3, ISMRMRD::ISMRMRD_COMMAND);
+
+  auto fp4 = std::bind (&icpClient::handleIsmrmrdHeader, *this, _1, _2);
+  _session->registerHandler ((CB_XMLHEAD) fp4, ISMRMRD::ISMRMRD_HEADER);
+
+  auto fp5 = std::bind (&icpClient::handleImage, *this, _1, _2);
+  _session->registerHandler ((CB_IMG_FLT) fp5, ISMRMRD::ISMRMRD_IMAGE);
+}
