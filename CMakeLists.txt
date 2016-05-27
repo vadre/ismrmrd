@@ -97,10 +97,6 @@ find_package(HDF5 1.8 COMPONENTS C CXX)
 if (HDF5_FOUND)
     set (ISMRMRD_DATASET_SUPPORT true)
     set (ISMRMRD_DATASET_SOURCES libsrc/dataset.cpp)
-    set (ISMRMRD_IPC_SOURCES examples/protocol/icpClientTestData.cpp)
-    set (ISMRMRD_IPC_INPUT_SOURCES examples/protocol/icpServerTestData.cpp)
-    set (ISMRMRD_IPC_OUTPUT_SOURCES examples/protocol/icpClient.cpp)
-    set (ISMRMRD_IPC_OUTPUT_SOURCES examples/protocol/icpServer.cpp)
     set (ISMRMRD_DATASET_INCLUDE_DIRS ${HDF5_INCLUDE_DIR} ${HDF5_INCLUDE_DIR}/cpp)
     set (ISMRMRD_DATASET_LIBRARIES ${HDF5_LIBRARIES})
 else (HDF5_FOUND)
@@ -153,7 +149,6 @@ set(ISMRMRD_TARGET_SOURCES
   libsrc/xml.cpp
   libsrc/meta.cpp
   ${ISMRMRD_DATASET_SOURCES}
-  ${ISMRMRD_IPC_SOURCES}
 )
 
 set(ISMRMRD_TARGET_LINK_LIBS ${ISMRMRD_DATASET_LIBRARIES})

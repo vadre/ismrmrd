@@ -4,22 +4,23 @@
 using namespace std::placeholders;
 /*******************************************************************************
  ******************************************************************************/
-void icp::server handleCommand
+void icpServer::handleCommand
 (
-  ISMRMRD::Command  msg,
+  ISMRMRD::Command  msg
 )
 {
+  auto fp1 = std::bind (&icpServer::handleIsmrmrdHeader, *this, _1);
+  auto fp2 = std::bind (&icpServer::handleAcquisition, *this, _1, _2);
+
   switch (msg.getCommandType())
   {
     case ISMRMRD::ISMRMRD_COMMAND_CONFIG_IMREC_ONE:
 
-      _imrec = new imageReconstructionOne;
+      _imrec = new imageReconOne;
 
-      auto fp1 = std::bind (&icpServerTest::handleIsmrmrdHeader, *this, _1, _2);
-      _msg_get.registerHandler ((CB_XMLHEAD) fp1, ISMRMRD::ISMRMRD_HEADER);
+      _session->registerHandler ((CB_XMLHEAD) fp1, ISMRMRD::ISMRMRD_HEADER);
 
-      auto fp2 = std::bind (&icpServerTest::handleAcquisition, *this, _1, _2);
-      _msg_get.registerHandler ((CB_MR_ACQ) fp2, ISMRMRD::ISMRMRD_MRACQUISITION);
+      _session->registerHandler ((CB_MR_ACQ) fp2, ISMRMRD::ISMRMRD_MRACQUISITION);
 
       break;
 
@@ -52,9 +53,9 @@ void icp::server handleCommand
 
 /*******************************************************************************
  ******************************************************************************/
-void icp::server handleErrorNotification
+void icpServer::handleErrorNotification
 (
-  ISMRMRD::ErrorNotification msg,
+  ISMRMRD::ErrorNotification msg
 )
 {
   std::cout << __func__ <<":\nError Type: " << msg.getErrorType()
@@ -68,21 +69,23 @@ void icp::server handleErrorNotification
 
 /*******************************************************************************
  ******************************************************************************/
-void icp::server handleIsmrmrdHeader
+void icpServer::handleIsmrmrdHeader
 (
-  ISMRMRD::IsmrmrdHeader  msg,
+  ISMRMRD::IsmrmrdHeader  msg
 )
 {
   std::cout << __func__ << ": Received IsmrmrdHeader\n";
   _imrec->addIsmrmrdHeader (msg);
-  _session->forward (ISMRMRD::ISMRMRD_HEADER hdr); // Just for demo
+  ISMRMRD::IsmrmrdHeaderWrapper wrp;
+  wrp.setHeader (msg);
+  _session->forwardMessage (ISMRMRD::ISMRMRD_HEADER_WRAPPER, &wrp); // For demo
 
   return;
 }
 
 /*****************************************************************************
  ****************************************************************************/
-void icp::server sendCommand
+void icpServer::sendCommand
 (
   ISMRMRD::CommandType cmd_type,
   uint32_t             cmd_id
@@ -91,14 +94,14 @@ void icp::server sendCommand
   ISMRMRD::Command msg;
   msg.setCommandType (cmd_type);
   msg.setCommandId (cmd_id);
-  _session->forward (ISMRMRD::ISMRMRD_COMMAND, &msg);
+  _session->forwardMessage (ISMRMRD::ISMRMRD_COMMAND, &msg);
 
   return;
 }
 
 /*****************************************************************************
  ****************************************************************************/
-void icp::server clientAccepted
+void icpServer::clientAccepted
 (
   ISMRMRD::Handshake  msg,
   bool                accepted
@@ -107,7 +110,7 @@ void icp::server clientAccepted
   msg.setConnectionStatus ((accepted) ?
     ISMRMRD::CONNECTION_ACCEPTED : ISMRMRD::CONNECTION_DENIED_UNKNOWN_USER);
 
-  _session->forward (ISMRMRD::ISMRMRD_HANDSHAKE, &msg);
+  _session->forwardMessage (ISMRMRD::ISMRMRD_HANDSHAKE, &msg);
 
   if (!accepted)
   {
@@ -119,9 +122,9 @@ void icp::server clientAccepted
 
 /*******************************************************************************
  ******************************************************************************/
-void icp::server handleHandshake
+void icpServer::handleHandshake
 (
-  ISMRMRD::Handshake  msg,
+  ISMRMRD::Handshake  msg
 )
 {
   // Could check if the client name is matching a list of expected clients
@@ -133,7 +136,7 @@ void icp::server handleHandshake
 
 /*****************************************************************************
  ****************************************************************************/
-void icp::server sendError
+void icpServer::sendError
 (
   ISMRMRD::ErrorType type,
   std::string        descr
@@ -142,14 +145,14 @@ void icp::server sendError
   ISMRMRD::ErrorNotification msg;
   msg.setErrorType (type);
   msg.setErrorDescription (descr);
-  _session->forward (ISMRMRD::ISMRMRD_ERROR_NOTIFICATION, &msg);
+  _session->forwardMessage (ISMRMRD::ISMRMRD_ERROR_NOTIFICATION, &msg);
   return;
 }
 
 /*******************************************************************************
  This routine could be used to receive 
  ******************************************************************************/
-void icp::server handleAcquisition
+void icpServer::handleAcquisition
 (
   ISMRMRD::Entity* ent,
   uint32_t         storage
@@ -159,7 +162,8 @@ void icp::server handleAcquisition
   _imrec->addAcquisition (ent, storage);
   if (_imrec->isImageDone())
   {
-    _session->forward (_imrec->getImageEntityPointer());
+    _session->forwardMessage (ISMRMRD::ISMRMRD_IMAGE,
+                              _imrec->getImageEntityPointer());
     _imrec_done = true;
     if (_client_done)
     {
@@ -187,14 +191,19 @@ icpServer::icpServer
   _imrec_done  (false),
   _id          (id)
 {
-  auto fp1 = std::bind (&icpServerTest::handleHandshake, *this, _1, _2);
-  _session->registerHandler ((CB_HNDSHK) fp, ISMRMRD::ISMRMRD_HANDSHAKE);
 
-  auto fp2 = std::bind (&icpServerTest::handleErrorNotification, *this, _1, _2);
-  _session->registerHandler ((CB_ERRNOTE) fp, ISMRMRD::ISMRMRD_ERROR_NOTIFICATION);
+  std::ios_base::sync_with_stdio(false);
+  std::cin.tie(static_cast<std::ostream*>(0));
+  std::cerr.tie(static_cast<std::ostream*>(0));
 
-  auto fp3 = std::bind (&icpServerTest::handleCommand, *this, _1, _2);
-  _session->registerHandler ((CB_COMMAND) fp, ISMRMRD::ISMRMRD_COMMAND);
+  auto fp1 = std::bind (&icpServer::handleHandshake, *this, _1);
+  _session->registerHandler ((CB_HANDSHK) fp1, ISMRMRD::ISMRMRD_HANDSHAKE);
+
+  auto fp2 = std::bind (&icpServer::handleErrorNotification, *this, _1);
+  _session->registerHandler ((CB_ERRNOTE) fp2, ISMRMRD::ISMRMRD_ERROR_NOTIFICATION);
+
+  auto fp3 = std::bind (&icpServer::handleCommand, *this, _1);
+  _session->registerHandler ((CB_COMMAND) fp3, ISMRMRD::ISMRMRD_COMMAND);
 
 }
 

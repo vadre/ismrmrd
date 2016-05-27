@@ -1,9 +1,5 @@
 #ifndef ICP_H
 #define ICP_H
-// icp.h  Need to break this file into icp_public.h and icp_internal.h
-
-//#include "icpServerTestData.h"
-//#include "icpClientTestData.h"
 
 #include <iostream>
 #include <boost/asio.hpp>

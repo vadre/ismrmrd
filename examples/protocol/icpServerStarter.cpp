@@ -1,3 +1,4 @@
+#include "icpServer.h"
 #include "icpConnection.h"
 #include "icpSession.h"
 
@@ -31,11 +32,15 @@ int main
     port = std::atoi (argv[1]);
   }
 
+  std::ios_base::sync_with_stdio(false);
+  std::cin.tie(static_cast<std::ostream*>(0));
+  std::cerr.tie(static_cast<std::ostream*>(0));
+
   std::cout << "ISMRMRD Server app starts with port number " << port << '\n';
   std::cout << "To connect to a different port, restart: icpServer <port>\n\n";
 
   icpConnection server_conn (port);
-  server_conn.registerUserApp ((icpConnection::START_USER_APP_FUNC) &runMe);
+  server_conn.registerUserApp ((START_USER_APP_FUNC) &runMe);
   server_conn.start();
 
   return 0;

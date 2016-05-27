@@ -130,6 +130,21 @@ template <> DataType get_hdf5_data_type<AcquisitionHeader>()
     return dtype;
 }
 
+template <> DataType get_hdf5_data_type<AcquisitionHeader_with_data<double> >()
+{
+    CompType dtype(sizeof(AcquisitionHeader_with_data<double>));
+
+    DataType head_type = get_hdf5_data_type<AcquisitionHeader>();
+
+    DataType realv_type = DataType(H5Tvlen_create(PredType::NATIVE_DOUBLE.getId()));
+
+    dtype.insertMember("head", HOFFSET(AcquisitionHeader_with_data<double>, head), head_type);
+    dtype.insertMember("traj", HOFFSET(AcquisitionHeader_with_data<double>, traj), realv_type);
+    dtype.insertMember("data", HOFFSET(AcquisitionHeader_with_data<double>, data), realv_type);
+
+    return dtype;
+}
+
 template <> DataType get_hdf5_data_type<AcquisitionHeader_with_data<float> >()
 {
     CompType dtype(sizeof(AcquisitionHeader_with_data<float>));

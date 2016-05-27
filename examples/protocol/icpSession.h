@@ -2,28 +2,32 @@
 #define ICP_SESSION_H
 
 #include <boost/asio.hpp>
-#include "ismrmrd/xml.h"
+#include <thread>
 #include <functional>
 #include <memory>
+#include <queue>
 #include <utility>
 #include <map>
+#include <time.h>
+#include "ismrmrd/version.h"
+#include "ismrmrd/xml.h"
 #include "icp.h"
 
 /*******************************************************************************
  ******************************************************************************/
-Class icpSession
+class icpSession
 {
 public:
-
-using ICP_SESSION = std::unique_ptr<icpSession>;
 
            icpSession            (SOCKET_PTR sock, uint32_t id);
            ~icpSession           ();
   void     beginReceiving        ();
   void     shutdown              ();
   bool     forwardMessage        (ISMRMRD::EntityType, ISMRMRD::Entity*);
-  template <typename F, typename E, typename S>
-  void     registerHandler       (F func, E etype, S stype);
+  //template <typename F, typename E, typename S>
+  //void     registerHandler       (F func, E etype, S stype);
+  template <typename F, typename E>
+  void     registerHandler       (F func, E etype);
 
 private:
   SOCKET_PTR                     _sock;
@@ -33,7 +37,7 @@ private:
   std::thread                    _writer;
   CB_MAP                         _callbacks;
 
-  void     getMessage            ();
+  bool     getMessage            ();
   uint32_t receiveFrameInfo      (IN_MSG& in_msg);
   void     deliver               (IN_MSG& in_msg);
   void     transmit              ();
@@ -48,7 +52,7 @@ private:
  * Template
  ******************************************************************************/
 template <typename F, typename E>
-void icpServer::registerHandler
+void icpSession::registerHandler
 (
   F func,
   E etype

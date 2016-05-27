@@ -4,6 +4,10 @@
 #include <boost/asio.hpp>
 #include "icp.h"
 #include <thread>
+#include "icpSession.h"
+
+using ICP_SESSION = std::shared_ptr<icpSession>;
+using START_USER_APP_FUNC = void (*) (ICP_SESSION, uint32_t);
 
 /*******************************************************************************
  ******************************************************************************/
@@ -21,7 +25,9 @@ public:
 private:
 
   static bool          _running;
+  std::string          _host;
   unsigned short       _port;
+  bool                 _user_app_registered;
   std::thread          _main_thread;
 
   void acceptor        ();

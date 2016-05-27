@@ -852,14 +852,13 @@ namespace ISMRMRD
 
   IsmrmrdHeaderWrapper::IsmrmrdHeaderWrapper
   (
-    IsmrmrdHeader hdr
   )
+  : version_      (ISMRMRD_VERSION_MAJOR),
+    entity_type_  (ISMRMRD_HEADER_WRAPPER),
+    storage_type_ (ISMRMRD_CHAR),
+    stream_       (ISMRMRD_STREAM_ISMRMRD_HEADER),
+    header_valid_ (false)
   {
-    version_      = ISMRMRD_VERSION_MAJOR;
-    entity_type_  = ISMRMRD_HEADER_WRAPPER;
-    storage_type_ = ISMRMRD_CHAR;
-    stream_       = ISMRMRD_STREAM_ISMRMRD_HEADER;
-    header_       = hdr;
   }
 
   uint32_t IsmrmrdHeaderWrapper::getVersion() const
@@ -872,6 +871,11 @@ namespace ISMRMRD
     return static_cast<StorageType>(storage_type_);
   }
 
+  EntityType IsmrmrdHeaderWrapper::getEntityType() const
+  {
+    return static_cast<EntityType>(entity_type_);
+  }
+
   uint32_t IsmrmrdHeaderWrapper::getStream() const
   {
     return stream_;
@@ -879,11 +883,16 @@ namespace ISMRMRD
 
   void IsmrmrdHeaderWrapper::setHeader (IsmrmrdHeader hdr)
   {
-    header_ = hdr;
+    header_       = hdr;
+    header_valid_ = true;
   }
 
   IsmrmrdHeader IsmrmrdHeaderWrapper::getHeader () const
   {
+    if (!header_valid_)
+    {
+      throw std::runtime_error ("IsmrmrdHeaderWrapper header invalid");
+    }
     return header_;
   }
 
@@ -893,6 +902,7 @@ namespace ISMRMRD
     ISMRMRD::serialize (header_, sstr);
     std::string xml_header = sstr.str();
     std::vector<unsigned char> ret (xml_header.begin(), xml_header.end());
+    header_valid_ = true;
     return ret;
   }
 
@@ -901,8 +911,13 @@ namespace ISMRMRD
     const std::vector<unsigned char>& buffer
   )
   {
-     std::string xml (buffer.begin(), buffer.end());
-     ISMRMRD::deserialize (xml.c_str(), header_);
+    if (!header_valid_)
+    {
+      throw std::runtime_error ("IsmrmrdHeaderWrapper header invalid");
+    }
+
+    std::string xml (buffer.begin(), buffer.end());
+    ISMRMRD::deserialize (xml.c_str(), header_);
   }
 
 

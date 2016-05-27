@@ -320,6 +320,7 @@ template <typename T> Acquisition<T> Dataset::readAcquisition(unsigned long inde
 template void Dataset::appendAcquisition(const Acquisition<int16_t>&, int);
 template void Dataset::appendAcquisition(const Acquisition<int32_t>&, int);
 template void Dataset::appendAcquisition(const Acquisition<float>&, int);
+template void Dataset::appendAcquisition(const Acquisition<double>&, int);
     
 unsigned long Dataset::getNumberOfAcquisitions(int stream)
 {
@@ -350,9 +351,13 @@ unsigned long Dataset::getNumberOfAcquisitions(int stream)
     return nacq;
 }
 
-template <typename T> void Dataset::appendImage(const std::string& var, const Image<T>& im)
+template <typename T>
+void Dataset::appendImage(const std::string& var, const Image<T>& im)
 {
     // TODO: implement
+  //std::string path = constructDataPath (im.getHead().stream);
+  //DataType dtype = get_hdf5_data_type<ImageHeader_with_data<T> >();
+  //ImageHeader_with_data<T> obj;
 }
 
 template EXPORTISMRMRD void Dataset::appendImage(const std::string& var, const Image<uint16_t>& im);

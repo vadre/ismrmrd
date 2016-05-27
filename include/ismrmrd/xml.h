@@ -342,10 +342,11 @@ namespace ISMRMRD
   {
     public:
 
-                  IsmrmrdHeaderWrapper(IsmrmrdHeader hdr);
+                  IsmrmrdHeaderWrapper();
     void          setHeader (IsmrmrdHeader hdr);
     IsmrmrdHeader getHeader () const;
     uint32_t      getVersion() const;
+    EntityType    getEntityType() const;
     StorageType   getStorageType() const;
     uint32_t      getStream() const;
 
@@ -359,6 +360,7 @@ namespace ISMRMRD
     uint32_t      entity_type_;
     uint32_t      storage_type_;
     uint32_t      stream_;
+    bool          header_valid_;
     IsmrmrdHeader header_;
   };
 }

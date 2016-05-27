@@ -19,8 +19,8 @@ void icpConnection::acceptor ()
     a.accept (*sock);
     std::cout << __func__ << ": Connection #" << id << "\n\n";
 
-    ICP_CONNECTION connection (new icpConnectionManager (sock));
-    std::thread (runUserApp, connection, id).detach();
+    ICP_SESSION session (new icpSession (sock, id));
+    std::thread (runUserApp, session, id).detach();
   }
 
   return;
@@ -47,12 +47,12 @@ void icpConnection::start ()
 {
   if (_running)
   {
-    std::out << "icpConnection is already running\n";
+    std::cout << "icpConnection is already running\n";
     return;
   }
   if (!_user_app_registered)
   {
-    std::out << "User app not registered\n";
+    std::cout << "User app not registered\n";
     return;
   }
 
@@ -70,21 +70,32 @@ void icpConnection::connect ()
   {
     std::cout << "Connecting to <" << _host << "> on port " << _port << "\n\n";
     boost::asio::io_service io_service;
+    std::cout << __func__ << ": 1\n";
     SOCKET_PTR sock (new tcp::socket (io_service));
+    std::cout << __func__ << ": 1\n";
     tcp::endpoint endpoint
       (boost::asio::ip::address::from_string (_host), _port);
+    std::cout << __func__ << ": 1\n";
 
     boost::system::error_code error = boost::asio::error::host_not_found;
+    std::cout << __func__ << ": 1\n";
     //(*sock).connect(endpoint, error);
     sock->connect(endpoint, error);
+    std::cout << __func__ << ": 1\n";
     if (error)
     {
+    std::cout << __func__ << ": 1\n";
       throw boost::system::system_error(error);
     }
+    std::cout << __func__ << ": 1\n";
 
     _running = true;
-    ICP_SESSION session (new icpSession (sock, id));
-    std::thread (runUserApp, session, id).detach();
+    std::cout << __func__ << ": 1\n";
+    ICP_SESSION session (new icpSession (sock, 777));
+    std::cout << __func__ << ": 1\n";
+    std::thread t (runUserApp, session, 777);
+    std::cout << __func__ << ": 1\n";
+    t.join();
   }
   return;
 }
@@ -103,8 +114,8 @@ icpConnection::icpConnection
   uint16_t p
 )
 : _port (p),
-  _main_thread (),
-  _user_app_registered (false)
+  _user_app_registered (false),
+  _main_thread ()
 {}
 
 /*******************************************************************************
@@ -116,6 +127,7 @@ icpConnection::icpConnection
 )
 : _host (host),
   _port (port),
-  _user_app_registered (false)
+  _user_app_registered (false),
+  _main_thread ()
 {}
 
