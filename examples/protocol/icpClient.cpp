@@ -154,12 +154,12 @@ void icpClient::writeImage
   if (storage == ISMRMRD::ISMRMRD_FLOAT)
   {
     ISMRMRD::Image<float>* img = static_cast<ISMRMRD::Image<float>*>(ent);
-    dset.appendImage ("cpp", *img);
+    dset.appendImage (*img, ISMRMRD::ISMRMRD_STREAM_IMAGE);
   }
   else if (storage == ISMRMRD::ISMRMRD_DOUBLE)
   {
     ISMRMRD::Image<double>* img = static_cast<ISMRMRD::Image<double>*>(ent);
-    dset.appendImage ("cpp", *img);
+    dset.appendImage (*img, ISMRMRD::ISMRMRD_STREAM_IMAGE);
   }
   else
   {
@@ -212,7 +212,8 @@ void icpClient::beginInput
   _session->forwardMessage (ISMRMRD::ISMRMRD_HEADER_WRAPPER, &wrapper); 
   std::cout << __func__ << ": 11\n";
 
-  //sendAcquisitions (dset);
+  
+  sendAcquisitions (dset, xmlHeader.streams[0].storageType);
   std::cout << __func__ << ": 12\n";
 
   ISMRMRD::Command cmd;
@@ -235,15 +236,20 @@ void icpClient::beginInput
  ******************************************************************************/
 void icpClient::sendAcquisitions
 (
-  ISMRMRD::Dataset& dset
+  ISMRMRD::Dataset& dset,
+  uint32_t          storage
 )
 {
+  std::cout << __func__ << ": 1\n";
   uint32_t num_acq = dset.getNumberOfAcquisitions (0);
-  uint32_t storage = dset.readAcquisition<int16_t> (0, 0).getStorageType();
+  std::cout << __func__ << ": 2\n";
+  //uint32_t storage = dset.readAcquisition<int16_t> (0, 0).getStorageType();
+  std::cout << __func__ << ": 3\n";
 
   //TODO: Per storage type: int16_t, int32_t, float, and stream
   if (storage == ISMRMRD::ISMRMRD_SHORT)
   {
+  std::cout << __func__ << ": 4\n";
     for (int ii = 0; ii < num_acq; ii++)
     {
       ISMRMRD::Acquisition<int16_t> acq = dset.readAcquisition<int16_t> (ii, 0);
@@ -252,17 +258,28 @@ void icpClient::sendAcquisitions
   }
   else if (storage == ISMRMRD::ISMRMRD_INT)
   {
+  std::cout << __func__ << ": 5\n";
     for (int ii = 0; ii < num_acq; ii++)
     {
       ISMRMRD::Acquisition<int32_t> acq = dset.readAcquisition<int32_t> (ii, 0);
       _session->forwardMessage (ISMRMRD::ISMRMRD_MRACQUISITION, &acq);
     }
   }
-  else if (storage == ISMRMRD::ISMRMRD_SHORT)
+  else if (storage == ISMRMRD::ISMRMRD_FLOAT)
   {
+  std::cout << __func__ << ": 6\n";
     for (int ii = 0; ii < num_acq; ii++)
     {
       ISMRMRD::Acquisition<float> acq = dset.readAcquisition<float> (ii, 0);
+      _session->forwardMessage (ISMRMRD::ISMRMRD_MRACQUISITION, &acq);
+    }
+  }
+  else if (storage == ISMRMRD::ISMRMRD_DOUBLE)
+  {
+  std::cout << __func__ << ": 7\n";
+    for (int ii = 0; ii < num_acq; ii++)
+    {
+      ISMRMRD::Acquisition<double> acq = dset.readAcquisition<double> (ii, 0);
       _session->forwardMessage (ISMRMRD::ISMRMRD_MRACQUISITION, &acq);
     }
   }
@@ -271,6 +288,7 @@ void icpClient::sendAcquisitions
     std::cout << __func__ << ": Unexpected storage type " << storage << "\n";
   }
 
+  std::cout << __func__ << ": 8\n";
   return;
 }
 
@@ -281,7 +299,7 @@ void icpClient::icpClient::run
 )
 {
   std::cout << __func__ << ": 1\n";
-  std::thread it(&icpClient::beginInput, this);
+  std::thread it (&icpClient::beginInput, this);
   if (it.joinable())
   {
     it.join();

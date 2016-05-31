@@ -39,7 +39,8 @@ private:
   void sendHandshake ();
   void sendError (ISMRMRD::ErrorType type, std::string descr);
   void writeImage (ISMRMRD::Dataset& dset, ISMRMRD::Entity* ent, uint32_t strg);
-  void sendAcquisitions (ISMRMRD::Dataset& dset);
+  //void sendAcquisitions (ISMRMRD::Dataset& dset, ISMRMRD::StorageType storage);
+  void sendAcquisitions (ISMRMRD::Dataset& dset, uint32_t storage);
 
   void beginInput ();
 
