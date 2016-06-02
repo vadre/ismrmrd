@@ -107,6 +107,17 @@ template <> EXPORTISMRMRD StorageType get_storage_type<std::complex<double> >()
     return ISMRMRD_CXDOUBLE;
 }
 
+template <> EXPORTISMRMRD StorageType get_storage_type<std::complex<int16_t> >()
+{
+    return ISMRMRD_CXSHORT;
+}
+
+template <> EXPORTISMRMRD StorageType get_storage_type<std::complex<int32_t> >()
+{
+    return ISMRMRD_CXINT;
+}
+
+
 
 bool operator==(const AcquisitionHeader& h1, const AcquisitionHeader& h2)
 {
@@ -491,7 +502,8 @@ template <typename T> void Acquisition<T>::setData(const std::vector<std::comple
 
 template <typename T> std::complex<T>& Acquisition<T>::at(uint32_t sample, uint32_t channel){
     if (sample >= getNumberOfSamples()) {
-        throw std::runtime_error("sample greater than number of samples");
+        std::cout << "sample = " << sample << ", num samples = " << getNumberOfSamples() << "\n";
+        throw std::runtime_error("sample greater than number of samples (acq::at)");
     }
     if (channel >= getActiveChannels()) {
         throw std::runtime_error("channel greater than number of active channels");
@@ -509,7 +521,7 @@ template <typename T> void Acquisition<T>::setTraj(const std::vector<float>& tra
 
 template <typename T> float& Acquisition<T>::trajAt(uint32_t dimension, uint32_t sample){
     if (sample >= getNumberOfSamples()) {
-        throw std::runtime_error("sample greater than number of samples");
+        throw std::runtime_error("sample greater than number of samples (acq::trajAt)");
     }
     if (dimension >= getTrajectoryDimensions()) {
         throw std::runtime_error("trajectory greater than trajectory_dimensions");
@@ -584,6 +596,7 @@ template <typename T> std::vector<unsigned char> Acquisition<T>::serialize()
     }
 
     size_t bytes = sizeof(AcquisitionHeader) + traj_.size()*sizeof(float) + data_.size()*sizeof(std::complex<T>);
+
     std::vector<unsigned char> buffer;
     buffer.reserve(bytes);
     std::copy((unsigned char*)(&this->head_),((unsigned char*)(&this->head_))+sizeof(AcquisitionHeader), std::back_inserter(buffer));
@@ -1354,6 +1367,8 @@ template EXPORTISMRMRD class NDArray<double>;
 template EXPORTISMRMRD class NDArray<std::complex<float> >;
 template EXPORTISMRMRD class NDArray<std::complex<double> >;
 
+template EXPORTISMRMRD class NDArray<std::complex<short> >;
+template EXPORTISMRMRD class NDArray<std::complex<int> >;
 
 int sign_of_directions(float read_dir[3], float phase_dir[3], float slice_dir[3]) {
     float r11 = read_dir[0], r12 = phase_dir[0], r13 = slice_dir[0];

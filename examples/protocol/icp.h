@@ -10,6 +10,9 @@ using boost::asio::ip::tcp;
 using SOCKET_PTR = std::shared_ptr<boost::asio::ip::tcp::socket>;
 
 /*******************************************************************************
+ ******************************************************************************/
+class icpUserAppBase { public: virtual ~icpUserAppBase() = default; };
+/*******************************************************************************
  * Constants - DO NOT MODIFY!!!
  ******************************************************************************/
 //const unsigned char my_version                    =  2;
@@ -42,12 +45,12 @@ using CB_MAP = std::map<uint32_t, std::unique_ptr<CB_BASE> >;
  ******************************************************************************/
 using BEGIN_INPUT_CALLBACK_FUNC = bool (*)();
 
-using CB_MR_ACQ   = CB_STRUCT <ISMRMRD::Entity*, uint32_t>;
-using CB_IMAGE    = CB_STRUCT <ISMRMRD::Entity*, uint32_t>;
-using CB_HANDSHK  = CB_STRUCT <ISMRMRD::Handshake>;
-using CB_ERRNOTE  = CB_STRUCT <ISMRMRD::ErrorNotification>;
-using CB_COMMAND  = CB_STRUCT <ISMRMRD::Command>;
-using CB_XMLHEAD  = CB_STRUCT <ISMRMRD::IsmrmrdHeader>;
+using CB_MR_ACQ   = CB_STRUCT <ISMRMRD::Entity*, uint32_t, icpUserAppBase*>;
+using CB_IMAGE    = CB_STRUCT <ISMRMRD::Entity*, uint32_t, icpUserAppBase*>;
+using CB_HANDSHK  = CB_STRUCT <ISMRMRD::Handshake, icpUserAppBase*>;
+using CB_ERRNOTE  = CB_STRUCT <ISMRMRD::ErrorNotification, icpUserAppBase*>;
+using CB_COMMAND  = CB_STRUCT <ISMRMRD::Command, icpUserAppBase*>;
+using CB_XMLHEAD  = CB_STRUCT <ISMRMRD::IsmrmrdHeader, icpUserAppBase*>;
 /*******************************************************************************
  * Byte order utilities - DO NOT MODIFY!!!
  ******************************************************************************/

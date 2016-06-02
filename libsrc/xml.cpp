@@ -891,13 +891,18 @@ namespace ISMRMRD
   {
     if (!header_valid_)
     {
-      throw std::runtime_error ("IsmrmrdHeaderWrapper header invalid");
+      throw std::runtime_error ("IsmrmrdHeaderWrapper header invalid (getHeader)");
     }
     return header_;
   }
 
   std::vector<unsigned char> IsmrmrdHeaderWrapper::serialize()
   {
+    if (!header_valid_)
+    {
+      throw std::runtime_error ("IsmrmrdHeaderWrapper header invalid (deserialize)");
+    }
+
     std::stringstream sstr;
     ISMRMRD::serialize (header_, sstr);
     std::string xml_header = sstr.str();
@@ -911,14 +916,9 @@ namespace ISMRMRD
     const std::vector<unsigned char>& buffer
   )
   {
-    if (!header_valid_)
-    {
-      throw std::runtime_error ("IsmrmrdHeaderWrapper header invalid");
-    }
-
     std::string xml (buffer.begin(), buffer.end());
     ISMRMRD::deserialize (xml.c_str(), header_);
+    header_valid_ = true;
   }
-
 
 }

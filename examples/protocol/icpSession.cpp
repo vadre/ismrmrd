@@ -30,14 +30,20 @@ icpSession::~icpSession
  ******************************************************************************/
 void icpSession::beginReceiving
 (
+  icpUserAppBase* user_obj
 )
 {
+  if (!user_obj)
+  {
+    throw std::runtime_error ("User object base pointer invalid");
+  }
+  _user_obj = user_obj;
+
   _writer = std::thread (&icpSession::transmit, this);
 
- std::cout << __func__ <<": 1\n";
+  std::cout << __func__ << ": starting\n";
   while (!_stop)
   {
- std::cout << __func__ <<": 2\n";
     if (!getMessage())
     {
       std::cout << __func__ <<": getMessage Error!\n";
@@ -47,13 +53,13 @@ void icpSession::beginReceiving
     }
   }
 
- std::cout << __func__ <<": 3\n";
+  std::cout << __func__ <<": stopped receiving\n";
+
   if (_writer.joinable())
   {
- std::cout << __func__ <<": 4\n";
     _writer.join();
   }
- std::cout << __func__ <<": 5\n";
+  std::cout << __func__ <<": Writing and receiving done\n";
 
   return;
 }
@@ -185,42 +191,60 @@ void icpSession::deliver
   ISMRMRD::Command cmd;
   ISMRMRD::IsmrmrdHeaderWrapper wrapper;
   ISMRMRD::ErrorNotification err;
+  ISMRMRD::Acquisition<int16_t> a16;
+  ISMRMRD::Acquisition<int32_t> a32;
   ISMRMRD::Acquisition<float> aflt;
   ISMRMRD::Acquisition<double> adbl;
+  ISMRMRD::Image<int16_t> i16;
+  ISMRMRD::Image<uint16_t> iu16;
+  ISMRMRD::Image<int32_t> i32;
+  ISMRMRD::Image<uint32_t> iu32;
   ISMRMRD::Image<float> iflt;
   ISMRMRD::Image<double> idbl;
+  ISMRMRD::Image<std::complex<float> > icxflt;
+  ISMRMRD::Image<std::complex<double> > icxdbl;
 
   switch (in_msg.ehdr.entity_type)
   {
     case ISMRMRD::ISMRMRD_HANDSHAKE:
 
       hand.deserialize (in_msg.data);
-      call (in_msg.ehdr.entity_type, hand);
+      call (in_msg.ehdr.entity_type, hand, _user_obj);
       break;
 
     case ISMRMRD::ISMRMRD_COMMAND:
 
       cmd.deserialize (in_msg.data);
-      call (in_msg.ehdr.entity_type, cmd);
+      call (in_msg.ehdr.entity_type, cmd, _user_obj);
       break;
 
     case ISMRMRD::ISMRMRD_HEADER_WRAPPER:
 
       wrapper.deserialize (in_msg.data);
-      call (ISMRMRD::ISMRMRD_HEADER, wrapper.getHeader());
+      call (ISMRMRD::ISMRMRD_HEADER, wrapper.getHeader(), _user_obj);
       break;
 
     case ISMRMRD::ISMRMRD_MRACQUISITION:
 
+      if (in_msg.ehdr.storage_type == ISMRMRD::ISMRMRD_SHORT)
+      {
+        a16.deserialize (in_msg.data);
+        call (in_msg.ehdr.entity_type, &a16, in_msg.ehdr.storage_type, _user_obj);
+      }
+      else if (in_msg.ehdr.storage_type == ISMRMRD::ISMRMRD_INT)
+      {
+        a32.deserialize (in_msg.data);
+        call (in_msg.ehdr.entity_type, &a32, in_msg.ehdr.storage_type, _user_obj);
+      }
       if (in_msg.ehdr.storage_type == ISMRMRD::ISMRMRD_FLOAT)
       {
         aflt.deserialize (in_msg.data);
-        call (in_msg.ehdr.entity_type, aflt, in_msg.ehdr.storage_type);
+        call (in_msg.ehdr.entity_type, &aflt, in_msg.ehdr.storage_type, _user_obj);
       }
       else if (in_msg.ehdr.storage_type == ISMRMRD::ISMRMRD_DOUBLE)
       {
         adbl.deserialize (in_msg.data);
-        call (in_msg.ehdr.entity_type, adbl, in_msg.ehdr.storage_type);
+        call (in_msg.ehdr.entity_type, &adbl, in_msg.ehdr.storage_type, _user_obj);
       }
       else
       {
@@ -232,20 +256,50 @@ void icpSession::deliver
     case ISMRMRD::ISMRMRD_ERROR_NOTIFICATION:
 
       err.deserialize (in_msg.data);
-      call (in_msg.ehdr.entity_type, err);
+      call (in_msg.ehdr.entity_type, err, _user_obj);
       break;
 
     case ISMRMRD::ISMRMRD_IMAGE:
 
-      if (in_msg.ehdr.storage_type == ISMRMRD::ISMRMRD_FLOAT)
+      if (in_msg.ehdr.storage_type == ISMRMRD::ISMRMRD_SHORT)
+      {
+        i16.deserialize (in_msg.data);
+        call (in_msg.ehdr.entity_type, &i16, in_msg.ehdr.storage_type, _user_obj);
+      }
+      else if (in_msg.ehdr.storage_type == ISMRMRD::ISMRMRD_USHORT)
+      {
+        iu16.deserialize (in_msg.data);
+        call (in_msg.ehdr.entity_type, &iu16, in_msg.ehdr.storage_type, _user_obj);
+      }
+      else if (in_msg.ehdr.storage_type == ISMRMRD::ISMRMRD_INT)
+      {
+        i32.deserialize (in_msg.data);
+        call (in_msg.ehdr.entity_type, &i32, in_msg.ehdr.storage_type, _user_obj);
+      }
+      else if (in_msg.ehdr.storage_type == ISMRMRD::ISMRMRD_UINT)
+      {
+        iu32.deserialize (in_msg.data);
+        call (in_msg.ehdr.entity_type, &iu32, in_msg.ehdr.storage_type, _user_obj);
+      }
+      else if (in_msg.ehdr.storage_type == ISMRMRD::ISMRMRD_FLOAT)
       {
         iflt.deserialize (in_msg.data);
-        call (in_msg.ehdr.entity_type, iflt, in_msg.ehdr.storage_type);
+        call (in_msg.ehdr.entity_type, &iflt, in_msg.ehdr.storage_type, _user_obj);
       }
       else if (in_msg.ehdr.storage_type == ISMRMRD::ISMRMRD_DOUBLE)
       {
         idbl.deserialize (in_msg.data);
-        call (in_msg.ehdr.entity_type, idbl, in_msg.ehdr.storage_type);
+        call (in_msg.ehdr.entity_type, &idbl, in_msg.ehdr.storage_type, _user_obj);
+      }
+      else if (in_msg.ehdr.storage_type == ISMRMRD::ISMRMRD_CXFLOAT)
+      {
+        icxflt.deserialize (in_msg.data);
+        call (in_msg.ehdr.entity_type, &icxflt, in_msg.ehdr.storage_type, _user_obj);
+      }
+      else if (in_msg.ehdr.storage_type == ISMRMRD::ISMRMRD_CXDOUBLE)
+      {
+        icxdbl.deserialize (in_msg.data);
+        call (in_msg.ehdr.entity_type, &icxdbl, in_msg.ehdr.storage_type, _user_obj);
       }
       else
       {
@@ -309,8 +363,9 @@ template<> void icpSession::registerHandler (CB_IMAGE,   uint32_t);
  ******************************************************************************/
 bool icpSession::forwardMessage
 (
-  ISMRMRD::EntityType type,
-  ISMRMRD::Entity*    entity
+  ISMRMRD::EntityType  etype,
+  ISMRMRD::Entity*     entity,
+  ISMRMRD::StorageType stype
 )
 {
   bool ret_val = true;
@@ -320,26 +375,28 @@ bool icpSession::forwardMessage
   std::vector <unsigned char> e_buffer;
 
   head.version     = ISMRMRD_VERSION_MAJOR;
-  head.entity_type = type;
+  head.entity_type = etype;
 
-  switch (type)
+  switch (etype)
   {
     case ISMRMRD::ISMRMRD_MRACQUISITION:
 
-      head.storage_type =
-        static_cast<ISMRMRD::Acquisition<int16_t>* >(entity)->getStorageType();
-      head.stream       =
-        static_cast<ISMRMRD::Acquisition<int16_t>* >(entity)->getStream();
+      head.storage_type = stype;
+      head.stream       = ISMRMRD::ISMRMRD_STREAM_ACQUISITION_DATA;
       e_buffer          = entity->serialize();
       break;
 
     case ISMRMRD::ISMRMRD_IMAGE:
 
-      head.storage_type =
-        static_cast<ISMRMRD::Image<int16_t>* >(entity)->getStorageType();
-      head.stream       =
-        static_cast<ISMRMRD::Image<int16_t>* >(entity)->getStream();
-      e_buffer = entity->serialize();
+      std::cout << __func__ << ": 1\n";
+      head.storage_type = stype;
+      head.stream       = ISMRMRD::ISMRMRD_STREAM_IMAGE;
+      std::cout << __func__ << ": 2, entity = " << entity << "\n";
+
+      std::cout << "storage = " << static_cast<ISMRMRD::Image<float>*>(entity)->getStorageType() << "\n";
+
+      e_buffer = static_cast<ISMRMRD::Image<float>*>(entity)->serialize();
+      std::cout << __func__ << ": 3\n";
       break;
 
     case ISMRMRD::ISMRMRD_HEADER_WRAPPER:
@@ -434,31 +491,24 @@ void icpSession::transmit
 {
   std::cout << __func__ << ": (" << _id << ") started\n";
 
-  struct timespec  ts = {0};
+  struct timespec  ts;
   ts.tv_sec  =     0;
-  ts.tv_nsec =     1000000;
-  //ts.tv_nsec =     10000000;
+  ts.tv_nsec =     10000000;
   int print = 0;
 
-  if (200 > print++) std::cout << __func__ << " 1\n";
   while (!_stop || _oq.size() > 0)
   {
-    if (200 > print++) std::cout << __func__ << " 2\n";
     while (_oq.size() > 0)
     {
-      if (200 > print++) std::cout << __func__ << " 3\n";
       OUT_MSG msg;
       msg = _oq.front();
-      if (200 > print++) std::cout << __func__ << " 4\n";
       boost::asio::write (*_sock,
                           boost::asio::buffer (msg.data, msg.data.size()));
-      if (200 > print++) std::cout << __func__ << " 5\n";
       _oq.pop();
-      if (200 > print++) std::cout << __func__ << " 6\n";
+      print = 0;
     }
-      if (200 > print++) std::cout << __func__ << " 7\n";
-    nanosleep (&ts, (struct timespec*)NULL);
-      if (200 > print++) std::cout << __func__ << " 8\n";
+      //if (1 > print++) std::cout << "  ^^\n";
+    nanosleep (&ts, NULL);
   }
 
   std::cout << "Writer (" << _id << "): Done!\n";

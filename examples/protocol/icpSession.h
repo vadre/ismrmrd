@@ -21,16 +21,16 @@ public:
 
            icpSession            (SOCKET_PTR sock, uint32_t id);
            ~icpSession           ();
-  void     beginReceiving        ();
+  void     beginReceiving        (icpUserAppBase* user_obj);
   void     shutdown              ();
-  bool     forwardMessage        (ISMRMRD::EntityType, ISMRMRD::Entity*);
-  //template <typename F, typename E, typename S>
-  //void     registerHandler       (F func, E etype, S stype);
+  bool     forwardMessage        (ISMRMRD::EntityType, ISMRMRD::Entity*,
+                                  ISMRMRD::StorageType stype = ISMRMRD::ISMRMRD_CHAR);
   template <typename F, typename E>
   void     registerHandler       (F func, E etype);
 
 private:
   SOCKET_PTR                     _sock;
+  icpUserAppBase*                _user_obj;
   bool                           _stop;
   uint32_t                       _id;   // debug only
   std::queue<OUT_MSG>            _oq;
@@ -63,21 +63,5 @@ void icpSession::registerHandler
 
   return;
 }
-/*
-template <typename F, typename E, typename S>
-void icpServer::registerHandler
-(
-  F func,
-  E etype,
-  S stype
-)
-{
-  std::unique_ptr<F> f_uptr (new F (func));
-  uint32_t index = etype * 100 + stype; //TODO: ISMRMRD::StorageType <= 99
-  _callbacks.insert (CB_MAP::value_type (index, std::move (f_uptr)));
-
-  return;
-}
-*/
 
 #endif // ICP_SESSION_H

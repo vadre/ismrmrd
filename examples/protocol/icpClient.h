@@ -7,7 +7,7 @@
 using ICP_SESSION = std::shared_ptr<icpSession>;
 /*******************************************************************************
  ******************************************************************************/
-class icpClient
+class icpClient : public icpUserAppBase
 {
 public:
 
@@ -32,21 +32,20 @@ private:
   bool                   _task_done;
 
   bool                   _header_received; // for debug only
-  //std::thread            _input_thread;
   ISMRMRD::IsmrmrdHeader _header;          // For debug only
 
-  void sendCommand (ISMRMRD::CommandType cmd_type, uint32_t cmd_id);
-  void sendHandshake ();
-  void sendError (ISMRMRD::ErrorType type, std::string descr);
+  void sendCommand (ISMRMRD::CommandType cmd_type, uint32_t cmd_id, icpClient* inst);
+  void sendHandshake (icpClient* inst);
+  void sendError (ISMRMRD::ErrorType type, std::string descr, icpClient* inst);
   void writeImage (ISMRMRD::Dataset& dset, ISMRMRD::Entity* ent, uint32_t strg);
-  //void sendAcquisitions (ISMRMRD::Dataset& dset, ISMRMRD::StorageType storage);
-  void sendAcquisitions (ISMRMRD::Dataset& dset, uint32_t storage);
+  template <typename S>
+  void sendAcquisitions (ISMRMRD::Dataset& dset);
 
   void beginInput ();
 
-  void handleImage             (ISMRMRD::Entity* ent, uint32_t storage);
-  void handleCommand           (ISMRMRD::Command msg);
-  void handleErrorNotification (ISMRMRD::ErrorNotification msg);
-  void handleIsmrmrdHeader     (ISMRMRD::IsmrmrdHeader msg);
-  void handleHandshake         (ISMRMRD::Handshake msg);
+  void handleImage    (ISMRMRD::Entity* ent, uint32_t storage, icpUserAppBase* p);
+  void handleCommand           (ISMRMRD::Command msg, icpUserAppBase* p);
+  void handleErrorNotification (ISMRMRD::ErrorNotification msg, icpUserAppBase* p);
+  void handleIsmrmrdHeader     (ISMRMRD::IsmrmrdHeader msg, icpUserAppBase* p);
+  void handleHandshake         (ISMRMRD::Handshake msg, icpUserAppBase* p);
 };

@@ -56,17 +56,19 @@ enum Constant {
 
 /** Storage Types */
 enum StorageType {
-    ISMRMRD_CHAR = 0,     /**< corresponds to char           */
-    ISMRMRD_USHORT = 1,   /**< corresponds to uint16_t       */
-    ISMRMRD_SHORT = 2,    /**< corresponds to int16_t        */
-    ISMRMRD_UINT = 3,     /**< corresponds to uint32_t       */
-    ISMRMRD_INT = 4,      /**< corresponds to int32_t        */
-    ISMRMRD_ULONG = 5,    /**< corresponds to uint64_t       */
-    ISMRMRD_LONG = 6,     /**< corresponds to int64_t        */
-    ISMRMRD_FLOAT = 7,    /**< corresponds to float          */
-    ISMRMRD_DOUBLE = 8,   /**< corresponds to double         */
-    ISMRMRD_CXFLOAT = 9,  /**< corresponds to complex float  */
-    ISMRMRD_CXDOUBLE = 10 /**< corresponds to complex double */
+    ISMRMRD_CHAR = 0,      /**< corresponds to char           */
+    ISMRMRD_USHORT = 1,    /**< corresponds to uint16_t       */
+    ISMRMRD_SHORT = 2,     /**< corresponds to int16_t        */
+    ISMRMRD_UINT = 3,      /**< corresponds to uint32_t       */
+    ISMRMRD_INT = 4,       /**< corresponds to int32_t        */
+    ISMRMRD_ULONG = 5,     /**< corresponds to uint64_t       */
+    ISMRMRD_LONG = 6,      /**< corresponds to int64_t        */
+    ISMRMRD_FLOAT = 7,     /**< corresponds to float          */
+    ISMRMRD_DOUBLE = 8,    /**< corresponds to double         */
+    ISMRMRD_CXFLOAT = 9,   /**< corresponds to complex float  */
+    ISMRMRD_CXDOUBLE = 10, /**< corresponds to complex double */
+    ISMRMRD_CXSHORT = 9,   /**< corresponds to complex int16_t  */
+    ISMRMRD_CXINT = 10     /**< corresponds to complex int32_t */
 };
 
 enum EntityType {

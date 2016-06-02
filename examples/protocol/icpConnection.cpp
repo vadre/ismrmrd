@@ -42,6 +42,7 @@ bool icpConnection::registerUserApp
 }
 
 /*******************************************************************************
+ For server
  ******************************************************************************/
 void icpConnection::start ()
 {
@@ -63,6 +64,7 @@ void icpConnection::start ()
 }
 
 /*******************************************************************************
+ For client
  ******************************************************************************/
 void icpConnection::connect ()
 {
@@ -70,32 +72,24 @@ void icpConnection::connect ()
   {
     std::cout << "Connecting to <" << _host << "> on port " << _port << "\n\n";
     boost::asio::io_service io_service;
-    std::cout << __func__ << ": 1\n";
     SOCKET_PTR sock (new tcp::socket (io_service));
-    std::cout << __func__ << ": 2\n";
     tcp::endpoint endpoint
       (boost::asio::ip::address::from_string (_host), _port);
-    std::cout << __func__ << ": 3\n";
 
     boost::system::error_code error = boost::asio::error::host_not_found;
-    std::cout << __func__ << ": 4\n";
-    //(*sock).connect(endpoint, error);
     sock->connect(endpoint, error);
-    std::cout << __func__ << ": 5\n";
     if (error)
     {
-    std::cout << __func__ << ": 6\n";
       throw boost::system::system_error(error);
     }
-    std::cout << __func__ << ": 7\n";
 
     _running = true;
-    std::cout << __func__ << ": 8\n";
+    std::cout << __func__ << ": new session\n";
     ICP_SESSION session (new icpSession (sock, 777));
-    std::cout << __func__ << ": 9\n";
+    std::cout << __func__ << ": starting user app\n";
     std::thread t (runUserApp, session, 777);
-    std::cout << __func__ << ": 10\n";
     t.join();
+    std::cout << __func__ << ": Client thread joined\n";
   }
   return;
 }
