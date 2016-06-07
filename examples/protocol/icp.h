@@ -7,11 +7,19 @@
 #include "ismrmrd/xml.h"
 
 using boost::asio::ip::tcp;
-using SOCKET_PTR = std::shared_ptr<boost::asio::ip::tcp::socket>;
 
-/*******************************************************************************
- ******************************************************************************/
-class icpUserAppBase { public: virtual ~icpUserAppBase() = default; };
+using SOCKET_PTR = std::shared_ptr<boost::asio::ip::tcp::socket>;
+using STYPE      = ISMRMRD::StorageType;
+using ETYPE      = ISMRMRD::EntityType;
+using ENTITY     = ISMRMRD::Entity;
+using HANDSHAKE  = ISMRMRD::Handshake;
+using COMMAND    = ISMRMRD::Command;
+using ERRNOTE    = ISMRMRD::ErrorNotification;
+using XMLHEAD    = ISMRMRD::IsmrmrdHeader;
+using XMLWRAP    = ISMRMRD::IsmrmrdHeaderWrapper;
+//using WAVEFORM  = ISMRMRD::Waveform;
+//using BLUB      = ISMRMRD::Blub;
+
 /*******************************************************************************
  * Constants - DO NOT MODIFY!!!
  ******************************************************************************/
@@ -22,35 +30,6 @@ const uint32_t      ICP_ERROR_SOCKET_EOF          = 100;
 const uint32_t      ICP_ERROR_SOCKET_WRONG_LENGTH = 200;
 const uint32_t      ICP_ENTITY_WITH_NO_DATA       = 300;
 
-/*******************************************************************************
- * Entity handlers management - DO NOT MODIFY!!!
- ******************************************************************************/
-struct CB_BASE
-{
-  virtual ~CB_BASE() = default;
-};
-
-template <typename ...A>
-struct CB_STRUCT : public CB_BASE
-{
-  using CB = std::function <void (A...)>;
-  CB callback;
-  CB_STRUCT (CB p_callback) : callback (p_callback) {}
-};
-using CB_MAP = std::map<uint32_t, std::unique_ptr<CB_BASE> >;
-
-/*******************************************************************************
- * Handlers callback signatures
- * These are handler callback signatures definitions
- ******************************************************************************/
-using BEGIN_INPUT_CALLBACK_FUNC = bool (*)();
-
-using CB_MR_ACQ   = CB_STRUCT <ISMRMRD::Entity*, uint32_t, icpUserAppBase*>;
-using CB_IMAGE    = CB_STRUCT <ISMRMRD::Entity*, uint32_t, icpUserAppBase*>;
-using CB_HANDSHK  = CB_STRUCT <ISMRMRD::Handshake, icpUserAppBase*>;
-using CB_ERRNOTE  = CB_STRUCT <ISMRMRD::ErrorNotification, icpUserAppBase*>;
-using CB_COMMAND  = CB_STRUCT <ISMRMRD::Command, icpUserAppBase*>;
-using CB_XMLHEAD  = CB_STRUCT <ISMRMRD::IsmrmrdHeader, icpUserAppBase*>;
 /*******************************************************************************
  * Byte order utilities - DO NOT MODIFY!!!
  ******************************************************************************/

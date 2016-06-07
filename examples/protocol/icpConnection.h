@@ -6,8 +6,8 @@
 #include <thread>
 #include "icpSession.h"
 
-using ICP_SESSION = std::shared_ptr<icpSession>;
-using START_USER_APP_FUNC = void (*) (ICP_SESSION, uint32_t);
+//using ICP_SESSION = std::unique_ptr<icpSession>;
+using GET_USER_APP_INSTANCE = icpUserAppBase* (*) (uint32_t);
 
 /*******************************************************************************
  ******************************************************************************/
@@ -15,22 +15,22 @@ class icpConnection
 {
 public:
 
-       icpConnection   (uint16_t port);
-       icpConnection   (std::string host, uint16_t port);
-       ~icpConnection  ();
-  void start           ();
-  void connect         ();
-  bool registerUserApp (START_USER_APP_FUNC func_ptr);
+       icpConnection     (uint16_t port);
+       icpConnection     (std::string host, uint16_t port);
+       ~icpConnection    ();
+  void start             ();
+  void connect           ();
+  bool registerUserApp   (GET_USER_APP_INSTANCE func_ptr);
 
 private:
 
-  static bool          _running;
-  std::string          _host;
-  unsigned short       _port;
-  bool                 _user_app_registered;
-  std::thread          _main_thread;
+  static bool            _running;
+  std::string            _host;
+  unsigned short         _port;
+  bool                   _user_app_registered;
+  std::thread            _main_thread;
 
-  void acceptor        ();
-  START_USER_APP_FUNC  runUserApp;
+  void acceptor          ();
+  GET_USER_APP_INSTANCE  getUserApp;
 };
 #endif // ICP_CONNECTION_H */

@@ -11,28 +11,24 @@ ISMRMRD::Entity* imageReconOne::runReconstruction
   {
     std::vector<ISMRMRD::Acquisition<int16_t> > acqs = getAcquisitions<int16_t> (ents);
     return reconstruct<int16_t> (acqs, hdr);
-    //return reconstruct (acqs, hdr);
   }
 
   if (storage == ISMRMRD::ISMRMRD_INT)
   {
     std::vector<ISMRMRD::Acquisition<int32_t> > acqs = getAcquisitions<int32_t> (ents);
     return reconstruct<int32_t> (acqs, hdr);
-    //return reconstruct (acqs, hdr);
   }
 
   if (storage == ISMRMRD::ISMRMRD_FLOAT)
   {
     std::vector<ISMRMRD::Acquisition<float> > acqs = getAcquisitions<float> (ents);
     return reconstruct<float> (acqs, hdr);
-    //return reconstruct (acqs, hdr);
   }
 
   if (storage == ISMRMRD::ISMRMRD_DOUBLE)
   {
     std::vector<ISMRMRD::Acquisition<double> > acqs = getAcquisitions<double> (ents);
     return reconstruct<double> (acqs, hdr);
-    //return reconstruct (acqs, hdr);
   }
 
   throw std::runtime_error ("MR Acquisition unexpected storage type");
@@ -118,7 +114,6 @@ ISMRMRD::Entity* imageReconOne::reconstruct
     }
   }
 
-  std::cout << __func__ << ": 2\n";
   for (uint16_t coil = 0; coil < num_coils; coil++)
   {
     fftwf_complex* tmp =
@@ -143,9 +138,6 @@ ISMRMRD::Entity* imageReconOne::reconstruct
     fftwf_free(tmp);
   }
 
-  std::cout << __func__ << ": 3\n";
-  //std::unique_ptr<ISMRMRD::Image<S> >
-    //img (new ISMRMRD::Image<S>(r_space.matrixSize.x, r_space.matrixSize.y, 1, 1));
   ISMRMRD::Image<S>* img (new ISMRMRD::Image<S>(r_space.matrixSize.x,
                                                 r_space.matrixSize.y, 1, 1));
 
@@ -157,15 +149,14 @@ ISMRMRD::Entity* imageReconOne::reconstruct
     {
       for (uint16_t coil = 0; coil < num_coils; coil++)
       {
-        img->at(x,y) += (std::abs (buffer.at (x + offset, y, coil))) *
-                        (std::abs (buffer.at (x + offset, y, coil)));
+        img->at (x, y) += (std::abs (buffer.at (x + offset, y, coil))) *
+                          (std::abs (buffer.at (x + offset, y, coil)));
       }
 
       img->at (x, y) = std::sqrt (img->at (x, y)); // Scale
     }
   }
 
-  std::cout << __func__ << ": 4\n";
   // The following are extra guidance we can put in the image header
   img->setStream (ISMRMRD::ISMRMRD_STREAM_IMAGE);
   img->setImageType (ISMRMRD::ISMRMRD_IMTYPE_MAGNITUDE);
@@ -173,16 +164,5 @@ ISMRMRD::Entity* imageReconOne::reconstruct
   img->setFieldOfView (r_space.fieldOfView_mm.x,
                        r_space.fieldOfView_mm.y,
                        r_space.fieldOfView_mm.z);
-
-  //std::shared_ptr<ISMRMRD::Image<S>*> img_entity (new ISMRMRD::Image<S>*(&(*img)));
-
-  //std::cout << static_cast<ISMRMRD::Image<S>*>(img_entity)->getStream() << "\n";
-  //std::cout << "storage = " << static_cast<ISMRMRD::Image<S>*>(img_entity)->getStorageType() << "\n";
-  std::cout << "stream  = " << img->getStream() << "\n";
-  std::cout << "storage = " << img->getStorageType() << "\n";
-  std::cout << __func__ << ": img = " << img << ", done " << "\n";
-
-  
-
   return img;
 }

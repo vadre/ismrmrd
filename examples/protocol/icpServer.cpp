@@ -6,48 +6,40 @@ using namespace std::placeholders;
  ******************************************************************************/
 void icpServer::handleCommand
 (
-  ISMRMRD::Command  msg,
-  icpUserAppBase*   base
+  COMMAND  msg
 )
 {
-  icpServer* inst = static_cast<icpServer*>(base);
-
-  auto fp1 = std::bind (&icpServer::handleIsmrmrdHeader, *this, _1, _2);
-  auto fp2 = std::bind (&icpServer::handleAcquisition, *this, _1, _2, _3);
-
   switch (msg.getCommandType())
   {
     case ISMRMRD::ISMRMRD_COMMAND_CONFIG_IMREC_ONE:
 
       std::cout << __func__ << ": Received config1\n";
-      inst->_imrec = new imageReconOne;
-
-      inst->_session->registerHandler ((CB_XMLHEAD) fp1,
-                                       ISMRMRD::ISMRMRD_HEADER);
-      inst->_session->registerHandler ((CB_MR_ACQ) fp2,
-                                       ISMRMRD::ISMRMRD_MRACQUISITION);
+      _imrec = new imageReconOne;
+      _session->subscribe (ISMRMRD::ISMRMRD_HEADER, true);
+      _session->subscribe (ISMRMRD::ISMRMRD_MRACQUISITION, true);
+      _session->subscribe (ISMRMRD::ISMRMRD_ERROR_NOTIFICATION, true);
       break;
 
     case ISMRMRD::ISMRMRD_COMMAND_CONFIG_IMREC_TWO:
 
       // Another preset option - hasn't been defined yet
-      std::cout << __func__ << ": Received config2\n";
+      std::cout << __func__ << ": Received config2 - not supported\n";
       break;
 
     case ISMRMRD::ISMRMRD_COMMAND_STOP_FROM_CLIENT:
 
       std::cout << __func__ << ": Received STOP\n";
-      inst->_client_done = true;
-      if (inst->_imrec_done)
+      _client_done = true;
+      if (_imrec_done)
       {
-        inst->sendCommand (ISMRMRD::ISMRMRD_COMMAND_DONE_FROM_SERVER, 0, inst);
+        sendCommand (ISMRMRD::ISMRMRD_COMMAND_DONE_FROM_SERVER, 0);
       }
       break;
 
     case ISMRMRD::ISMRMRD_COMMAND_CLOSE_CONNECTION:
 
       std::cout << __func__ << ": Received CLOSE\n";
-      inst->_session->shutdown();
+      _session->shutdown();
       break;
 
     default:
@@ -61,8 +53,7 @@ void icpServer::handleCommand
  ******************************************************************************/
 void icpServer::handleErrorNotification
 (
-  ISMRMRD::ErrorNotification msg,
-  icpUserAppBase*   base
+  ISMRMRD::ErrorNotification msg
 )
 {
   std::cout << __func__ <<":\nError Type: " << msg.getErrorType()
@@ -78,17 +69,15 @@ void icpServer::handleErrorNotification
  ******************************************************************************/
 void icpServer::handleIsmrmrdHeader
 (
-  ISMRMRD::IsmrmrdHeader  msg,
-  icpUserAppBase*   base
+  XMLHEAD  msg
 )
 {
-  icpServer* inst = static_cast<icpServer*>(base);
-
-  inst->_hdr = msg;
-  inst->_header_received = true;
-  ISMRMRD::IsmrmrdHeaderWrapper wrp;
+  std::cout << __func__ << ": received IsmrmrdHeader\n";
+  _hdr = msg;
+  _header_received = true;
+  XMLWRAP wrp;
   wrp.setHeader (msg);
-  inst->_session->forwardMessage (ISMRMRD::ISMRMRD_HEADER_WRAPPER, &wrp); // For demo
+  _session->send (ISMRMRD::ISMRMRD_HEADER_WRAPPER, &wrp); // For demo
 
   return;
 }
@@ -98,14 +87,13 @@ void icpServer::handleIsmrmrdHeader
 void icpServer::sendCommand
 (
   ISMRMRD::CommandType cmd_type,
-  uint32_t             cmd_id,
-  icpServer*           inst
+  uint32_t             cmd_id
 )
 {
-  ISMRMRD::Command msg;
+  COMMAND msg;
   msg.setCommandType (cmd_type);
   msg.setCommandId (cmd_id);
-  inst->_session->forwardMessage (ISMRMRD::ISMRMRD_COMMAND, &msg);
+  _session->send (ISMRMRD::ISMRMRD_COMMAND, &msg);
 
   return;
 }
@@ -114,19 +102,18 @@ void icpServer::sendCommand
  ****************************************************************************/
 void icpServer::clientAccepted
 (
-  ISMRMRD::Handshake  msg,
-  bool                accepted,
-  icpServer*          inst
+  HANDSHAKE  msg,
+  bool       accepted
 )
 {
   msg.setConnectionStatus ((accepted) ?
     ISMRMRD::CONNECTION_ACCEPTED : ISMRMRD::CONNECTION_DENIED_UNKNOWN_USER);
 
-  inst->_session->forwardMessage (ISMRMRD::ISMRMRD_HANDSHAKE, &msg);
+  _session->send (ISMRMRD::ISMRMRD_HANDSHAKE, &msg);
 
   if (!accepted)
   {
-    inst->sendCommand (ISMRMRD::ISMRMRD_COMMAND_DONE_FROM_SERVER, 0, inst);
+    sendCommand (ISMRMRD::ISMRMRD_COMMAND_DONE_FROM_SERVER, 0);
   }
 
   return;
@@ -136,15 +123,12 @@ void icpServer::clientAccepted
  ******************************************************************************/
 void icpServer::handleHandshake
 (
-  ISMRMRD::Handshake  msg,
-  icpUserAppBase*   base
+  HANDSHAKE  msg
 )
 {
-  icpServer* inst = static_cast<icpServer*>(base);
-
   // Could check if the client name is matching a list of expected clients
   std::cout << __func__ << ": client <"<< msg.getClientName() << "> accepted\n";
-  inst->clientAccepted (msg, true, inst);
+  clientAccepted (msg, true);
 
   return;
 }
@@ -154,27 +138,25 @@ void icpServer::handleHandshake
 void icpServer::sendError
 (
   ISMRMRD::ErrorType type,
-  std::string        descr,
-  icpServer*         inst
+  std::string        descr
 )
 {
   ISMRMRD::ErrorNotification msg;
   msg.setErrorType (type);
   msg.setErrorDescription (descr);
-  _session->forwardMessage (ISMRMRD::ISMRMRD_ERROR_NOTIFICATION, &msg);
+  _session->send (ISMRMRD::ISMRMRD_ERROR_NOTIFICATION, &msg);
   return;
 }
 
 /*****************************************************************************
  ****************************************************************************/
-ISMRMRD::Entity* icpServer::copyEntity
+ENTITY* icpServer::copyEntity
 (
-  ISMRMRD::Entity* ent,
-  uint32_t         storage,
-  icpServer*         inst
+  ENTITY* ent,
+  STYPE   stype
 )
 {
-  if (storage == ISMRMRD::ISMRMRD_SHORT)
+  if (stype == ISMRMRD::ISMRMRD_SHORT)
   {
     ISMRMRD::Acquisition<int16_t>* tmp = static_cast<ISMRMRD::Acquisition<int16_t>*>(ent);
     ISMRMRD::Acquisition<int16_t>* acq
@@ -188,7 +170,7 @@ ISMRMRD::Entity* icpServer::copyEntity
     return acq;
   }
 
-  if (storage == ISMRMRD::ISMRMRD_INT)
+  if (stype == ISMRMRD::ISMRMRD_INT)
   {
     ISMRMRD::Acquisition<int32_t>* tmp = static_cast<ISMRMRD::Acquisition<int32_t>*>(ent);
 
@@ -203,7 +185,7 @@ ISMRMRD::Entity* icpServer::copyEntity
     return acq;
   }
 
-  if (storage == ISMRMRD::ISMRMRD_FLOAT)
+  if (stype == ISMRMRD::ISMRMRD_FLOAT)
   {
     ISMRMRD::Acquisition<float>* tmp = static_cast<ISMRMRD::Acquisition<float>*>(ent);
     ISMRMRD::Acquisition<float>* acq
@@ -218,7 +200,7 @@ ISMRMRD::Entity* icpServer::copyEntity
     return acq;
   }
 
-  if (storage == ISMRMRD::ISMRMRD_DOUBLE)
+  if (stype == ISMRMRD::ISMRMRD_DOUBLE)
   {
     ISMRMRD::Acquisition<double>* tmp = static_cast<ISMRMRD::Acquisition<double>*>(ent);
     ISMRMRD::Acquisition<double>* acq
@@ -241,83 +223,65 @@ ISMRMRD::Entity* icpServer::copyEntity
  ******************************************************************************/
 void icpServer::handleAcquisition
 (
-  ISMRMRD::Entity* ent,
-  uint32_t         storage,
-  icpUserAppBase*   base
+  ENTITY* ent,
+  STYPE   stype
 )
 {
-  icpServer* inst = static_cast<icpServer*>(base);
-
-  if (!inst->_acq_storage_set)
+  if (!_acq_storage_set)
   {
-    inst->_acq_storage     = (ISMRMRD::StorageType)storage;
-    inst->_acq_storage_set = true;
+    _acq_storage     = stype;
+    _acq_storage_set = true;
   }
-  else if (inst->_acq_storage != storage)
+  else if (_acq_storage != stype)
   {
     throw std::runtime_error ("Inconsistent acquisition storage type");
   }
 
-  inst->_acqs.push_back (inst->copyEntity (ent, storage, inst));
+  _acqs.push_back (copyEntity (ent, stype));
 
-  if (inst->_acqs.size() == inst->_hdr.encoding[0].encodedSpace.matrixSize.y)
+  if (_header_received &&
+      _acqs.size() == _hdr.encoding[0].encodedSpace.matrixSize.y)
   {
-    ISMRMRD::Entity* img_ent =
-      inst->_imrec->runReconstruction (inst->_acqs,
-                                       (ISMRMRD::StorageType)storage,
-                                       inst->_hdr);
+    ENTITY* img_ent = _imrec->runReconstruction (_acqs, stype, _hdr);
+    _session->send (ISMRMRD::ISMRMRD_IMAGE, img_ent, stype);
+    _imrec_done = true;
 
-    inst->_session->forwardMessage (ISMRMRD::ISMRMRD_IMAGE, img_ent,
-                                    (ISMRMRD::StorageType)storage);
-    inst->_imrec_done = true;
-    if (inst->_client_done)
+    if (_client_done)
     {
-      inst->sendCommand (ISMRMRD::ISMRMRD_COMMAND_DONE_FROM_SERVER, 0, inst);
+      sendCommand (ISMRMRD::ISMRMRD_COMMAND_DONE_FROM_SERVER, 0);
     }
   }
 }
 
 /*******************************************************************************
  ******************************************************************************/
-void icpServer::run ()
+void icpServer::saveSessionPointer
+(
+  icpSession* session
+)
 {
-
-  _session->beginReceiving (this);
+  _session = session;
 }
 
 /*******************************************************************************
  ******************************************************************************/
 icpServer::icpServer
 (
-  ICP_SESSION  session,
-  uint32_t     id    // debug only
+  uint32_t     id   // debug only
 )
-: _session     (session),
-  _header_received (false),
+: _header_received (false),
   _acq_storage_set (false),
   _client_done (false),
   _imrec_done  (false),
   _id          (id)
 {
-
-  std::ios_base::sync_with_stdio(false);
-  std::cin.tie(static_cast<std::ostream*>(0));
-  std::cerr.tie(static_cast<std::ostream*>(0));
-
-  auto fp1 = std::bind (&icpServer::handleHandshake, *this, _1, _2);
-  _session->registerHandler ((CB_HANDSHK) fp1, ISMRMRD::ISMRMRD_HANDSHAKE);
-
-  auto fp2 = std::bind (&icpServer::handleErrorNotification, *this, _1, _2);
-  _session->registerHandler ((CB_ERRNOTE) fp2, ISMRMRD::ISMRMRD_ERROR_NOTIFICATION);
-
-  auto fp3 = std::bind (&icpServer::handleCommand, *this, _1, _2);
-  _session->registerHandler ((CB_COMMAND) fp3, ISMRMRD::ISMRMRD_COMMAND);
-
+  std::cout << __func__ << " (" << _id << ") - starting\n";
 }
 
 /*******************************************************************************
  ******************************************************************************/
 icpServer::~icpServer ()
 {
+  std::cout << __func__ << " (" << _id << ") - completed\n";
   delete (_imrec);
 }

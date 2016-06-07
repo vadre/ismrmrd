@@ -19,8 +19,7 @@ void icpConnection::acceptor ()
     a.accept (*sock);
     std::cout << __func__ << ": Connection #" << id << "\n\n";
 
-    ICP_SESSION session (new icpSession (sock, id));
-    std::thread (runUserApp, session, id).detach();
+    ICP_SESSION session (new icpSession (sock, getUserApp (id), id));
   }
 
   return;
@@ -30,12 +29,12 @@ void icpConnection::acceptor ()
  ******************************************************************************/
 bool icpConnection::registerUserApp
 (
-  START_USER_APP_FUNC func_ptr
+  GET_USER_APP_INSTANCE func_ptr
 )
 {
   if (func_ptr)
   {
-    runUserApp           = func_ptr;
+    getUserApp           = func_ptr;
     _user_app_registered = true;
   }
   return _user_app_registered;
@@ -84,12 +83,7 @@ void icpConnection::connect ()
     }
 
     _running = true;
-    std::cout << __func__ << ": new session\n";
-    ICP_SESSION session (new icpSession (sock, 777));
-    std::cout << __func__ << ": starting user app\n";
-    std::thread t (runUserApp, session, 777);
-    t.join();
-    std::cout << __func__ << ": Client thread joined\n";
+    ICP_SESSION session (new icpSession (sock, getUserApp (777), 777));
   }
   return;
 }
