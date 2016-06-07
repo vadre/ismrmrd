@@ -79,8 +79,6 @@ int main(int argc, char** argv)
 
     NDArray<std::complex<float> > coil_images(dims);
 
-    std::cout << "coil images size = " << matrix_size*ros << " x " << matrix_size << " x " << ncoils << "\n";
-
     for (unsigned int c = 0; c < ncoils; c++) {
         for (unsigned int y = 0; y < matrix_size; y++) {
             for (unsigned int x = 0; x < matrix_size; x++) {
@@ -89,7 +87,6 @@ int main(int argc, char** argv)
             }
         }
     }
-    std::cout << "coil images size = " << matrix_size*ros << " x " << matrix_size << " x " << ncoils << "\n";
 
     //Let's append the data to the file
     //Create if needed
@@ -104,7 +101,6 @@ int main(int argc, char** argv)
         add_noise(acq,noise_level);
         acq.setDwellTime_ns(5000);
         d.appendAcquisition(acq, 0);
-        std::cout << "NC: readout = " << readout << ", ncoils = " << ncoils << "\n";
     }
 
     if (store_coordinates) {
@@ -115,7 +111,6 @@ int main(int argc, char** argv)
 
     acq.setAvailableChannels(ncoils);
     acq.setCenterSample(readout / 2);
-    std::cout << "readout = " << readout << ", ncoils = " << ncoils << "\n";
 
     for (unsigned int r = 0; r < repetitions; r++) {
         for (unsigned int a = 0; a < acc_factor; a++) {
@@ -150,7 +145,6 @@ int main(int argc, char** argv)
                         acq.trajAt(1, x) = ky;
                     }
                 } 
-std::cout << "num_samples: " << acq.getNumberOfSamples() << ", traj: " << acq.getTraj().size() << ", data: " << acq.getData().size() << "\n";
                 d.appendAcquisition(acq, 0);
             }
         }
