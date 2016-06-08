@@ -152,7 +152,6 @@ ISMRMRD::Entity* imageReconOne::reconstruct
         img->at (x, y) += (std::abs (buffer.at (x + offset, y, coil))) *
                           (std::abs (buffer.at (x + offset, y, coil)));
       }
-
       img->at (x, y) = std::sqrt (img->at (x, y)); // Scale
     }
   }
