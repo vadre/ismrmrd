@@ -144,7 +144,8 @@ int main(int argc, char** argv)
     for (uint16_t y = 0; y < r_space.matrixSize.y; y++) {
         for (uint16_t x = 0; x < r_space.matrixSize.x; x++) {
             for (uint16_t c=0; c<nCoils; c++) {
-                img_out.at(x,y) += (std::abs(buffer.at(x+offset, y, c))) * (std::abs(buffer.at(x+offset, y, c)));
+                img_out.at(x,y) += (std::abs(buffer.at(x+offset, y, c))) *
+                                   (std::abs(buffer.at(x+offset, y, c)));
             }
             img_out.at(x,y) = std::sqrt(img_out.at(x,y));            
         }
