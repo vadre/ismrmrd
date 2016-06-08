@@ -106,16 +106,22 @@ void icpServer::clientAccepted
   bool       accepted
 )
 {
+  std::cout << __func__ << ": 1" << "\n";
   msg.setConnectionStatus ((accepted) ?
     ISMRMRD::CONNECTION_ACCEPTED : ISMRMRD::CONNECTION_DENIED_UNKNOWN_USER);
 
+  std::cout << __func__ << ": 2" << "\n";
   _session->send (ISMRMRD::ISMRMRD_HANDSHAKE, &msg);
 
+  std::cout << __func__ << ": 3" << "\n";
   if (!accepted)
   {
+  std::cout << __func__ << ": 4" << "\n";
     sendCommand (ISMRMRD::ISMRMRD_COMMAND_DONE_FROM_SERVER, 0);
+  std::cout << __func__ << ": 5" << "\n";
   }
 
+  std::cout << __func__ << ": 6" << "\n";
   return;
 }
 
@@ -127,8 +133,121 @@ void icpServer::handleHandshake
 )
 {
   // Could check if the client name is matching a list of expected clients
-  std::cout << __func__ << ": client <"<< msg.getClientName() << "> accepted\n";
-  clientAccepted (msg, true);
+  std::cout << __func__ << ": client_name = <"<< msg.getClientName() << ">\n";
+
+  bool status = true;
+  
+  std::cout << __func__ << ": 1" << "\n";
+  status = msg.verifyManifestEntry (ISMRMRD::ISMRMRD_HANDSHAKE,
+                                    ISMRMRD::ISMRMRD_CHAR, "ISHANDSHAKE");
+  std::cout << __func__ << ": 2" << "\n";
+  if (!status) clientAccepted (msg, false);
+  status = msg.verifyManifestEntry (ISMRMRD::ISMRMRD_COMMAND,
+                                    ISMRMRD::ISMRMRD_CHAR, "ISCOMMAND");
+  std::cout << __func__ << ": 3" << "\n";
+  if (!status) clientAccepted (msg, false);
+  status = msg.verifyManifestEntry (ISMRMRD::ISMRMRD_MRACQUISITION,
+                                    ISMRMRD::ISMRMRD_SHORT, "ISACQSHORT");
+  std::cout << __func__ << ": 4" << "\n";
+  if (!status) clientAccepted (msg, false);
+  std::cout << __func__ << ": 4.1" << "\n";
+  status = msg.verifyManifestEntry (ISMRMRD::ISMRMRD_MRACQUISITION,
+                                    ISMRMRD::ISMRMRD_INT, "ISACQINT");
+  std::cout << __func__ << ": 5" << "\n";
+  if (!status) clientAccepted (msg, false);
+  status = msg.verifyManifestEntry (ISMRMRD::ISMRMRD_MRACQUISITION,
+                                    ISMRMRD::ISMRMRD_FLOAT, "ISACQFLT");
+  std::cout << __func__ << ": 6" << "\n";
+  if (!status) clientAccepted (msg, false);
+  status = msg.verifyManifestEntry (ISMRMRD::ISMRMRD_MRACQUISITION,
+                                    ISMRMRD::ISMRMRD_DOUBLE, "ISACQDBL");
+  std::cout << __func__ << ": 7" << "\n";
+  if (!status) clientAccepted (msg, false);
+  status = msg.verifyManifestEntry (ISMRMRD::ISMRMRD_IMAGE,
+                                    ISMRMRD::ISMRMRD_USHORT, "ISIMUSHORT");
+  std::cout << __func__ << ": 8" << "\n";
+  if (!status) clientAccepted (msg, false);
+  status = msg.verifyManifestEntry (ISMRMRD::ISMRMRD_IMAGE,
+                                    ISMRMRD::ISMRMRD_SHORT, "ISIMSHORT");
+  std::cout << __func__ << ": 9" << "\n";
+  if (!status) clientAccepted (msg, false);
+  status = msg.verifyManifestEntry (ISMRMRD::ISMRMRD_IMAGE,
+                                    ISMRMRD::ISMRMRD_UINT, "ISIMUINT");
+  std::cout << __func__ << ": 10" << "\n";
+  if (!status) clientAccepted (msg, false);
+  status = msg.verifyManifestEntry (ISMRMRD::ISMRMRD_IMAGE,
+                                    ISMRMRD::ISMRMRD_INT, "ISIMINT");
+  std::cout << __func__ << ": 11" << "\n";
+  if (!status) clientAccepted (msg, false);
+  status = msg.verifyManifestEntry (ISMRMRD::ISMRMRD_IMAGE,
+                                    ISMRMRD::ISMRMRD_FLOAT, "ISIMFLT");
+  std::cout << __func__ << ": 12" << "\n";
+  if (!status) clientAccepted (msg, false);
+  status = msg.verifyManifestEntry (ISMRMRD::ISMRMRD_IMAGE,
+                                    ISMRMRD::ISMRMRD_DOUBLE, "ISIMDBL");
+  std::cout << __func__ << ": 13" << "\n";
+  if (!status) clientAccepted (msg, false);
+  status = msg.verifyManifestEntry (ISMRMRD::ISMRMRD_IMAGE,
+                                    ISMRMRD::ISMRMRD_CXFLOAT, "ISIMCXFLT");
+  std::cout << __func__ << ": 14" << "\n";
+  if (!status) clientAccepted (msg, false);
+  status = msg.verifyManifestEntry (ISMRMRD::ISMRMRD_IMAGE,
+                                    ISMRMRD::ISMRMRD_CXDOUBLE, "ISIMCXDBL");
+  std::cout << __func__ << ": 15" << "\n";
+  if (!status) clientAccepted (msg, false);
+  status = msg.verifyManifestEntry (ISMRMRD::ISMRMRD_HEADER,
+                                    ISMRMRD::ISMRMRD_CHAR, "ISHEADER");
+  std::cout << __func__ << ": 16" << "\n";
+  if (!status) clientAccepted (msg, false);
+  status = msg.verifyManifestEntry (ISMRMRD::ISMRMRD_HEADER_WRAPPER,
+                                    ISMRMRD::ISMRMRD_CHAR, "ISHEADWRAP");
+  std::cout << __func__ << ": 17" << "\n";
+  if (!status) clientAccepted (msg, false);
+  status = msg.verifyManifestEntry (ISMRMRD::ISMRMRD_ERROR_NOTIFICATION,
+                                    ISMRMRD::ISMRMRD_CHAR, "ISERRNOTE");
+  std::cout << __func__ << ": 18" << "\n";
+
+
+  /*if (msg.verifyManifestEntry (ISMRMRD::ISMRMRD_HANDSHAKE,
+                               ISMRMRD::ISMRMRD_CHAR, "ISHANDSHAKE") &&
+      msg.verifyManifestEntry (ISMRMRD::ISMRMRD_COMMAND,
+                               ISMRMRD::ISMRMRD_CHAR, "ISCOMMAND") &&
+      msg.verifyManifestEntry (ISMRMRD::ISMRMRD_MRACQUISITION,
+                               ISMRMRD::ISMRMRD_SHORT, "ISACQSHORT") &&
+      msg.verifyManifestEntry (ISMRMRD::ISMRMRD_MRACQUISITION,
+                               ISMRMRD::ISMRMRD_INT, "ISACQINT") &&
+      msg.verifyManifestEntry (ISMRMRD::ISMRMRD_MRACQUISITION,
+                               ISMRMRD::ISMRMRD_FLOAT, "ISACQFLT") &&
+      msg.verifyManifestEntry (ISMRMRD::ISMRMRD_MRACQUISITION,
+                               ISMRMRD::ISMRMRD_DOUBLE, "ISACQDBL") &&
+      msg.verifyManifestEntry (ISMRMRD::ISMRMRD_IMAGE,
+                               ISMRMRD::ISMRMRD_USHORT, "ISIMUSHORT") &&
+      msg.verifyManifestEntry (ISMRMRD::ISMRMRD_IMAGE,
+                               ISMRMRD::ISMRMRD_SHORT, "ISIMSHORT") &&
+      msg.verifyManifestEntry (ISMRMRD::ISMRMRD_IMAGE,
+                               ISMRMRD::ISMRMRD_UINT, "ISIMUINT") &&
+      msg.verifyManifestEntry (ISMRMRD::ISMRMRD_IMAGE,
+                               ISMRMRD::ISMRMRD_INT, "ISIMINT") &&
+      msg.verifyManifestEntry (ISMRMRD::ISMRMRD_IMAGE,
+                               ISMRMRD::ISMRMRD_FLOAT, "ISIMFLT") &&
+      msg.verifyManifestEntry (ISMRMRD::ISMRMRD_IMAGE,
+                               ISMRMRD::ISMRMRD_DOUBLE, "ISIMDBL") &&
+      msg.verifyManifestEntry (ISMRMRD::ISMRMRD_IMAGE,
+                               ISMRMRD::ISMRMRD_CXFLOAT, "ISIMCXFLT") &&
+      msg.verifyManifestEntry (ISMRMRD::ISMRMRD_IMAGE,
+                               ISMRMRD::ISMRMRD_CXDOUBLE, "ISIMCXDBL") &&
+      msg.verifyManifestEntry (ISMRMRD::ISMRMRD_HEADER,
+                               ISMRMRD::ISMRMRD_CHAR, "ISHEADER") &&
+      msg.verifyManifestEntry (ISMRMRD::ISMRMRD_HEADER_WRAPPER,
+                               ISMRMRD::ISMRMRD_CHAR, "ISHEADWRAP") &&
+      msg.verifyManifestEntry (ISMRMRD::ISMRMRD_ERROR_NOTIFICATION,
+                               ISMRMRD::ISMRMRD_CHAR, "ISERRNOTE"))
+  {
+    status = true;
+  } 
+  */
+
+  clientAccepted (msg, status);
 
   return;
 }

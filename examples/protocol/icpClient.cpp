@@ -87,6 +87,11 @@ void icpClient::handleHandshake
   std::cout << __func__ << " response for " << _client_name << ":\n";
   std::cout << "Name  : " << msg.getClientName() << "\n";
   std::cout << "Status: " << msg.getConnectionStatus() << "\n";
+
+  if (msg.getConnectionStatus() != ISMRMRD::CONNECTION_ACCEPTED)
+  {
+    _session->shutdown();
+  }
   return;
 }
 
@@ -147,7 +152,27 @@ void icpClient::writeImage
   STYPE             stype
 )
 {
-  if (stype == ISMRMRD::ISMRMRD_FLOAT)
+  if (stype == ISMRMRD::ISMRMRD_USHORT)
+  {
+    ISMRMRD::Image<uint16_t>* img = static_cast<ISMRMRD::Image<uint16_t>*>(ent);
+    dset.appendImage (*img, ISMRMRD::ISMRMRD_STREAM_IMAGE);
+  }
+  else if (stype == ISMRMRD::ISMRMRD_SHORT)
+  {
+    ISMRMRD::Image<int16_t>* img = static_cast<ISMRMRD::Image<int16_t>*>(ent);
+    dset.appendImage (*img, ISMRMRD::ISMRMRD_STREAM_IMAGE);
+  }
+  else if (stype == ISMRMRD::ISMRMRD_UINT)
+  {
+    ISMRMRD::Image<uint32_t>* img = static_cast<ISMRMRD::Image<uint32_t>*>(ent);
+    dset.appendImage (*img, ISMRMRD::ISMRMRD_STREAM_IMAGE);
+  }
+  else if (stype == ISMRMRD::ISMRMRD_INT)
+  {
+    ISMRMRD::Image<int32_t>* img = static_cast<ISMRMRD::Image<int32_t>*>(ent);
+    dset.appendImage (*img, ISMRMRD::ISMRMRD_STREAM_IMAGE);
+  }
+  else if (stype == ISMRMRD::ISMRMRD_FLOAT)
   {
     ISMRMRD::Image<float>* img = static_cast<ISMRMRD::Image<float>*>(ent);
     dset.appendImage (*img, ISMRMRD::ISMRMRD_STREAM_IMAGE);
@@ -155,6 +180,18 @@ void icpClient::writeImage
   else if (stype == ISMRMRD::ISMRMRD_DOUBLE)
   {
     ISMRMRD::Image<double>* img = static_cast<ISMRMRD::Image<double>*>(ent);
+    dset.appendImage (*img, ISMRMRD::ISMRMRD_STREAM_IMAGE);
+  }
+  else if (stype == ISMRMRD::ISMRMRD_CXFLOAT)
+  {
+    ISMRMRD::Image<std::complex<float>>* img =
+      static_cast<ISMRMRD::Image<std::complex<float> >*>(ent);
+    dset.appendImage (*img, ISMRMRD::ISMRMRD_STREAM_IMAGE);
+  }
+  else if (stype == ISMRMRD::ISMRMRD_CXDOUBLE)
+  {
+    ISMRMRD::Image<std::complex<double>>* img =
+      static_cast<ISMRMRD::Image<std::complex<double> >*>(ent);
     dset.appendImage (*img, ISMRMRD::ISMRMRD_STREAM_IMAGE);
   }
   else
@@ -175,6 +212,36 @@ void icpClient::sendHandshake
   msg.setTimestamp ((uint64_t)std::time(nullptr));
   msg.setConnectionStatus (ISMRMRD::CONNECTION_REQUEST);
   msg.setClientName (_client_name);
+  msg.addManifestEntry (ISMRMRD::ISMRMRD_MRACQUISITION,
+                        ISMRMRD::ISMRMRD_SHORT, "ISACQSHORT");
+  msg.addManifestEntry (ISMRMRD::ISMRMRD_MRACQUISITION,
+                        ISMRMRD::ISMRMRD_INT, "ISACQINT");
+  msg.addManifestEntry (ISMRMRD::ISMRMRD_MRACQUISITION,
+                        ISMRMRD::ISMRMRD_FLOAT, "ISACQFLT");
+  msg.addManifestEntry (ISMRMRD::ISMRMRD_MRACQUISITION,
+                        ISMRMRD::ISMRMRD_DOUBLE, "ISACQDBL");
+  msg.addManifestEntry (ISMRMRD::ISMRMRD_IMAGE,
+                        ISMRMRD::ISMRMRD_USHORT, "ISIMUSHORT");
+  msg.addManifestEntry (ISMRMRD::ISMRMRD_IMAGE,
+                        ISMRMRD::ISMRMRD_SHORT, "ISIMSHORT");
+  msg.addManifestEntry (ISMRMRD::ISMRMRD_IMAGE,
+                        ISMRMRD::ISMRMRD_UINT, "ISIMUINT");
+  msg.addManifestEntry (ISMRMRD::ISMRMRD_IMAGE,
+                        ISMRMRD::ISMRMRD_INT, "ISIMINT");
+  msg.addManifestEntry (ISMRMRD::ISMRMRD_IMAGE,
+                        ISMRMRD::ISMRMRD_FLOAT, "ISIMFLT");
+  msg.addManifestEntry (ISMRMRD::ISMRMRD_IMAGE,
+                        ISMRMRD::ISMRMRD_DOUBLE, "ISIMDBL");
+  msg.addManifestEntry (ISMRMRD::ISMRMRD_IMAGE,
+                        ISMRMRD::ISMRMRD_CXFLOAT, "ISIMCXFLT");
+  msg.addManifestEntry (ISMRMRD::ISMRMRD_IMAGE,
+                        ISMRMRD::ISMRMRD_CXDOUBLE, "ISIMCXDBL");
+  msg.addManifestEntry (ISMRMRD::ISMRMRD_HEADER,
+                        ISMRMRD::ISMRMRD_CHAR, "ISHEADER");
+  msg.addManifestEntry (ISMRMRD::ISMRMRD_HEADER_WRAPPER,
+                        ISMRMRD::ISMRMRD_CHAR, "ISHEADWRAP");
+  msg.addManifestEntry (ISMRMRD::ISMRMRD_ERROR_NOTIFICATION,
+                        ISMRMRD::ISMRMRD_CHAR, "ISERRNOTE");
   _session->send (ISMRMRD::ISMRMRD_HANDSHAKE, &msg);
 
   return;
@@ -234,7 +301,7 @@ void icpClient::beginInput
   _session->send (ISMRMRD::ISMRMRD_COMMAND, &cmd);
 
   uint32_t num_acq = dset.getNumberOfAcquisitions (0);
-  std::cout << "Finished input, " << num_acq << " acqs, sent STOP_FROM_CLIENT\n";
+  std::cout << "Finished input - " << num_acq << " acqs, and STOP_FROM_CLIENT\n";
 
   return;
 }
@@ -255,7 +322,6 @@ void icpClient::sendAcquisitions
     _session->send (ISMRMRD::ISMRMRD_MRACQUISITION, &acq,
                               ISMRMRD::get_storage_type<S>());
   }
-  std::cout << __func__ << ": sent out " << num_acq << " acquisitions \n";
   return;
 }
 

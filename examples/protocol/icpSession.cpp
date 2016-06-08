@@ -394,33 +394,33 @@ bool icpSession::send
 
       head.storage_type = stype;
       head.stream       = ISMRMRD::ISMRMRD_STREAM_IMAGE;
-
-      std::cout << "Image storage = " << static_cast<ISMRMRD::Image<float>*>(entity)->getStorageType() << "\n";
-
-      e_buffer = static_cast<ISMRMRD::Image<float>*>(entity)->serialize();
+      e_buffer          = entity->serialize();
       break;
 
     case ISMRMRD::ISMRMRD_HEADER_WRAPPER:
 
       head.storage_type = ISMRMRD::ISMRMRD_CHAR;
       head.stream       = ISMRMRD::ISMRMRD_STREAM_ISMRMRD_HEADER;
-
-      e_buffer =
+      e_buffer          =
         static_cast<ISMRMRD::IsmrmrdHeaderWrapper*>(entity)->serialize();
       break;
 
     case ISMRMRD::ISMRMRD_HANDSHAKE:
 
+      std::cout << __func__ << ": 1" << "\n";
       head.storage_type = ISMRMRD::ISMRMRD_CHAR;
+      std::cout << __func__ << ": 2" << "\n";
       head.stream       = ISMRMRD::ISMRMRD_STREAM_HANDSHAKE;
-      e_buffer = entity->serialize();
+      std::cout << __func__ << ": 3" << "\n";
+      e_buffer          = entity->serialize();
+      std::cout << "Serialized handshake size = " << e_buffer.size() << "\n";
       break;
 
     case ISMRMRD::ISMRMRD_COMMAND:
 
       head.storage_type = ISMRMRD::ISMRMRD_CHAR;
       head.stream       = ISMRMRD::ISMRMRD_STREAM_COMMAND;
-      e_buffer = entity->serialize();
+      e_buffer          = entity->serialize();
       break;
 
     case ISMRMRD::ISMRMRD_ERROR_NOTIFICATION:
