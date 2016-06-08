@@ -1209,60 +1209,88 @@ template <typename T> T& Image<T>::at(uint32_t ix, uint32_t iy, uint32_t iz, uin
 
 template <typename T> std::vector<unsigned char> Image<T>::serialize()
 {
-    if (this->head_.entity_type != ISMRMRD_IMAGE) {
-        throw std::runtime_error("The header entity type does not match the class type");
-    }
+  if (this->head_.entity_type != ISMRMRD_IMAGE)
+  {
+    throw std::runtime_error("The header entity type does not match the class type");
+  }
 
-    if (this->head_.storage_type != get_storage_type<T>()) {
-        throw std::runtime_error("Header storage type does not match class");
-    }
+  if (this->head_.storage_type != get_storage_type<T>())
+  {
+    throw std::runtime_error("Header storage type does not match class");
+  }
 
-    size_t bytes = sizeof(ImageHeader) + attribute_string_.size() + data_.size()*sizeof(T);
-    std::vector<unsigned char> buffer;
-    buffer.reserve(bytes);
-    std::copy((unsigned char*)(&this->head_),((unsigned char*)(&this->head_))+sizeof(head_), std::back_inserter(buffer));
-    std::copy((unsigned char*)(&this->attribute_string_[0]),(unsigned char*)(&this->attribute_string_[0] + attribute_string_.size()),std::back_inserter(buffer));
-    std::copy((unsigned char*)(&this->data_[0]),(unsigned char*)(&this->data_[0] + data_.size()),std::back_inserter(buffer));
+  size_t bytes = sizeof(ImageHeader) + attribute_string_.size() + data_.size()*sizeof(T);
 
-    if (buffer.size() != bytes) {
-        throw std::runtime_error("Serialized Image buffer size does not match expected buffer size");
-    }
+  std::vector<unsigned char> buffer;
+  buffer.reserve(bytes);
+
+  std::copy ((unsigned char*)(&this->head_),
+             (unsigned char*)(&this->head_) + sizeof (head_),
+             std::back_inserter (buffer));
+
+  std::copy ((unsigned char*)(&this->attribute_string_[0]),
+             (unsigned char*)(&this->attribute_string_[0] + attribute_string_.size()),
+             std::back_inserter (buffer));
+
+  std::copy ((unsigned char*)(&this->data_[0]),
+             (unsigned char*)(&this->data_[0] + data_.size()),
+             std::back_inserter (buffer));
+
+  if (buffer.size() != bytes)
+  {
+    throw std::runtime_error
+      ("Serialized Image buffer size does not match expected buffer size");
+  }
     
-    return buffer; //Should not be copied on newer compilers due to return value optimization.
+  return buffer;
+  //Should not be copied on newer compilers due to return value optimization.
 }
     
 template <typename T>  void Image<T>::deserialize(const std::vector<unsigned char>& buffer)
 {
-    if (buffer.size() < sizeof(ImageHeader)) {
-        throw std::runtime_error("Buffer is too small to contain an Acquisition");
-    }
+  if (buffer.size() < sizeof(ImageHeader))
+  {
+    throw std::runtime_error("Buffer is too small to contain an Acquisition");
+  }
 
-    ImageHeader* h_ptr = (ImageHeader*)&buffer[0];
+  ImageHeader* h_ptr = (ImageHeader*)&buffer[0];
 
-    if (h_ptr->entity_type != ISMRMRD_IMAGE) {
-        throw std::runtime_error("The header entity type does not match the class type");
-    }
+  if (h_ptr->entity_type != ISMRMRD_IMAGE)
+  {
+    throw std::runtime_error("The header entity type does not match the class type");
+  }
 
-    if (h_ptr->storage_type != get_storage_type<T>()) {
-        throw std::runtime_error("Header storage type does not match class");
-    }
+  if (h_ptr->storage_type != get_storage_type<T>())
+  {
+    throw std::runtime_error("Header storage type does not match class");
+  }
     
-    size_t expected_bytes =
-        sizeof(ImageHeader) +
-        h_ptr->attribute_string_len +
-        h_ptr->matrix_size[0]*h_ptr->matrix_size[1]*h_ptr->matrix_size[2]*h_ptr->channels*sizeof(T);
+  size_t expected_bytes = sizeof(ImageHeader) +
+                          h_ptr->attribute_string_len +
+                          h_ptr->matrix_size[0] *
+                          h_ptr->matrix_size[1] *
+                          h_ptr->matrix_size[2] *
+                          h_ptr->channels * sizeof(T);
 
-    if (expected_bytes != buffer.size()) {
-        std::stringstream ss;
-        ss << "Unexpected buffer length " << buffer.size() << ", expected: " << expected_bytes;
-        throw std::runtime_error(ss.str());
-    }
+  if (expected_bytes != buffer.size())
+  {
+    std::stringstream ss;
+    ss << "Unexpected buffer length " << buffer.size()
+       << ", expected: " << expected_bytes;
+    throw std::runtime_error(ss.str());
+  }
     
-    this->setHead(*h_ptr);
-    size_t attr_start = sizeof(AcquisitionHeader);
-    size_t data_start = attr_start + h_ptr->attribute_string_len;
-    this->attribute_string_ = std::string((char*)&buffer[attr_start],h_ptr->attribute_string_len);
-    std::copy(&buffer[data_start], &buffer[expected_bytes], (unsigned char*)(&this->data_[0]));
+  this->setHead(*h_ptr);
+
+  size_t attr_start = sizeof (ImageHeader);
+  size_t data_start = attr_start + h_ptr->attribute_string_len;
+
+  this->attribute_string_ = std::string ((char*)&buffer[attr_start],
+                                         h_ptr->attribute_string_len);
+
+  std::copy (&buffer[data_start],
+             &buffer[expected_bytes],
+             (unsigned char*)(&this->data_[0]));
 }
     
 //
@@ -1544,13 +1572,17 @@ void EntityHeader::deserialize(const std::vector<unsigned char>& buffer)
 /******************************************************************************/
 Handshake::Handshake ()
 {
-  head_.version      = ISMRMRD_VERSION_MAJOR;
-  head_.entity_type  = ISMRMRD_HANDSHAKE;
-  head_.storage_type = ISMRMRD_CHAR;
-  head_.stream       = ISMRMRD_STREAM_HANDSHAKE;
+  head_.version        = ISMRMRD_VERSION_MAJOR;
+  head_.entity_type    = ISMRMRD_HANDSHAKE;
+  head_.storage_type   = ISMRMRD_CHAR;
+  head_.stream         = ISMRMRD_STREAM_HANDSHAKE;
   timestamp_           = 0;
   conn_status_         = CONNECTION_NOT_ASSIGNED;
-  memset (client_name_, 0, MAX_CLIENT_NAME_LENGTH);
+  client_name_length_  = 0;
+  manifest_size_       = 0;
+
+  addManifestEntry (ISMRMRD_HANDSHAKE, ISMRMRD_CHAR, "Handshake");
+  addManifestEntry (ISMRMRD_COMMAND, ISMRMRD_CHAR, "Command");
 }
 
 /******************************************************************************/
@@ -1589,23 +1621,95 @@ void Handshake::setConnectionStatus (ConnectionStatus status)
   conn_status_ = status;
 }
 /******************************************************************************/
+uint32_t Handshake::getClientNameLength() const
+{
+  return client_name_length_;
+}
+/******************************************************************************/
 std::string Handshake::getClientName() const
 {
-  return std::string (client_name_);
+  return client_name_;
 }
 /******************************************************************************/
 void Handshake::setClientName (std::string name)
 {
-  if (name.size() == 0 || name.size() > MAX_CLIENT_NAME_LENGTH)
+  client_name_        = name;
+  client_name_length_ = client_name_.size();
+}
+/******************************************************************************/
+void Handshake::addManifestEntry (ISMRMRD::EntityType  etype,
+                                  ISMRMRD::StorageType stype,
+                                  std::string          description)
+{
+  if ((uint32_t)stype >= 100 || stype < 0)
   {
-    throw std::runtime_error("Invalid client name size");
+    throw std::runtime_error ("Invalid storage type value");
   }
 
-  strncpy (client_name_, name.c_str(),
-           ((MAX_CLIENT_NAME_LENGTH <= name.size()) ?
-           MAX_CLIENT_NAME_LENGTH : name.size()));
-}
+  for (int ii = 0; ii < manifest_size_; ii++)
+  {
+    if (manifest_[ii].stream == etype * 100 + stype)
+    {
+      return;
+    }
+  }
 
+  IsmrmrdManifest entry;
+
+  entry.stream       = etype * 100 + stype;
+  entry.entity_type  = etype;
+  entry.storage_type = stype;
+  entry.description  = description;
+  entry.descr_length = entry.description.size();
+    
+  manifest_.push_back (entry);
+  manifest_size_ = manifest_.size();
+
+  return;
+}
+/******************************************************************************/
+uint32_t Handshake::getManifestSize () const
+{
+  return manifest_size_;
+}
+/******************************************************************************/
+std::map<uint32_t, IsmrmrdManifest> Handshake::getManifest () const
+{
+  std::map<uint32_t, IsmrmrdManifest> mm;
+
+  for (int ii = 0; ii < manifest_size_; ii++)
+  {
+    mm.insert (std::make_pair (manifest_[ii].stream, manifest_[ii]));
+  }
+
+  return mm;
+}
+/******************************************************************************/
+bool Handshake::verifyManifestEntry (ISMRMRD::EntityType  etype,
+                                     ISMRMRD::StorageType stype,
+                                     std::string          description) const
+{
+  std::cout << __func__ << ": 1\n";
+  for (int ii = 0; ii < manifest_size_; ii++)
+  {
+  std::cout << __func__ << ": 2\n";
+    if (manifest_[ii].stream != etype * 100 + stype)
+    {
+  std::cout << __func__ << ": 3\n";
+      continue;
+    }
+    else if (manifest_[ii].entity_type  == etype &&
+             manifest_[ii].storage_type == stype)
+    {
+  std::cout << __func__ << ": 4\n";
+      //TODO: This lookup doesn't make much sense - maybe a custom string??
+      return true;
+    }
+  std::cout << __func__ << ": 5\n";
+  }
+  std::cout << __func__ << ": 6\n";
+  return false;
+}
 /******************************************************************************/
 std::vector<unsigned char> Handshake::serialize()
 {
@@ -1616,8 +1720,14 @@ std::vector<unsigned char> Handshake::serialize()
 
   size_t bytes = sizeof (HandshakeHeader) +
                  sizeof (uint64_t) +
-                 sizeof (uint32_t) +
-                 MAX_CLIENT_NAME_LENGTH;
+                 sizeof (uint32_t) * 3 +
+                 client_name_.size();
+
+  for (int ii = 0; ii < manifest_size_; ii++)
+  {
+    bytes += sizeof (uint32_t) * 2 + manifest_[ii].descr_length;
+    bytes += sizeof (EntityType) + sizeof (StorageType);
+  }
 
   std::vector<unsigned char> buffer;
   buffer.reserve (bytes);
@@ -1634,9 +1744,27 @@ std::vector<unsigned char> Handshake::serialize()
              (unsigned char*) &this->conn_status_ + sizeof (uint32_t),
              std::back_inserter (buffer));
 
-  std::copy ((unsigned char*) &this->client_name_,
-             (unsigned char*) &this->client_name_ + MAX_CLIENT_NAME_LENGTH,
+  std::copy ((unsigned char*) &this->client_name_length_,
+             (unsigned char*) &this->client_name_length_ + sizeof (uint32_t),
              std::back_inserter (buffer));
+
+  std::copy ((unsigned char*) &this->manifest_size_,
+             (unsigned char*) &this->manifest_size_ + sizeof (uint32_t),
+             std::back_inserter (buffer));
+
+  std::copy ((unsigned char*) &this->client_name_,
+             (unsigned char*) &this->client_name_ + client_name_.size(),
+             std::back_inserter (buffer));
+
+  for (int ii = 0; ii < manifest_size_; ii++)
+  {
+    std::copy ((unsigned char*) &this->manifest_[ii],
+               (unsigned char*) &this->manifest_[ii] +
+               sizeof (uint32_t) * 2 + manifest_[ii].descr_length +
+               sizeof (EntityType) + sizeof (StorageType),
+               std::back_inserter (buffer));
+  }
+
 
   if (buffer.size() != bytes)
   {
@@ -1651,17 +1779,6 @@ std::vector<unsigned char> Handshake::serialize()
 /******************************************************************************/
 void Handshake::deserialize(const std::vector<unsigned char>& buffer)
 {
-  size_t expected_bytes = sizeof (HandshakeHeader) +
-                          sizeof (uint64_t) +
-                          sizeof (uint32_t) +
-                          MAX_CLIENT_NAME_LENGTH;
-
-  if (buffer.size() != expected_bytes)
-  {
-    printf ("size: %lu, expected: %lu\n ", buffer.size(), expected_bytes);
-    throw std::runtime_error ("Buffer size does not match Handshake class");
-  }
-
   HandshakeHeader* h_ptr = (HandshakeHeader*)&buffer[0];
   if (h_ptr->entity_type != ISMRMRD_HANDSHAKE)
   {
@@ -1682,9 +1799,53 @@ void Handshake::deserialize(const std::vector<unsigned char>& buffer)
              (unsigned char*) &this->conn_status_);
 
   left = right;
-  right += MAX_CLIENT_NAME_LENGTH;
+  right += sizeof (uint32_t);
+  std::copy (&buffer[left], &buffer[right],
+             (unsigned char*) &this->client_name_length_);
+
+  left = right;
+  right += sizeof (uint32_t);
+  std::copy (&buffer[left], &buffer[right],
+             (unsigned char*) &this->manifest_size_);
+
+  left = right;
+  right += client_name_length_;
   std::copy (&buffer[left], &buffer[right],
              (unsigned char*) &this->client_name_);
+
+  for (int ii = 0; ii < manifest_size_; ii++)
+  {
+    left = right;
+    right += sizeof (uint32_t);
+    std::copy (&buffer[left], &buffer[right],
+               (unsigned char*) &this->manifest_[ii].stream);
+
+    left = right;
+    right += sizeof (EntityType);
+    std::copy (&buffer[left], &buffer[right],
+               (unsigned char*) &this->manifest_[ii].entity_type);
+
+    left = right;
+    right += sizeof (StorageType);
+    std::copy (&buffer[left], &buffer[right],
+               (unsigned char*) &this->manifest_[ii].storage_type);
+
+    left = right;
+    right += sizeof (uint32_t);
+    std::copy (&buffer[left], &buffer[right],
+               (unsigned char*) &this->manifest_[ii].descr_length);
+
+    left = right;
+    right += manifest_[ii].descr_length;
+    std::copy (&buffer[left], &buffer[right],
+               (unsigned char*) &this->manifest_[ii].description);
+  }
+
+  if (buffer.size() != right)
+  {
+    std::cout << "size: " << buffer.size() << ", expected: " << right << "\n";
+    throw std::runtime_error ("Buffer size does not match Handshake class");
+  }
 }
 
 /********************************* Command ************************************/

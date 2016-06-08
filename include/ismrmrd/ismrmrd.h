@@ -30,6 +30,7 @@ typedef unsigned __int64 uint64_t;
 
 #include <complex>
 #include <vector>
+#include <map>
 
 /* Exports needed for MS C++ */
 #include "ismrmrd/export.h"
@@ -187,7 +188,8 @@ enum ConnectionStatus
     CONNECTION_REQUEST               = 201,   /**< Client to server */
     CONNECTION_ACCEPTED              = 202,   /**< Server to client */
     CONNECTION_DENIED_UNKNOWN_USER   = 301,   /**< Server to client */
-    CONNECTION_DENIED_SERVER_BUSY    = 302    /**< Server to client */
+    CONNECTION_DENIED_SERVER_BUSY    = 302,   /**< Server to client */
+    CONNECTION_DENIED_MANIFEST_ERROR = 303    /**< Server to client */
 };
 
 enum ConfigurationType
@@ -231,6 +233,15 @@ struct EntityHeader
     uint32_t stream;        /**< which stream this belongs to */
 };
 
+struct IsmrmrdManifest
+{
+  uint32_t             stream;
+  ISMRMRD::EntityType  entity_type;
+  ISMRMRD::StorageType storage_type;
+  uint32_t             descr_length;
+  std::string          description;
+};
+
 struct HandshakeHeader
 {
     uint32_t version;       /**< First unsigned int indicates the version  */
@@ -251,8 +262,17 @@ public:
     uint64_t         getTimestamp () const;
     void             setClientName (std::string name);
     std::string      getClientName () const;
+    uint32_t         getClientNameLength () const;
     void             setConnectionStatus (ConnectionStatus status);
     ConnectionStatus getConnectionStatus () const;
+    void             addManifestEntry (ISMRMRD::EntityType  etype,
+                                       ISMRMRD::StorageType stype,
+                                       std::string          description);
+    uint32_t         getManifestSize () const;
+    std::map<uint32_t, IsmrmrdManifest> getManifest () const;
+    bool             verifyManifestEntry (ISMRMRD::EntityType  etype,
+                                          ISMRMRD::StorageType stype,
+                                          std::string          description) const;
 
     // Functions inherited from Entity
     /*virtual uint32_t     getVersion ();
@@ -266,7 +286,10 @@ protected:
     HandshakeHeader  head_;
     uint64_t         timestamp_;   /**< Session start set by client */
     uint32_t         conn_status_; /**< Connection Status set by server */
-    char             client_name_[MAX_CLIENT_NAME_LENGTH];
+    uint32_t         client_name_length_;
+    uint32_t         manifest_size_;
+    std::string      client_name_;
+    std::vector<IsmrmrdManifest> manifest_;
 };
 
 struct CommandHeader
