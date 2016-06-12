@@ -1689,25 +1689,21 @@ bool Handshake::verifyManifestEntry (ISMRMRD::EntityType  etype,
                                      ISMRMRD::StorageType stype,
                                      std::string          description) const
 {
-  std::cout << __func__ << ": 1\n";
+  std::cout << __func__ << ": 1 starting\n";
   for (int ii = 0; ii < manifest_size_; ii++)
   {
-  std::cout << __func__ << ": 2\n";
-    if (manifest_[ii].stream != etype * 100 + stype)
+    std::cout << __func__ << ": 2 - iteration " << ii << " of " << manifest_size_ << "\n";
+    if (manifest_[ii].stream       == etype * 100 + stype &&
+        manifest_[ii].entity_type  == etype &&
+        manifest_[ii].storage_type == stype)
     {
-  std::cout << __func__ << ": 3\n";
-      continue;
-    }
-    else if (manifest_[ii].entity_type  == etype &&
-             manifest_[ii].storage_type == stype)
-    {
-  std::cout << __func__ << ": 4\n";
+      std::cout << __func__ << ": 3 - FOUND\n";
       //TODO: This lookup doesn't make much sense - maybe a custom string??
       return true;
     }
-  std::cout << __func__ << ": 5\n";
+    std::cout << __func__ << ": 4 - not yet\n";
   }
-  std::cout << __func__ << ": 6\n";
+  std::cout << __func__ << ": 5 - NOT found\n";
   return false;
 }
 /******************************************************************************/
@@ -1717,44 +1713,54 @@ std::vector<unsigned char> Handshake::serialize()
   {
     throw std::runtime_error("Entity type does not match Handshake class");
   }
+  std::cout << __func__ << ": 1" << "\n";
 
   size_t bytes = sizeof (HandshakeHeader) +
                  sizeof (uint64_t) +
                  sizeof (uint32_t) * 3 +
                  client_name_.size();
 
+  std::cout << __func__ << ": 2" << "\n";
   for (int ii = 0; ii < manifest_size_; ii++)
   {
     bytes += sizeof (uint32_t) * 2 + manifest_[ii].descr_length;
     bytes += sizeof (EntityType) + sizeof (StorageType);
   }
 
+  std::cout << __func__ << ": 3" << "\n";
   std::vector<unsigned char> buffer;
   buffer.reserve (bytes);
 
+  std::cout << __func__ << ": 4" << "\n";
   std::copy ((unsigned char*) &this->head_,
              (unsigned char*) &this->head_ + sizeof (this->head_),
              std::back_inserter (buffer));
+  std::cout << __func__ << ": 5" << "\n";
 
   std::copy ((unsigned char*) &this->timestamp_,
              (unsigned char*) &this->timestamp_ + sizeof (uint64_t),
              std::back_inserter (buffer));
+  std::cout << __func__ << ": 6" << "\n";
 
   std::copy ((unsigned char*) &this->conn_status_,
              (unsigned char*) &this->conn_status_ + sizeof (uint32_t),
              std::back_inserter (buffer));
+  std::cout << __func__ << ": 7" << "\n";
 
   std::copy ((unsigned char*) &this->client_name_length_,
              (unsigned char*) &this->client_name_length_ + sizeof (uint32_t),
              std::back_inserter (buffer));
+  std::cout << __func__ << ": 8" << "\n";
 
   std::copy ((unsigned char*) &this->manifest_size_,
              (unsigned char*) &this->manifest_size_ + sizeof (uint32_t),
              std::back_inserter (buffer));
+  std::cout << __func__ << ": 9" << "\n";
 
   std::copy ((unsigned char*) &this->client_name_,
              (unsigned char*) &this->client_name_ + client_name_.size(),
              std::back_inserter (buffer));
+  std::cout << __func__ << ": 10" << "\n";
 
   for (int ii = 0; ii < manifest_size_; ii++)
   {
@@ -1763,6 +1769,7 @@ std::vector<unsigned char> Handshake::serialize()
                sizeof (uint32_t) * 2 + manifest_[ii].descr_length +
                sizeof (EntityType) + sizeof (StorageType),
                std::back_inserter (buffer));
+  std::cout << __func__ << ": 11." << ii << "\n";
   }
 
 
@@ -1772,6 +1779,7 @@ std::vector<unsigned char> Handshake::serialize()
       ("Serialized Handshake buffer size does not match expected buffer size");
   }
 
+  std::cout << __func__ << ": 12" << "\n";
   return buffer; // Should not be copied on newer compilers due to return
                  // value optimization.
 }

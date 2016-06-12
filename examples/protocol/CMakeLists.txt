@@ -27,12 +27,21 @@ add_library(imageReconOne SHARED imageReconOne.cpp)
 target_link_libraries(imageReconOne ismrmrd ${FFTW3_LIBRARIES})
 install(TARGETS imageReconOne DESTINATION lib)
 
-add_library(icpClient SHARED icpClient.cpp)
-target_link_libraries(icpClient ismrmrd icpSession)
+add_library(icpClientCallbacks icpClientCallbacks.cpp)
+target_link_libraries(icpClientCallbacks ismrmrd icpSession icpClient)
+install(TARGETS icpClientCallbacks DESTINATION lib)
+
+add_library(icpServerCallbacks icpServerCallbacks.cpp)
+target_link_libraries(icpServerCallbacks ismrmrd icpSession icpServer)
+install(TARGETS icpServerCallbacks DESTINATION lib)
+
+add_library(icpClient icpClient.cpp)
+target_link_libraries(icpClient ismrmrd icpSession icpClientCallbacks)
 install(TARGETS icpClient DESTINATION lib)
 
-add_library(icpServer SHARED icpServer.cpp)
-target_link_libraries(icpServer ismrmrd icpSession imageReconOne)
+
+add_library(icpServer icpServer.cpp)
+target_link_libraries(icpServer ismrmrd icpSession imageReconOne icpServerCallbacks)
 install(TARGETS icpServer DESTINATION lib)
 
 add_executable(icpClientStarter icpClientStarter.cpp)

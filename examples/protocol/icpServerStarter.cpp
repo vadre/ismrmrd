@@ -2,11 +2,15 @@
 #include "icpConnection.h"
 #include "icpSession.h"
 
-icpUserAppBase* getUserAppInstance (uint32_t id) // id for debug only
+void runMe (ICP_SESSION session, uint32_t id)
 {
-  icpUserAppBase* user_app (new icpServer (id));
-
-  return user_app;
+  icpServer* server = new icpServer (session, id);
+  std::cout << __func__ << " Running for id " << id << "\n";
+  server->run();
+  std::cout << __func__ << " Deleting for id " << id << "\n";
+  delete (server);
+  std::cout << __func__ << " Returning for id " << id << "\n";
+  return;
 }
 
 /*******************************************************************************
@@ -32,7 +36,7 @@ int main
   std::cout << "To connect to a different port, restart: icpServer <port>\n\n";
 
   icpConnection server_conn (port);
-  server_conn.registerUserApp ((GET_USER_APP_INSTANCE) &getUserAppInstance);
+  server_conn.registerUserApp ((START_USER_APP_FUNC) &runMe);
   server_conn.start();
 
   return 0;

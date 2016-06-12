@@ -1,83 +1,39 @@
 #include "icpServer.h"
 #include <functional>
+#include "icpServerCallbacks.h"
 
 using namespace std::placeholders;
 /*******************************************************************************
  ******************************************************************************/
-void icpServer::handleCommand
+void icpServer::configure
 (
-  COMMAND  msg
+  ISMRMRD::CommandType  cmd
 )
 {
-  switch (msg.getCommandType())
+  if (cmd == ISMRMRD::ISMRMRD_COMMAND_CONFIG_IMREC_ONE)
   {
-    case ISMRMRD::ISMRMRD_COMMAND_CONFIG_IMREC_ONE:
+    std::cout << "Received request for configuration option 1\n";
 
-      std::cout << __func__ << ": Received config1\n";
-      _imrec = new imageReconOne;
-      _session->subscribe (ISMRMRD::ISMRMRD_HEADER, true);
-      _session->subscribe (ISMRMRD::ISMRMRD_MRACQUISITION, true);
-      _session->subscribe (ISMRMRD::ISMRMRD_ERROR_NOTIFICATION, true);
-      break;
+    _imrec = new imageReconOne;
 
-    case ISMRMRD::ISMRMRD_COMMAND_CONFIG_IMREC_TWO:
+    //using namespace std::placeholders;
 
-      // Another preset option - hasn't been defined yet
-      std::cout << __func__ << ": Received config2 - not supported\n";
-      break;
+    std::unique_ptr<icpServerIsmrmrdHeaderWrapperHandler> headCB
+      (new icpServerIsmrmrdHeaderWrapperHandler (this));
+    auto fp1 = std::bind (&icpCallback::receive, *headCB, _1, _2, _3);
+    _session->registerHandler
+      ((ICP_CB) fp1, ISMRMRD::ISMRMRD_HEADER_WRAPPER);
 
-    case ISMRMRD::ISMRMRD_COMMAND_STOP_FROM_CLIENT:
-
-      std::cout << __func__ << ": Received STOP\n";
-      _client_done = true;
-      if (_imrec_done)
-      {
-        sendCommand (ISMRMRD::ISMRMRD_COMMAND_DONE_FROM_SERVER, 0);
-      }
-      break;
-
-    case ISMRMRD::ISMRMRD_COMMAND_CLOSE_CONNECTION:
-
-      std::cout << __func__ << ": Received CLOSE\n";
-      _session->shutdown();
-      break;
-
-    default:
-      std::cout << __func__ << ": Received unexpected command\n";
-      break;
+    std::unique_ptr<icpServerAcquisitionHandler> acqCB
+      (new icpServerAcquisitionHandler (this));
+    auto fp2 = std::bind (&icpCallback::receive, *acqCB, _1, _2, _3);
+    _session->registerHandler
+      ((ICP_CB) fp2, ISMRMRD::ISMRMRD_MRACQUISITION);
   }
-  return;
-}
-
-/*******************************************************************************
- ******************************************************************************/
-void icpServer::handleErrorNotification
-(
-  ISMRMRD::ErrorNotification msg
-)
-{
-  std::cout << __func__ <<":\nError Type: " << msg.getErrorType()
-            << ", Error Command: " << msg.getErrorCommandType()
-            << ", Error Command ID: " << msg.getErrorCommandId()
-            << ", Error Entity: " << msg.getErrorEntityType()
-            << ",\nError Description: " << msg.getErrorDescription() << "\n";
-  // React to error...
-  return;
-}
-
-/*******************************************************************************
- ******************************************************************************/
-void icpServer::handleIsmrmrdHeader
-(
-  XMLHEAD  msg
-)
-{
-  std::cout << __func__ << ": received IsmrmrdHeader\n";
-  _hdr = msg;
-  _header_received = true;
-  XMLWRAP wrp;
-  wrp.setHeader (msg);
-  _session->send (ISMRMRD::ISMRMRD_HEADER_WRAPPER, &wrp); // For demo
+  else
+  {
+    std::cout <<"Requested configuration option not implemented\n";
+  } 
 
   return;
 }
@@ -90,10 +46,10 @@ void icpServer::sendCommand
   uint32_t             cmd_id
 )
 {
-  COMMAND msg;
+  ISMRMRD::Command msg;
   msg.setCommandType (cmd_type);
   msg.setCommandId (cmd_id);
-  _session->send (ISMRMRD::ISMRMRD_COMMAND, &msg);
+  _session->send (&msg, ISMRMRD::ISMRMRD_COMMAND);
 
   return;
 }
@@ -102,152 +58,22 @@ void icpServer::sendCommand
  ****************************************************************************/
 void icpServer::clientAccepted
 (
-  HANDSHAKE  msg,
-  bool       accepted
+  ISMRMRD::Handshake* msg,
+  bool                accepted
 )
 {
-  std::cout << __func__ << ": 1" << "\n";
-  msg.setConnectionStatus ((accepted) ?
+  msg->setConnectionStatus ((accepted) ?
     ISMRMRD::CONNECTION_ACCEPTED : ISMRMRD::CONNECTION_DENIED_UNKNOWN_USER);
 
-  std::cout << __func__ << ": 2" << "\n";
-  _session->send (ISMRMRD::ISMRMRD_HANDSHAKE, &msg);
+  _session->send (msg, ISMRMRD::ISMRMRD_HANDSHAKE);
+    std::cout << __func__ << ": just sent handshake\n";
 
-  std::cout << __func__ << ": 3" << "\n";
   if (!accepted)
   {
-  std::cout << __func__ << ": 4" << "\n";
+    std::cout << __func__ << ": sending DONE from server\n";
     sendCommand (ISMRMRD::ISMRMRD_COMMAND_DONE_FROM_SERVER, 0);
-  std::cout << __func__ << ": 5" << "\n";
+    std::cout << __func__ << ": just sent DONE from server\n";
   }
-
-  std::cout << __func__ << ": 6" << "\n";
-  return;
-}
-
-/*******************************************************************************
- ******************************************************************************/
-void icpServer::handleHandshake
-(
-  HANDSHAKE  msg
-)
-{
-  // Could check if the client name is matching a list of expected clients
-  std::cout << __func__ << ": client_name = <"<< msg.getClientName() << ">\n";
-
-  bool status = true;
-  
-  std::cout << __func__ << ": 1" << "\n";
-  status = msg.verifyManifestEntry (ISMRMRD::ISMRMRD_HANDSHAKE,
-                                    ISMRMRD::ISMRMRD_CHAR, "ISHANDSHAKE");
-  std::cout << __func__ << ": 2" << "\n";
-  if (!status) clientAccepted (msg, false);
-  status = msg.verifyManifestEntry (ISMRMRD::ISMRMRD_COMMAND,
-                                    ISMRMRD::ISMRMRD_CHAR, "ISCOMMAND");
-  std::cout << __func__ << ": 3" << "\n";
-  if (!status) clientAccepted (msg, false);
-  status = msg.verifyManifestEntry (ISMRMRD::ISMRMRD_MRACQUISITION,
-                                    ISMRMRD::ISMRMRD_SHORT, "ISACQSHORT");
-  std::cout << __func__ << ": 4" << "\n";
-  if (!status) clientAccepted (msg, false);
-  std::cout << __func__ << ": 4.1" << "\n";
-  status = msg.verifyManifestEntry (ISMRMRD::ISMRMRD_MRACQUISITION,
-                                    ISMRMRD::ISMRMRD_INT, "ISACQINT");
-  std::cout << __func__ << ": 5" << "\n";
-  if (!status) clientAccepted (msg, false);
-  status = msg.verifyManifestEntry (ISMRMRD::ISMRMRD_MRACQUISITION,
-                                    ISMRMRD::ISMRMRD_FLOAT, "ISACQFLT");
-  std::cout << __func__ << ": 6" << "\n";
-  if (!status) clientAccepted (msg, false);
-  status = msg.verifyManifestEntry (ISMRMRD::ISMRMRD_MRACQUISITION,
-                                    ISMRMRD::ISMRMRD_DOUBLE, "ISACQDBL");
-  std::cout << __func__ << ": 7" << "\n";
-  if (!status) clientAccepted (msg, false);
-  status = msg.verifyManifestEntry (ISMRMRD::ISMRMRD_IMAGE,
-                                    ISMRMRD::ISMRMRD_USHORT, "ISIMUSHORT");
-  std::cout << __func__ << ": 8" << "\n";
-  if (!status) clientAccepted (msg, false);
-  status = msg.verifyManifestEntry (ISMRMRD::ISMRMRD_IMAGE,
-                                    ISMRMRD::ISMRMRD_SHORT, "ISIMSHORT");
-  std::cout << __func__ << ": 9" << "\n";
-  if (!status) clientAccepted (msg, false);
-  status = msg.verifyManifestEntry (ISMRMRD::ISMRMRD_IMAGE,
-                                    ISMRMRD::ISMRMRD_UINT, "ISIMUINT");
-  std::cout << __func__ << ": 10" << "\n";
-  if (!status) clientAccepted (msg, false);
-  status = msg.verifyManifestEntry (ISMRMRD::ISMRMRD_IMAGE,
-                                    ISMRMRD::ISMRMRD_INT, "ISIMINT");
-  std::cout << __func__ << ": 11" << "\n";
-  if (!status) clientAccepted (msg, false);
-  status = msg.verifyManifestEntry (ISMRMRD::ISMRMRD_IMAGE,
-                                    ISMRMRD::ISMRMRD_FLOAT, "ISIMFLT");
-  std::cout << __func__ << ": 12" << "\n";
-  if (!status) clientAccepted (msg, false);
-  status = msg.verifyManifestEntry (ISMRMRD::ISMRMRD_IMAGE,
-                                    ISMRMRD::ISMRMRD_DOUBLE, "ISIMDBL");
-  std::cout << __func__ << ": 13" << "\n";
-  if (!status) clientAccepted (msg, false);
-  status = msg.verifyManifestEntry (ISMRMRD::ISMRMRD_IMAGE,
-                                    ISMRMRD::ISMRMRD_CXFLOAT, "ISIMCXFLT");
-  std::cout << __func__ << ": 14" << "\n";
-  if (!status) clientAccepted (msg, false);
-  status = msg.verifyManifestEntry (ISMRMRD::ISMRMRD_IMAGE,
-                                    ISMRMRD::ISMRMRD_CXDOUBLE, "ISIMCXDBL");
-  std::cout << __func__ << ": 15" << "\n";
-  if (!status) clientAccepted (msg, false);
-  status = msg.verifyManifestEntry (ISMRMRD::ISMRMRD_HEADER,
-                                    ISMRMRD::ISMRMRD_CHAR, "ISHEADER");
-  std::cout << __func__ << ": 16" << "\n";
-  if (!status) clientAccepted (msg, false);
-  status = msg.verifyManifestEntry (ISMRMRD::ISMRMRD_HEADER_WRAPPER,
-                                    ISMRMRD::ISMRMRD_CHAR, "ISHEADWRAP");
-  std::cout << __func__ << ": 17" << "\n";
-  if (!status) clientAccepted (msg, false);
-  status = msg.verifyManifestEntry (ISMRMRD::ISMRMRD_ERROR_NOTIFICATION,
-                                    ISMRMRD::ISMRMRD_CHAR, "ISERRNOTE");
-  std::cout << __func__ << ": 18" << "\n";
-
-
-  /*if (msg.verifyManifestEntry (ISMRMRD::ISMRMRD_HANDSHAKE,
-                               ISMRMRD::ISMRMRD_CHAR, "ISHANDSHAKE") &&
-      msg.verifyManifestEntry (ISMRMRD::ISMRMRD_COMMAND,
-                               ISMRMRD::ISMRMRD_CHAR, "ISCOMMAND") &&
-      msg.verifyManifestEntry (ISMRMRD::ISMRMRD_MRACQUISITION,
-                               ISMRMRD::ISMRMRD_SHORT, "ISACQSHORT") &&
-      msg.verifyManifestEntry (ISMRMRD::ISMRMRD_MRACQUISITION,
-                               ISMRMRD::ISMRMRD_INT, "ISACQINT") &&
-      msg.verifyManifestEntry (ISMRMRD::ISMRMRD_MRACQUISITION,
-                               ISMRMRD::ISMRMRD_FLOAT, "ISACQFLT") &&
-      msg.verifyManifestEntry (ISMRMRD::ISMRMRD_MRACQUISITION,
-                               ISMRMRD::ISMRMRD_DOUBLE, "ISACQDBL") &&
-      msg.verifyManifestEntry (ISMRMRD::ISMRMRD_IMAGE,
-                               ISMRMRD::ISMRMRD_USHORT, "ISIMUSHORT") &&
-      msg.verifyManifestEntry (ISMRMRD::ISMRMRD_IMAGE,
-                               ISMRMRD::ISMRMRD_SHORT, "ISIMSHORT") &&
-      msg.verifyManifestEntry (ISMRMRD::ISMRMRD_IMAGE,
-                               ISMRMRD::ISMRMRD_UINT, "ISIMUINT") &&
-      msg.verifyManifestEntry (ISMRMRD::ISMRMRD_IMAGE,
-                               ISMRMRD::ISMRMRD_INT, "ISIMINT") &&
-      msg.verifyManifestEntry (ISMRMRD::ISMRMRD_IMAGE,
-                               ISMRMRD::ISMRMRD_FLOAT, "ISIMFLT") &&
-      msg.verifyManifestEntry (ISMRMRD::ISMRMRD_IMAGE,
-                               ISMRMRD::ISMRMRD_DOUBLE, "ISIMDBL") &&
-      msg.verifyManifestEntry (ISMRMRD::ISMRMRD_IMAGE,
-                               ISMRMRD::ISMRMRD_CXFLOAT, "ISIMCXFLT") &&
-      msg.verifyManifestEntry (ISMRMRD::ISMRMRD_IMAGE,
-                               ISMRMRD::ISMRMRD_CXDOUBLE, "ISIMCXDBL") &&
-      msg.verifyManifestEntry (ISMRMRD::ISMRMRD_HEADER,
-                               ISMRMRD::ISMRMRD_CHAR, "ISHEADER") &&
-      msg.verifyManifestEntry (ISMRMRD::ISMRMRD_HEADER_WRAPPER,
-                               ISMRMRD::ISMRMRD_CHAR, "ISHEADWRAP") &&
-      msg.verifyManifestEntry (ISMRMRD::ISMRMRD_ERROR_NOTIFICATION,
-                               ISMRMRD::ISMRMRD_CHAR, "ISERRNOTE"))
-  {
-    status = true;
-  } 
-  */
-
-  clientAccepted (msg, status);
 
   return;
 }
@@ -263,19 +89,19 @@ void icpServer::sendError
   ISMRMRD::ErrorNotification msg;
   msg.setErrorType (type);
   msg.setErrorDescription (descr);
-  _session->send (ISMRMRD::ISMRMRD_ERROR_NOTIFICATION, &msg);
+  _session->send (&msg, ISMRMRD::ISMRMRD_ERROR_NOTIFICATION);
   return;
 }
 
 /*****************************************************************************
  ****************************************************************************/
-ENTITY* icpServer::copyEntity
+ISMRMRD::Entity* icpServer::copyEntity
 (
-  ENTITY* ent,
-  STYPE   stype
+  ISMRMRD::Entity* ent,
+  uint32_t         storage
 )
 {
-  if (stype == ISMRMRD::ISMRMRD_SHORT)
+  if (storage == ISMRMRD::ISMRMRD_SHORT)
   {
     ISMRMRD::Acquisition<int16_t>* tmp = static_cast<ISMRMRD::Acquisition<int16_t>*>(ent);
     ISMRMRD::Acquisition<int16_t>* acq
@@ -289,7 +115,7 @@ ENTITY* icpServer::copyEntity
     return acq;
   }
 
-  if (stype == ISMRMRD::ISMRMRD_INT)
+  if (storage == ISMRMRD::ISMRMRD_INT)
   {
     ISMRMRD::Acquisition<int32_t>* tmp = static_cast<ISMRMRD::Acquisition<int32_t>*>(ent);
 
@@ -304,7 +130,7 @@ ENTITY* icpServer::copyEntity
     return acq;
   }
 
-  if (stype == ISMRMRD::ISMRMRD_FLOAT)
+  if (storage == ISMRMRD::ISMRMRD_FLOAT)
   {
     ISMRMRD::Acquisition<float>* tmp = static_cast<ISMRMRD::Acquisition<float>*>(ent);
     ISMRMRD::Acquisition<float>* acq
@@ -319,7 +145,7 @@ ENTITY* icpServer::copyEntity
     return acq;
   }
 
-  if (stype == ISMRMRD::ISMRMRD_DOUBLE)
+  if (storage == ISMRMRD::ISMRMRD_DOUBLE)
   {
     ISMRMRD::Acquisition<double>* tmp = static_cast<ISMRMRD::Acquisition<double>*>(ent);
     ISMRMRD::Acquisition<double>* acq
@@ -337,70 +163,52 @@ ENTITY* icpServer::copyEntity
   throw std::runtime_error ("MR Acquisition unexpected storage type");
   return NULL;
 }
-/*******************************************************************************
- This routine could be used to receive 
- ******************************************************************************/
-void icpServer::handleAcquisition
-(
-  ENTITY* ent,
-  STYPE   stype
-)
-{
-  if (!_acq_storage_set)
-  {
-    _acq_storage     = stype;
-    _acq_storage_set = true;
-  }
-  else if (_acq_storage != stype)
-  {
-    throw std::runtime_error ("Inconsistent acquisition storage type");
-  }
-
-  _acqs.push_back (copyEntity (ent, stype));
-
-  if (_header_received &&
-      _acqs.size() == _hdr.encoding[0].encodedSpace.matrixSize.y)
-  {
-    ENTITY* img_ent = _imrec->runReconstruction (_acqs, stype, _hdr);
-    _session->send (ISMRMRD::ISMRMRD_IMAGE, img_ent, stype);
-    _imrec_done = true;
-
-    if (_client_done)
-    {
-      sendCommand (ISMRMRD::ISMRMRD_COMMAND_DONE_FROM_SERVER, 0);
-    }
-  }
-}
 
 /*******************************************************************************
  ******************************************************************************/
-void icpServer::saveSessionPointer
-(
-  icpSession* session
-)
+void icpServer::run ()
 {
-  _session = session;
+
+  _session->beginReceiving ();
 }
 
 /*******************************************************************************
  ******************************************************************************/
 icpServer::icpServer
 (
-  uint32_t     id   // debug only
+  ICP_SESSION  session,
+  uint32_t     id    // debug only
 )
-: _header_received (false),
+: _session     (session),
+  _header_received (false),
   _acq_storage_set (false),
   _client_done (false),
-  _imrec_done  (false),
-  _id          (id)
+  _imrec_done  (false)//,
+  //_id          (id)
 {
-  std::cout << __func__ << " (" << _id << ") - starting\n";
+
+  //using namespace std::placeholders;
+
+  std::unique_ptr<icpServerHandshakeHandler> handCB
+    (new icpServerHandshakeHandler (this));
+  auto fp1 = std::bind (&icpCallback::receive, *handCB, _1, _2, _3);
+  _session->registerHandler ((ICP_CB) fp1, ISMRMRD::ISMRMRD_HANDSHAKE);
+
+  std::unique_ptr<icpServerErrorNotificationHandler> errCB
+    (new icpServerErrorNotificationHandler (this));
+  auto fp2 = std::bind (&icpCallback::receive, *errCB, _1, _2, _3);
+  _session->registerHandler ((ICP_CB) fp2, ISMRMRD::ISMRMRD_ERROR_NOTIFICATION);
+
+  std::unique_ptr<icpServerCommandHandler> commCB
+    (new icpServerCommandHandler (this));
+  auto fp3 = std::bind (&icpCallback::receive, *commCB, _1, _2, _3);
+  _session->registerHandler ((ICP_CB) fp3, ISMRMRD::ISMRMRD_COMMAND);
+
 }
 
 /*******************************************************************************
  ******************************************************************************/
 icpServer::~icpServer ()
 {
-  std::cout << __func__ << " (" << _id << ") - completed\n";
   delete (_imrec);
 }

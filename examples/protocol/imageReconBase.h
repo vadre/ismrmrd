@@ -1,3 +1,6 @@
+#ifndef IMAGERECONBASE_H
+#define IMAGERECONBASE_H
+
 #include "ismrmrd/ismrmrd.h"
 #include "ismrmrd/xml.h"
 
@@ -14,3 +17,5 @@ class imageReconBase
 
   //virtual ISMRMRD::Entity* getImageEntityPointer () = 0;
  };
+
+#endif //IMAGERECONBASE_H
