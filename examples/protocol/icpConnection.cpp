@@ -1,44 +1,74 @@
+#include <signal.h>
 #include "icpConnection.h"
 #include "icpSession.h"
 
 /*******************************************************************************
  ******************************************************************************/
-bool  icpConnection::_running  = false;
+bool           icpConnection::_running  = false;
+icpConnection* icpConnection::_this     = NULL;
 
 /*******************************************************************************
- Thread
  ******************************************************************************/
-void icpConnection::acceptor ()
+void icpConnection::signalHandler
+(
+  int sig_id
+)
 {
-  boost::asio::io_service io_service;
-  tcp::acceptor a (io_service, tcp::endpoint (tcp::v4(), _port));
-
-  for (uint32_t id = 1;; ++id)
-  {
-    SOCKET_PTR sock (new tcp::socket (io_service));
-    a.accept (*sock);
-    std::cout << __func__ << ": Connection #" << id << "\n\n";
-
-    ICP_SESSION session (new icpSession (sock));
-    std::thread (runUserApp, session, id).detach();
-  }
-
-  return;
+  _this->_acceptor->cancel();
+  _this->_io_service.stop();
+  std::cout << "\nConnection teminated with signal " << sig_id << "\n";
 }
 
 /*******************************************************************************
  ******************************************************************************/
-bool icpConnection::registerUserApp
+void icpConnection::catchSignal ()
+{
+  struct sigaction action;
+  action.sa_handler = icpConnection::signalHandler;
+  action.sa_flags = 0;
+  sigemptyset (&action.sa_mask);
+  sigaction (SIGINT, &action, NULL);
+  sigaction (SIGTERM, &action, NULL);
+}
+
+/*******************************************************************************
+ ******************************************************************************/
+void icpConnection::asyncAccept ()
+{
+
+  SOCKET_PTR sock (new tcp::socket (_io_service));
+  _acceptor->async_accept
+    (*sock, bind (&icpConnection::startUserApp, this, sock));
+  _io_service.run_one();
+}
+
+/*******************************************************************************
+ ******************************************************************************/
+void icpConnection::startUserApp
+(
+  SOCKET_PTR sock
+)
+{
+  ICP_SESSION session (new icpSession (sock));
+  std::thread (runUserApp, std::move (session), _id++).detach();
+
+  asyncAccept ();
+}
+
+/*******************************************************************************
+ ******************************************************************************/
+void icpConnection::registerUserApp
 (
   START_USER_APP_FUNC func_ptr
 )
 {
-  if (func_ptr)
+  if (!func_ptr)
   {
-    runUserApp           = func_ptr;
-    _user_app_registered = true;
+    throw std::runtime_error ("Invalid User App pointer");
   }
-  return _user_app_registered;
+
+  runUserApp           = func_ptr;
+  _user_app_registered = true;
 }
 
 /*******************************************************************************
@@ -48,16 +78,19 @@ void icpConnection::start ()
 {
   if (_running)
   {
-    std::cout << "icpConnection is already running\n";
-    return;
+    throw std::runtime_error ("icpConnection is already running\n");
   }
   if (!_user_app_registered)
   {
-    std::cout << "User app not registered\n";
-    return;
+    throw std::runtime_error ("User app not registered\n");
   }
 
-  _main_thread = std::thread (&icpConnection::acceptor, this);
+  icpConnection::_this = this;
+  _acceptor = std::shared_ptr<tcp::acceptor>
+    (new tcp::acceptor (_io_service, tcp::endpoint(tcp::v4(), _port)));
+
+  catchSignal();
+  asyncAccept ();
   _running = true;
 
   return;
@@ -68,51 +101,47 @@ void icpConnection::start ()
  ******************************************************************************/
 void icpConnection::connect ()
 {
-  if (!_running)
+  if (_running)
   {
-    std::cout << "Connecting to <" << _host << "> on port " << _port << "\n\n";
-    boost::asio::io_service io_service;
-    SOCKET_PTR sock (new tcp::socket (io_service));
-    tcp::endpoint endpoint
-      (boost::asio::ip::address::from_string (_host), _port);
-
-    boost::system::error_code error = boost::asio::error::host_not_found;
-    sock->connect(endpoint, error);
-    if (error)
-    {
-      throw boost::system::system_error(error);
-    }
-
-    _running = true;
-    std::cout << __func__ << ": new session\n";
-    ICP_SESSION session (new icpSession (sock));
-    std::cout << __func__ << ": starting user app\n";
-    std::thread t (runUserApp, session, 777);
-    t.join();
-    std::cout << __func__ << ": Client thread joined\n";
+    throw std::runtime_error ("icpConnection is already running\n");
   }
-  return;
+  if (!_user_app_registered)
+  {
+    throw std::runtime_error ("User app not registered\n");
+  }
+
+  std::cout << "Connecting to <" << _host << "> on port " << _port << "\n\n";
+  boost::asio::io_service io_service;
+  SOCKET_PTR sock (new tcp::socket (io_service));
+  tcp::endpoint endpoint
+    (boost::asio::ip::address::from_string (_host), _port);
+
+  boost::system::error_code error = boost::asio::error::host_not_found;
+  sock->connect(endpoint, error);
+  if (error)
+  {
+    throw boost::system::system_error(error);
+  }
+
+  _running = true;
+  ICP_SESSION session (new icpSession (sock));
+  std::thread t (runUserApp, std::move (session), 777);
+  t.join();
 }
 
 /*******************************************************************************
- ******************************************************************************/
-icpConnection::~icpConnection ()
-{
-  if (_main_thread.joinable ()) _main_thread.join();
-}
-
-/*******************************************************************************
+ Constructor for server application
  ******************************************************************************/
 icpConnection::icpConnection
 (
   uint16_t p
 )
 : _port (p),
-  _user_app_registered (false),
-  _main_thread ()
+  _user_app_registered (false)
 {}
 
 /*******************************************************************************
+ Constructor for client application
  ******************************************************************************/
 icpConnection::icpConnection
 (
@@ -121,7 +150,6 @@ icpConnection::icpConnection
 )
 : _host (host),
   _port (port),
-  _user_app_registered (false),
-  _main_thread ()
-{}
-
+  _user_app_registered (false)
+{
+}

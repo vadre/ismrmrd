@@ -8,7 +8,7 @@ icpSession::icpSession
 )
 : _sock (sock),
   _stop (false),
-  _writer ()
+  _transmitter ()
 {
 }
 
@@ -23,31 +23,24 @@ icpSession::~icpSession
 
 /*******************************************************************************
  ******************************************************************************/
-void icpSession::beginReceiving
+void icpSession::run
 (
 )
 {
-  _writer = std::thread (&icpSession::transmit, this);
-
-  std::cout << __func__ << ": starting\n";
+  _transmitter = std::thread (&icpSession::transmit, this);
   while (!_stop)
   {
     if (!getMessage())
     {
-      std::cout << __func__ <<": getMessage Error!\n";
+      std::cout << "Error from icpSession::getMessage\n";
       _stop = true;
-
-      return;
     }
   }
 
-  std::cout << __func__ <<": stopped receiving\n";
-
-  if (_writer.joinable())
+  if (_transmitter.joinable())
   {
-    _writer.join();
+    _transmitter.join();
   }
-  std::cout << __func__ <<": Writing and receiving done\n";
 
   return;
 }
@@ -60,6 +53,10 @@ void icpSession::shutdown
 {
   _stop = true;
 }
+
+/*******************************************************************************
+ ******************************************************************************/
+template<> void icpSession::registerHandler (ICP_CB, ETYPE);
 
 /*******************************************************************************
  ******************************************************************************/
@@ -96,12 +93,7 @@ bool icpSession::getMessage
     std::cout << "Error: message data read status: " << error << "\n";
   }
 
-  if (bytes_read == 0)
-  {
-    std::cout << __func__ << "Received EOF from client\n";
-    return false;
-  }
-  else if (bytes_read != in_msg.data.size())
+  if (bytes_read != in_msg.data.size())
   {
     std::cout << "Error: Read " << bytes_read
               << ", expected " << in_msg.data_size << " bytes\n";
@@ -131,7 +123,7 @@ uint32_t icpSession::receiveFrameInfo
 
   if (bytes_read == 0)
   {
-    std::cout << __func__ << "Received EOF from client\n";
+    std::cout << __func__ << "Received EOF\n";
     return ICP_ERROR_SOCKET_EOF;
   }
   else if (bytes_read != DATAFRAME_SIZE_FIELD_SIZE)
@@ -150,12 +142,7 @@ uint32_t icpSession::receiveFrameInfo
     std::cout << "Entity Header read status: " << error << "\n";
   }
 
-  if (bytes_read == 0)
-  {
-    std::cout << __func__ << "Received EOF from client\n";
-    return ICP_ERROR_SOCKET_EOF;
-  }
-  else if (bytes_read != ENTITY_HEADER_SIZE)
+  if (bytes_read != ENTITY_HEADER_SIZE)
   {
     std::cout << "Error: Read " << bytes_read << ", expected "
               << ENTITY_HEADER_SIZE << " bytes\n";
@@ -175,146 +162,135 @@ void icpSession::deliver
   IN_MSG& in_msg
 )
 {
-  ISMRMRD::Handshake hand;
-  ISMRMRD::Command cmd;
-  ISMRMRD::IsmrmrdHeaderWrapper wrapper;
-  ISMRMRD::ErrorNotification err;
-  ISMRMRD::Acquisition<int16_t> a16;
-  ISMRMRD::Acquisition<int32_t> a32;
-  ISMRMRD::Acquisition<float> aflt;
-  ISMRMRD::Acquisition<double> adbl;
-  ISMRMRD::Image<int16_t> i16;
-  ISMRMRD::Image<uint16_t> iu16;
-  ISMRMRD::Image<int32_t> i32;
-  ISMRMRD::Image<uint32_t> iu32;
-  ISMRMRD::Image<float> iflt;
-  ISMRMRD::Image<double> idbl;
-  ISMRMRD::Image<std::complex<float> > icxflt;
-  ISMRMRD::Image<std::complex<double> > icxdbl;
-
   ISMRMRD::EntityType  etype = (ISMRMRD::EntityType) in_msg.ehdr.entity_type;
   ISMRMRD::StorageType stype = (ISMRMRD::StorageType) in_msg.ehdr.storage_type;
-
   if (_callbacks.find (etype) == _callbacks.end())
   {
     std::cout << "Warning! received unexpected entity type: " << etype << "\n";
     return;
   }
 
-  switch (etype)
+  if (etype == ISMRMRD::ISMRMRD_HANDSHAKE)
   {
-    case ISMRMRD::ISMRMRD_HANDSHAKE:
-
-      hand.deserialize (in_msg.data);
-      call (etype, &hand, etype, stype);
-      break;
-
-    case ISMRMRD::ISMRMRD_COMMAND:
-
-      cmd.deserialize (in_msg.data);
-      call (etype, &cmd, etype, stype);
-      break;
-
-    case ISMRMRD::ISMRMRD_HEADER_WRAPPER:
-
-      wrapper.deserialize (in_msg.data);
-      call (etype, &wrapper, etype, stype);
-      break;
-
-    case ISMRMRD::ISMRMRD_MRACQUISITION:
-
-      if (stype == ISMRMRD::ISMRMRD_SHORT)
-      {
-        a16.deserialize (in_msg.data);
-        call (etype, &a16, etype, stype);
-      }
-      else if (stype == ISMRMRD::ISMRMRD_INT)
-      {
-        a32.deserialize (in_msg.data);
-        call (etype, &a32, etype, stype);
-      }
-      if (stype == ISMRMRD::ISMRMRD_FLOAT)
-      {
-        aflt.deserialize (in_msg.data);
-        call (etype, &aflt, etype, stype);
-      }
-      else if (stype == ISMRMRD::ISMRMRD_DOUBLE)
-      {
-        adbl.deserialize (in_msg.data);
-        call (etype, &adbl, etype, stype);
-      }
-      else
-      {
-        std::cout << "Warning! Unexpected MR Acquisition Storage type "
-                  << stype << "\n";
-      }
-      break;
-
-    case ISMRMRD::ISMRMRD_ERROR_NOTIFICATION:
-
-      err.deserialize (in_msg.data);
-      call (etype, &err, etype, stype);
-      break;
-
-    case ISMRMRD::ISMRMRD_IMAGE:
-
-      if (stype == ISMRMRD::ISMRMRD_SHORT)
-      {
-        i16.deserialize (in_msg.data);
-        call (etype, &i16, etype, stype);
-      }
-      else if (stype == ISMRMRD::ISMRMRD_USHORT)
-      {
-        iu16.deserialize (in_msg.data);
-        call (etype, &iu16, etype, stype);
-      }
-      else if (stype == ISMRMRD::ISMRMRD_INT)
-      {
-        i32.deserialize (in_msg.data);
-        call (etype, &i32, etype, stype);
-      }
-      else if (stype == ISMRMRD::ISMRMRD_UINT)
-      {
-        iu32.deserialize (in_msg.data);
-        call (etype, &iu32, etype, stype);
-      }
-      else if (stype == ISMRMRD::ISMRMRD_FLOAT)
-      {
-        iflt.deserialize (in_msg.data);
-        call (etype, &iflt, etype, stype);
-      }
-      else if (stype == ISMRMRD::ISMRMRD_DOUBLE)
-      {
-        idbl.deserialize (in_msg.data);
-        call (etype, &idbl, etype, stype);
-      }
-      else if (stype == ISMRMRD::ISMRMRD_CXFLOAT)
-      {
-        icxflt.deserialize (in_msg.data);
-        call (etype, &icxflt, etype, stype);
-      }
-      else if (stype == ISMRMRD::ISMRMRD_CXDOUBLE)
-      {
-        icxdbl.deserialize (in_msg.data);
-        call (etype, &icxdbl, etype, stype);
-      }
-      else
-      {
-        std::cout << "Warning! Unexpected Image Storage type: " << stype << "\n";
-      }
-      break;
-
-    //case ISMRMRD::ISMRMRD_WAVEFORM:
-      //break;
-    //case ISMRMRD::ISMRMRD_BLOB:
-      //break;
-
-    default:
-
-      std::cout << "Warning! Dropping unknown entity type: " << etype << "\n\n";
-      break;
-
-  } // switch ((*in_msg).ehdr.entity_type)
+    std::unique_ptr<HANDSHAKE> ent (new (HANDSHAKE));
+    ent->deserialize (in_msg.data);
+    call (etype, &(*ent), etype, stype);
+  }
+  else if (etype == ISMRMRD::ISMRMRD_COMMAND)
+  {
+    std::unique_ptr<COMMAND> ent (new (COMMAND));
+    ent->deserialize (in_msg.data);
+    call (etype, ent, etype, stype);
+  }
+  else if (etype == ISMRMRD::ISMRMRD_HEADER_WRAPPER)
+  {
+    std::unique_ptr<XMLWRAP> ent (new (XMLWRAP));
+    ent->deserialize (in_msg.data);
+    call (etype, &(*ent), etype, stype);
+  }
+  else if (etype == ISMRMRD::ISMRMRD_ERROR_REPORT)
+  {
+    std::unique_ptr<ERRREPORT> ent (new (ERRREPORT));
+    ent->deserialize (in_msg.data);
+    call (etype, &(*ent), etype, stype);
+  }
+  else if (etype == ISMRMRD::ISMRMRD_MRACQUISITION)
+  {
+    if (stype == ISMRMRD::ISMRMRD_SHORT)
+    {
+      std::unique_ptr<ISMRMRD::Acquisition<int16_t>> ent
+        (new ISMRMRD::Acquisition<int16_t>);
+      ent->deserialize (in_msg.data);
+      call (etype, &(*ent), etype, stype);
+    }
+    else if (stype == ISMRMRD::ISMRMRD_INT)
+    {
+      std::unique_ptr<ISMRMRD::Acquisition<int32_t>> ent
+        (new ISMRMRD::Acquisition<int32_t>);
+      ent->deserialize (in_msg.data);
+      call (etype, &(*ent), etype, stype);
+    }
+    if (stype == ISMRMRD::ISMRMRD_FLOAT)
+    {
+      std::unique_ptr<ISMRMRD::Acquisition<float>> ent
+        (new ISMRMRD::Acquisition<float>);
+      ent->deserialize (in_msg.data);
+      call (etype, &(*ent), etype, stype);
+    }
+    else if (stype == ISMRMRD::ISMRMRD_DOUBLE)
+    {
+      std::unique_ptr<ISMRMRD::Acquisition<double>> ent
+        (new ISMRMRD::Acquisition<double>);
+      ent->deserialize (in_msg.data);
+      call (etype, &(*ent), etype, stype);
+    }
+    else
+    {
+      std::cout << "Warning! Unexpected MR Acquisition Storage type "
+                << stype << "\n";
+    }
+  }
+  else if (etype == ISMRMRD::ISMRMRD_IMAGE)
+  {
+    if (stype == ISMRMRD::ISMRMRD_SHORT)
+    {
+      std::unique_ptr<ISMRMRD::Image<int16_t>> ent (new ISMRMRD::Image<int16_t>);
+      ent->deserialize (in_msg.data);
+      call (etype, &(*ent), etype, stype);
+    }
+    else if (stype == ISMRMRD::ISMRMRD_USHORT)
+    {
+      std::unique_ptr<ISMRMRD::Image<uint16_t>> ent (new ISMRMRD::Image<uint16_t>);
+      ent->deserialize (in_msg.data);
+      call (etype, &(*ent), etype, stype);
+    }
+    else if (stype == ISMRMRD::ISMRMRD_INT)
+    {
+      std::unique_ptr<ISMRMRD::Image<int32_t>> ent (new ISMRMRD::Image<int32_t>);
+      ent->deserialize (in_msg.data);
+      call (etype, &(*ent), etype, stype);
+    }
+    else if (stype == ISMRMRD::ISMRMRD_UINT)
+    {
+      std::unique_ptr<ISMRMRD::Image<uint32_t>> ent (new ISMRMRD::Image<uint32_t>);
+      ent->deserialize (in_msg.data);
+      call (etype, &(*ent), etype, stype);
+    }
+    else if (stype == ISMRMRD::ISMRMRD_FLOAT)
+    {
+      std::unique_ptr<ISMRMRD::Image<float>> ent (new ISMRMRD::Image<float>);
+      ent->deserialize (in_msg.data);
+      call (etype, &(*ent), etype, stype);
+    }
+    else if (stype == ISMRMRD::ISMRMRD_DOUBLE)
+    {
+      std::unique_ptr<ISMRMRD::Image<double>> ent (new ISMRMRD::Image<double>);
+      ent->deserialize (in_msg.data);
+      call (etype, &(*ent), etype, stype);
+    }
+    else if (stype == ISMRMRD::ISMRMRD_CXFLOAT)
+    {
+      std::unique_ptr <ISMRMRD::Image<std::complex<float>>> ent
+        (new ISMRMRD::Image<std::complex<float>>);
+      ent->deserialize (in_msg.data);
+      call (etype, &(*ent), etype, stype);
+    }
+    else if (stype == ISMRMRD::ISMRMRD_CXDOUBLE)
+    {
+      std::unique_ptr <ISMRMRD::Image<std::complex<double>>> ent
+        (new ISMRMRD::Image<std::complex<double>>);
+      ent->deserialize (in_msg.data);
+      call (etype, &(*ent), etype, stype);
+    }
+    else
+    {
+      std::cout << "Warning! Unexpected Image Storage type: " << stype << "\n";
+    }
+  }
+  else
+  {
+    std::cout << "Warning! Dropping unknown entity type: " << etype << "\n\n";
+  }
 }
 
 /*******************************************************************************
@@ -337,17 +313,35 @@ void icpSession::call
 
     func (std::forward <A> (args)...);
   }
-  else
-  {
-    std::cout << "Warning: Entity handler for entity "
-              << (uint32_t)(index / 100) << ", storage " << index % 100
-              << ", not registered\n";
-  }
 }
 
 /*******************************************************************************
  ******************************************************************************/
-template<> void icpSession::registerHandler (ICP_CB, ETYPE);
+uint32_t icpSession::getAcqStream
+(
+  ENTITY* entity,
+  STYPE   stype
+)
+{
+  if (stype == ISMRMRD::ISMRMRD_SHORT)
+  {
+    return static_cast<ISMRMRD::Acquisition<int16_t>*>(entity)->getStream();
+  }
+  else if (stype == ISMRMRD::ISMRMRD_INT)
+  {
+    return static_cast<ISMRMRD::Acquisition<int32_t>*>(entity)->getStream();
+  }
+  else if (stype == ISMRMRD::ISMRMRD_FLOAT)
+  {
+    return static_cast<ISMRMRD::Acquisition<float>*>(entity)->getStream();
+  }
+  else if (stype == ISMRMRD::ISMRMRD_DOUBLE)
+  {
+    return static_cast<ISMRMRD::Acquisition<double>*>(entity)->getStream();
+  }
+
+  throw std::runtime_error ("Unexpected Acquisition Storage Type");
+}
 
 /*******************************************************************************
  ******************************************************************************/
@@ -360,7 +354,6 @@ bool icpSession::send
 {
   bool ret_val = true;
   ISMRMRD::EntityHeader head;
-  std::stringstream sstr;
   std::vector <unsigned char> h_buffer;
   std::vector <unsigned char> e_buffer;
 
@@ -372,31 +365,22 @@ bool icpSession::send
     case ISMRMRD::ISMRMRD_MRACQUISITION:
 
       head.storage_type = stype;
-      head.stream       = ISMRMRD::ISMRMRD_STREAM_ACQUISITION_DATA;
+      head.stream       = getAcqStream (entity, stype);
       e_buffer          = entity->serialize();
       break;
 
     case ISMRMRD::ISMRMRD_IMAGE:
 
-      std::cout << __func__ << ": 1\n";
       head.storage_type = stype;
       head.stream       = ISMRMRD::ISMRMRD_STREAM_IMAGE;
-      std::cout << __func__ << ": 2, entity = " << entity << "\n";
-
-      std::cout << "storage = "
-                << static_cast<ISMRMRD::Image<float>*>(entity)->getStorageType() << "\n";
-
-      e_buffer = static_cast<ISMRMRD::Image<float>*>(entity)->serialize();
-      std::cout << __func__ << ": 3\n";
+      e_buffer          = entity->serialize();
       break;
 
     case ISMRMRD::ISMRMRD_HEADER_WRAPPER:
 
       head.storage_type = ISMRMRD::ISMRMRD_CHAR;
       head.stream       = ISMRMRD::ISMRMRD_STREAM_ISMRMRD_HEADER;
-
-      e_buffer =
-        static_cast<ISMRMRD::IsmrmrdHeaderWrapper*>(entity)->serialize();
+      e_buffer          = entity->serialize();
       break;
 
     case ISMRMRD::ISMRMRD_HANDSHAKE:
@@ -413,14 +397,12 @@ bool icpSession::send
       e_buffer = entity->serialize();
       break;
 
-    case ISMRMRD::ISMRMRD_ERROR_NOTIFICATION:
+    case ISMRMRD::ISMRMRD_ERROR_REPORT:
       head.storage_type = ISMRMRD::ISMRMRD_CHAR;
       head.stream       = ISMRMRD::ISMRMRD_STREAM_ERROR;
       e_buffer = entity->serialize();
       break;
 
-    /*case ISMRMRD_WAVEFORM:
-    case ISMRMRD_BLOB:*/
     default:
 
       std::cout << __func__ << "Warning: Entity " << head.entity_type
@@ -467,8 +449,6 @@ void icpSession::queueMessage
              std::back_inserter (msg.data));
 
   _oq.push (msg);
-  //std::cout << __func__ << ": num queued messages for id "
-            //<< thread_data->id << " = " << thread_data->oq.size() << '\n';
 
   return;
 }

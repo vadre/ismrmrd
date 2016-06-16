@@ -15,15 +15,16 @@ unsigned short    port        = 50050;
 
 /*******************************************************************************
  ******************************************************************************/
-void runMe (ICP_SESSION session, uint32_t id)
+void startClient (ICP_SESSION session, uint32_t id)
 {
-  icpClient* client = new icpClient (session, "Client_1", "testdata.h5",
-                                     "FileOut.h5", "dataset", "dataset");
-  std::cout << __func__ << " Running Client id " << id << "\n";
-  client->run();
-  std::cout << __func__ << " Deleting Client id " << id << "\n";
+  icpClient* client = new icpClient (std::move (session),
+                                     client_name,
+                                     in_fname,
+                                     out_fname,
+                                     in_dset,
+                                     out_dset);
   delete (client);
-  std::cout << __func__ << " Returning Client id " << id << "\n";
+  std::cout << "Client finished\n\n";
   return;
 }
 
@@ -72,16 +73,12 @@ int main
     return 0;
   }
 
-  std::ios_base::sync_with_stdio(false);
-  std::cin.tie(static_cast<std::ostream*>(0));
-  std::cerr.tie(static_cast<std::ostream*>(0));
-
   std::cout << "Using client name <" << client_name << ">, host IP address <"
             << host << ">, and port <" << port << ">" << std::endl;
   std::cout << "Re-start with: icpClient -h to see all options\n" << std::endl;
 
   icpConnection client_conn (host, port);
-  client_conn.registerUserApp ((START_USER_APP_FUNC) &runMe);
+  client_conn.registerUserApp ((START_USER_APP_FUNC) &startClient);
   client_conn.connect();
 
   return 0;

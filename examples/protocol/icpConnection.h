@@ -5,7 +5,6 @@
 #include <thread>
 #include "icpSession.h"
 
-using ICP_SESSION = std::shared_ptr<icpSession>;
 using START_USER_APP_FUNC = void (*) (ICP_SESSION, uint32_t);
 
 /*******************************************************************************
@@ -16,20 +15,27 @@ public:
 
        icpConnection   (uint16_t port);
        icpConnection   (std::string host, uint16_t port);
-       ~icpConnection  ();
   void start           ();
   void connect         ();
-  bool registerUserApp (START_USER_APP_FUNC func_ptr);
+  void registerUserApp (START_USER_APP_FUNC func_ptr);
 
 private:
 
-  static bool          _running;
-  std::string          _host;
-  unsigned short       _port;
-  bool                 _user_app_registered;
-  std::thread          _main_thread;
+  void catchSignal ();
+  static void signalHandler (int sig_id);
 
-  void acceptor        ();
+  void                 asyncAccept ();
+  void                 startUserApp (SOCKET_PTR);
   START_USER_APP_FUNC  runUserApp;
+
+  static bool                    _running;
+  static icpConnection*          _this;
+
+  boost::asio::io_service        _io_service;
+  std::shared_ptr<tcp::acceptor> _acceptor;
+  std::string                    _host;
+  unsigned short                 _port;
+  bool                           _user_app_registered;
+  int                            _id;
 };
 #endif // ICP_CONNECTION_H */

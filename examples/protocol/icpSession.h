@@ -23,13 +23,11 @@ using ETYPE      = ISMRMRD::EntityType;
 using ENTITY     = ISMRMRD::Entity;
 using HANDSHAKE  = ISMRMRD::Handshake;
 using COMMAND    = ISMRMRD::Command;
-using ERRNOTE    = ISMRMRD::ErrorNotification;
+using ERRREPORT  = ISMRMRD::ErrorReport;
 using XMLHEAD    = ISMRMRD::IsmrmrdHeader;
 using XMLWRAP    = ISMRMRD::IsmrmrdHeaderWrapper;
 //using WAVEFORM  = ISMRMRD::Waveform;
-//using BLUB      = ISMRMRD::Blub;
-
-//using BEGIN_INPUT_CALLBACK_FUNC = bool (*)();
+//using BLOB      = ISMRMRD::Blob;
 
 /*******************************************************************************
  ******************************************************************************/
@@ -56,6 +54,7 @@ struct CB_STRUCT : public CB_BASE
 
 using ICP_CB = CB_STRUCT <ENTITY*, ETYPE, STYPE>;
 using CB_MAP = std::map<uint32_t, std::unique_ptr<CB_BASE> >;
+
 /*******************************************************************************
  * Byte order utilities - DO NOT MODIFY!!!
  ******************************************************************************/
@@ -85,24 +84,27 @@ typedef OUTPUT_MESSAGE_STRUCTURE  OUT_MSG;
  ******************************************************************************/
 class icpSession
 {
-public:
+  public:
 
          icpSession      (SOCKET_PTR sock);
          ~icpSession     ();
-  void   beginReceiving  ();
+  void   run             ();
   void   shutdown        ();
-  bool   send            (ENTITY*, ETYPE, STYPE stype = ISMRMRD::ISMRMRD_CHAR);
+  bool   send            (ENTITY*, ETYPE,
+                          STYPE stype = ISMRMRD::ISMRMRD_STORAGE_NONE);
   template <typename F, typename E>
   void   registerHandler (F func, E etype);
 
-private:
+  private:
+
   SOCKET_PTR                _sock;
   bool                      _stop;
   std::queue<OUT_MSG>       _oq;
-  std::thread               _writer;
+  std::thread               _transmitter;
   CB_MAP                    _callbacks;
 
   bool     getMessage       ();
+  uint32_t getAcqStream     (ENTITY*, STYPE);
   uint32_t receiveFrameInfo (IN_MSG& in_msg);
   void     deliver          (IN_MSG& in_msg);
   void     transmit         ();
@@ -113,14 +115,16 @@ private:
   
 };
 
+using ICP_SESSION = std::unique_ptr<icpSession>;
+
 /*******************************************************************************
- * Template
+ * Templates
  ******************************************************************************/
 template <typename F, typename E>
 void icpSession::registerHandler
 (
-  F            func,
-  E            etype
+  F  func,
+  E  etype
 )
 {
   std::unique_ptr<F> f_uptr (new F (func));

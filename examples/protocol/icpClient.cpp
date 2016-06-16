@@ -27,10 +27,10 @@ void icpClient::sendError
   std::string        descr
 )
 {
-  ISMRMRD::ErrorNotification msg;
+  ISMRMRD::ErrorReport msg;
   msg.setErrorType (type);
   msg.setErrorDescription (descr);
-  _session->send (&msg, ISMRMRD::ISMRMRD_ERROR_NOTIFICATION);
+  _session->send (&msg, ISMRMRD::ISMRMRD_ERROR_REPORT);
 
   return;
 }
@@ -72,6 +72,7 @@ void icpClient::sendHandshake
   msg.setTimestamp ((uint64_t)std::time(nullptr));
   msg.setConnectionStatus (ISMRMRD::CONNECTION_REQUEST);
   msg.setClientName (_client_name);
+  // fill in the manifest here
   _session->send (&msg, ISMRMRD::ISMRMRD_HANDSHAKE);
 
   return;
@@ -85,9 +86,13 @@ void icpClient::beginInput
 {
   
   std::cout << __func__ << ": starting\n";
-  //sleep (1);
   sendHandshake ();
-  sendCommand (ISMRMRD::ISMRMRD_COMMAND_CONFIG_IMREC_ONE, 0);
+
+  ISMRMRD::Command msg;
+  msg.setCommandType (ISMRMRD::ISMRMRD_COMMAND_CONFIGURATION);
+  msg.setCommandId (0);
+  msg.setConfigType (ISMRMRD::CONFIGURATION_BUILT_IN_1);
+  _session->send (&msg, ISMRMRD::ISMRMRD_COMMAND);
   std::cout << __func__ << "Sent out config command\n";
 
   ISMRMRD::Dataset dset (_in_fname, _in_dset);
@@ -160,25 +165,6 @@ void icpClient::sendAcquisitions
 
 /*******************************************************************************
  ******************************************************************************/
-void icpClient::icpClient::run
-(
-)
-{
-  std::cout << __func__ << ": 1\n";
-  std::thread it (&icpClient::beginInput, this);
-  if (it.joinable())
-  {
-    it.join();
-  }
-  _session->beginReceiving ();
-  //if (it.joinable())
-  //{
-    //it.join();
-  //}
-}
-
-/*******************************************************************************
- ******************************************************************************/
 icpClient::icpClient
 (
   ICP_SESSION      session,
@@ -188,7 +174,7 @@ icpClient::icpClient
   std::string      in_dataset,
   std::string      out_dataset
 )
-: _session         (session),
+: _session         (std::move (session)),
   _client_name     (client_name),
   _in_fname        (in_fname),
   _out_fname       (out_fname),
@@ -200,10 +186,9 @@ icpClient::icpClient
   //_input_thread    ()
 {
 
-  std::ios_base::sync_with_stdio(false);
-  std::cin.tie(static_cast<std::ostream*>(0));
-  std::cerr.tie(static_cast<std::ostream*>(0));
-
+  std::cout << __func__ << "client name : <"<< client_name << ">\n";
+  std::cout << __func__ << "_client name : <"<< _client_name << ">\n";
+  std::cout << __func__ << "_client name length : <"<< _client_name.size() << ">\n";
   using namespace std::placeholders;
 
   std::unique_ptr<icpClientHandshakeHandler> handCB
@@ -211,10 +196,10 @@ icpClient::icpClient
   auto fp1 = std::bind (&icpCallback::receive, *handCB, _1, _2, _3);
   _session->registerHandler ((ICP_CB) fp1, ISMRMRD::ISMRMRD_HANDSHAKE);
 
-  std::unique_ptr<icpClientErrorNotificationHandler> errCB
-    (new icpClientErrorNotificationHandler (this));
+  std::unique_ptr<icpClientErrorReportHandler> errCB
+    (new icpClientErrorReportHandler (this));
   auto fp2 = std::bind (&icpCallback::receive, *errCB, _1, _2, _3);
-  _session->registerHandler ((ICP_CB) fp2, ISMRMRD::ISMRMRD_ERROR_NOTIFICATION);
+  _session->registerHandler ((ICP_CB) fp2, ISMRMRD::ISMRMRD_ERROR_REPORT);
 
   std::unique_ptr<icpClientCommandHandler> commCB
     (new icpClientCommandHandler (this));
@@ -230,12 +215,19 @@ icpClient::icpClient
     (new icpClientImageHandler (this));
   auto fp5 = std::bind (&icpCallback::receive, *imCB, _1, _2, _3);
   _session->registerHandler ((ICP_CB) fp5, ISMRMRD::ISMRMRD_IMAGE);
+
+  std::thread it (&icpClient::beginInput, this);
+  _session->run ();
+  if (it.joinable())
+  {
+    it.join();
+  }
 }
 
 /*******************************************************************************
  ******************************************************************************/
 /*
-icpClient::icpClient
+icpClient::~icpClient
 (
 )
 {

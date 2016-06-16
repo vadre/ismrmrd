@@ -6,7 +6,6 @@
 #include "ismrmrd/ismrmrd.h"
 #include "ismrmrd/xml.h"
 
-using ICP_SESSION = std::shared_ptr<icpSession>;
 /*******************************************************************************
  ******************************************************************************/
 class icpServer
@@ -14,9 +13,11 @@ class icpServer
 public:
        icpServer       (ICP_SESSION, uint32_t id); // id is for debug only
        ~icpServer      ();
-  void run             ();
+private:
+
+  void sendError       (ISMRMRD::ErrorType type, std::string descr);
   void clientAccepted  (ISMRMRD::Handshake* msg, bool accepted);
-  void configure       (ISMRMRD::CommandType cmd);
+  void configure       (COMMAND* cmd);
   void sendCommand     (ISMRMRD::CommandType cmd, uint32_t cmd_id);
   ISMRMRD::Entity* copyEntity (ISMRMRD::Entity* ent, uint32_t storage);
 
@@ -30,9 +31,12 @@ public:
   ISMRMRD::IsmrmrdHeader         _hdr;
   ISMRMRD::StorageType           _acq_storage;
 
-private:
-
-  void sendError       (ISMRMRD::ErrorType type, std::string descr);
+  friend class icpServerHandshakeHandler;
+  friend class icpServerCommandHandler;
+  friend class icpServerCommandHandler;
+  friend class icpServerErrorReportHandler;
+  friend class icpServerIsmrmrdHeaderWrapperHandler;
+  friend class icpServerAcquisitionHandler;
 
   //uint32_t                _id;           // Debug only
 };

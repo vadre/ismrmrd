@@ -7,16 +7,14 @@ using namespace std::placeholders;
  ******************************************************************************/
 void icpServer::configure
 (
-  ISMRMRD::CommandType  cmd
+  COMMAND* msg
 )
 {
-  if (cmd == ISMRMRD::ISMRMRD_COMMAND_CONFIG_IMREC_ONE)
+  if (msg->getConfigType() == ISMRMRD::CONFIGURATION_BUILT_IN_1)
   {
     std::cout << "Received request for configuration option 1\n";
 
     _imrec = new imageReconOne;
-
-    //using namespace std::placeholders;
 
     std::unique_ptr<icpServerIsmrmrdHeaderWrapperHandler> headCB
       (new icpServerIsmrmrdHeaderWrapperHandler (this));
@@ -86,10 +84,10 @@ void icpServer::sendError
   std::string        descr
 )
 {
-  ISMRMRD::ErrorNotification msg;
+  ISMRMRD::ErrorReport msg;
   msg.setErrorType (type);
   msg.setErrorDescription (descr);
-  _session->send (&msg, ISMRMRD::ISMRMRD_ERROR_NOTIFICATION);
+  _session->send (&msg, ISMRMRD::ISMRMRD_ERROR_REPORT);
   return;
 }
 
@@ -166,43 +164,34 @@ ISMRMRD::Entity* icpServer::copyEntity
 
 /*******************************************************************************
  ******************************************************************************/
-void icpServer::run ()
-{
-
-  _session->beginReceiving ();
-}
-
-/*******************************************************************************
- ******************************************************************************/
 icpServer::icpServer
 (
   ICP_SESSION  session,
   uint32_t     id    // debug only
 )
-: _session     (session),
+: _session (std::move (session)),
   _header_received (false),
   _acq_storage_set (false),
   _client_done (false),
-  _imrec_done  (false)//,
-  //_id          (id)
+  _imrec_done  (false)
 {
-
-  //using namespace std::placeholders;
 
   std::unique_ptr<icpServerHandshakeHandler> handCB
     (new icpServerHandshakeHandler (this));
   auto fp1 = std::bind (&icpCallback::receive, *handCB, _1, _2, _3);
   _session->registerHandler ((ICP_CB) fp1, ISMRMRD::ISMRMRD_HANDSHAKE);
 
-  std::unique_ptr<icpServerErrorNotificationHandler> errCB
-    (new icpServerErrorNotificationHandler (this));
+  std::unique_ptr<icpServerErrorReportHandler> errCB
+    (new icpServerErrorReportHandler (this));
   auto fp2 = std::bind (&icpCallback::receive, *errCB, _1, _2, _3);
-  _session->registerHandler ((ICP_CB) fp2, ISMRMRD::ISMRMRD_ERROR_NOTIFICATION);
+  _session->registerHandler ((ICP_CB) fp2, ISMRMRD::ISMRMRD_ERROR_REPORT);
 
   std::unique_ptr<icpServerCommandHandler> commCB
     (new icpServerCommandHandler (this));
   auto fp3 = std::bind (&icpCallback::receive, *commCB, _1, _2, _3);
   _session->registerHandler ((ICP_CB) fp3, ISMRMRD::ISMRMRD_COMMAND);
+
+  _session->run ();
 
 }
 

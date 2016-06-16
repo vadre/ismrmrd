@@ -1505,8 +1505,8 @@ void quaternion_to_directions(float quat[4], float read_dir[3],
     slice_dir[2] = 1.0f - 2.0f * (a * a + b * b);
 }
 
-
-
+/******************************* EntityHeader *********************************/
+/******************************************************************************/
 std::vector<unsigned char> EntityHeader::serialize()
 {
   size_t bytes = sizeof (uint32_t) * 4;
@@ -1531,15 +1531,13 @@ std::vector<unsigned char> EntityHeader::serialize()
 
   if (buffer.size() != bytes)
   {
-
     std::cout << "buffer.size()         = " << buffer.size() << std::endl;
     std::cout << "bytes                 = " << bytes << std::endl;
     throw std::runtime_error
       ("Serialized EntityHeader buffer size does not match expected buffer size");
   }
 
-  return buffer; // Should not be copied on newer compilers due to return
-                 // value optimization.
+  return buffer;
 }
 
 
@@ -1574,15 +1572,12 @@ Handshake::Handshake ()
 {
   head_.version        = ISMRMRD_VERSION_MAJOR;
   head_.entity_type    = ISMRMRD_HANDSHAKE;
-  head_.storage_type   = ISMRMRD_CHAR;
+  head_.storage_type   = ISMRMRD_STORAGE_NONE;
   head_.stream         = ISMRMRD_STREAM_HANDSHAKE;
   timestamp_           = 0;
   conn_status_         = CONNECTION_NOT_ASSIGNED;
   client_name_length_  = 0;
   manifest_size_       = 0;
-
-  addManifestEntry (ISMRMRD_HANDSHAKE, ISMRMRD_CHAR, "Handshake");
-  addManifestEntry (ISMRMRD_COMMAND, ISMRMRD_CHAR, "Command");
 }
 
 /******************************************************************************/
@@ -1634,29 +1629,20 @@ std::string Handshake::getClientName() const
 void Handshake::setClientName (std::string name)
 {
   client_name_        = name;
+  std::cout << __func__ << "client_name_ <" << client_name_ << ">\n";
+  std::cout << __func__ << ".size() <" << client_name_.size() << ">\n";
   client_name_length_ = client_name_.size();
+  std::cout << __func__ << "length <" << client_name_length_ << ">\n";
 }
 /******************************************************************************/
-void Handshake::addManifestEntry (ISMRMRD::EntityType  etype,
+void Handshake::addManifestEntry (uint32_t             stream,
+                                  ISMRMRD::EntityType  etype,
                                   ISMRMRD::StorageType stype,
                                   std::string          description)
 {
-  if ((uint32_t)stype >= 100 || stype < 0)
-  {
-    throw std::runtime_error ("Invalid storage type value");
-  }
-
-  for (int ii = 0; ii < manifest_size_; ii++)
-  {
-    if (manifest_[ii].stream == etype * 100 + stype)
-    {
-      return;
-    }
-  }
-
   IsmrmrdManifest entry;
 
-  entry.stream       = etype * 100 + stype;
+  entry.stream       = stream;
   entry.entity_type  = etype;
   entry.storage_type = stype;
   entry.description  = description;
@@ -1685,25 +1671,19 @@ std::map<uint32_t, IsmrmrdManifest> Handshake::getManifest () const
   return mm;
 }
 /******************************************************************************/
-bool Handshake::verifyManifestEntry (ISMRMRD::EntityType  etype,
-                                     ISMRMRD::StorageType stype,
-                                     std::string          description) const
+bool Handshake::verifyManifestEntry (uint32_t             stream,
+                                     ISMRMRD::EntityType  etype,
+                                     ISMRMRD::StorageType stype) const
 {
-  std::cout << __func__ << ": 1 starting\n";
   for (int ii = 0; ii < manifest_size_; ii++)
   {
-    std::cout << __func__ << ": 2 - iteration " << ii << " of " << manifest_size_ << "\n";
-    if (manifest_[ii].stream       == etype * 100 + stype &&
-        manifest_[ii].entity_type  == etype &&
+    if (manifest_[ii].stream       == stream &&
+        manifest_[ii].entity_type  == etype  &&
         manifest_[ii].storage_type == stype)
     {
-      std::cout << __func__ << ": 3 - FOUND\n";
-      //TODO: This lookup doesn't make much sense - maybe a custom string??
       return true;
     }
-    std::cout << __func__ << ": 4 - not yet\n";
   }
-  std::cout << __func__ << ": 5 - NOT found\n";
   return false;
 }
 /******************************************************************************/
@@ -1713,54 +1693,44 @@ std::vector<unsigned char> Handshake::serialize()
   {
     throw std::runtime_error("Entity type does not match Handshake class");
   }
-  std::cout << __func__ << ": 1" << "\n";
 
   size_t bytes = sizeof (HandshakeHeader) +
                  sizeof (uint64_t) +
                  sizeof (uint32_t) * 3 +
                  client_name_.size();
 
-  std::cout << __func__ << ": 2" << "\n";
   for (int ii = 0; ii < manifest_size_; ii++)
   {
     bytes += sizeof (uint32_t) * 2 + manifest_[ii].descr_length;
     bytes += sizeof (EntityType) + sizeof (StorageType);
   }
 
-  std::cout << __func__ << ": 3" << "\n";
   std::vector<unsigned char> buffer;
   buffer.reserve (bytes);
 
-  std::cout << __func__ << ": 4" << "\n";
   std::copy ((unsigned char*) &this->head_,
              (unsigned char*) &this->head_ + sizeof (this->head_),
              std::back_inserter (buffer));
-  std::cout << __func__ << ": 5" << "\n";
 
   std::copy ((unsigned char*) &this->timestamp_,
              (unsigned char*) &this->timestamp_ + sizeof (uint64_t),
              std::back_inserter (buffer));
-  std::cout << __func__ << ": 6" << "\n";
 
   std::copy ((unsigned char*) &this->conn_status_,
              (unsigned char*) &this->conn_status_ + sizeof (uint32_t),
              std::back_inserter (buffer));
-  std::cout << __func__ << ": 7" << "\n";
 
   std::copy ((unsigned char*) &this->client_name_length_,
              (unsigned char*) &this->client_name_length_ + sizeof (uint32_t),
              std::back_inserter (buffer));
-  std::cout << __func__ << ": 8" << "\n";
 
   std::copy ((unsigned char*) &this->manifest_size_,
              (unsigned char*) &this->manifest_size_ + sizeof (uint32_t),
              std::back_inserter (buffer));
-  std::cout << __func__ << ": 9" << "\n";
 
   std::copy ((unsigned char*) &this->client_name_,
              (unsigned char*) &this->client_name_ + client_name_.size(),
              std::back_inserter (buffer));
-  std::cout << __func__ << ": 10" << "\n";
 
   for (int ii = 0; ii < manifest_size_; ii++)
   {
@@ -1769,9 +1739,7 @@ std::vector<unsigned char> Handshake::serialize()
                sizeof (uint32_t) * 2 + manifest_[ii].descr_length +
                sizeof (EntityType) + sizeof (StorageType),
                std::back_inserter (buffer));
-  std::cout << __func__ << ": 11." << ii << "\n";
   }
-
 
   if (buffer.size() != bytes)
   {
@@ -1779,9 +1747,7 @@ std::vector<unsigned char> Handshake::serialize()
       ("Serialized Handshake buffer size does not match expected buffer size");
   }
 
-  std::cout << __func__ << ": 12" << "\n";
-  return buffer; // Should not be copied on newer compilers due to return
-                 // value optimization.
+  return buffer;
 }
 
 /******************************************************************************/
@@ -1794,59 +1760,82 @@ void Handshake::deserialize(const std::vector<unsigned char>& buffer)
   }
 
   uint16_t left  = 0;
-  uint16_t right = sizeof (HandshakeHeader);
-  std::copy (&buffer[left], &buffer[right], (unsigned char*) &this->head_);
+  uint16_t right = 0;
+  if ((right = sizeof (HandshakeHeader)) <= buffer.size())
+  {
+    std::copy (&buffer[left], &buffer[right], (unsigned char*) &this->head_);
+  }
 
   left = right;
-  right += sizeof (uint64_t);
-  std::copy (&buffer[left], &buffer[right], (unsigned char*) &this->timestamp_);
+  if ((right += sizeof (uint64_t)) <= buffer.size())
+  {
+    std::copy (&buffer[left], &buffer[right], (unsigned char*) &this->timestamp_);
+  }
 
   left = right;
-  right += sizeof (uint32_t);
-  std::copy (&buffer[left], &buffer[right],
-             (unsigned char*) &this->conn_status_);
+  if ((right += sizeof (uint32_t)) <= buffer.size())
+  {
+    std::copy (&buffer[left], &buffer[right],
+               (unsigned char*) &this->conn_status_);
+  }
 
   left = right;
-  right += sizeof (uint32_t);
-  std::copy (&buffer[left], &buffer[right],
-             (unsigned char*) &this->client_name_length_);
+  if ((right += sizeof (uint32_t)) <= buffer.size())
+  {
+    std::copy (&buffer[left], &buffer[right],
+               (unsigned char*) &this->client_name_length_);
+  }
 
   left = right;
-  right += sizeof (uint32_t);
-  std::copy (&buffer[left], &buffer[right],
-             (unsigned char*) &this->manifest_size_);
+  if ((right += sizeof (uint32_t)) <= buffer.size())
+  {
+    std::copy (&buffer[left], &buffer[right],
+               (unsigned char*) &this->manifest_size_);
+  }
 
   left = right;
-  right += client_name_length_;
-  std::copy (&buffer[left], &buffer[right],
-             (unsigned char*) &this->client_name_);
+  if ((right += client_name_length_) <= buffer.size())
+  {
+    std::copy (&buffer[left], &buffer[right],
+               (unsigned char*) &this->client_name_);
+  }
 
-  for (int ii = 0; ii < manifest_size_; ii++)
+  for (int ii = 0; ii < manifest_size_ && right <= buffer.size(); ii++)
   {
     left = right;
-    right += sizeof (uint32_t);
-    std::copy (&buffer[left], &buffer[right],
-               (unsigned char*) &this->manifest_[ii].stream);
+    if ((right += sizeof (uint32_t)) <= buffer.size())
+    {
+      std::copy (&buffer[left], &buffer[right],
+                 (unsigned char*) &this->manifest_[ii].stream);
+    }
 
     left = right;
-    right += sizeof (EntityType);
-    std::copy (&buffer[left], &buffer[right],
-               (unsigned char*) &this->manifest_[ii].entity_type);
+    if ((right += sizeof (EntityType)) <= buffer.size())
+    {
+      std::copy (&buffer[left], &buffer[right],
+                 (unsigned char*) &this->manifest_[ii].entity_type);
+    }
 
     left = right;
-    right += sizeof (StorageType);
-    std::copy (&buffer[left], &buffer[right],
-               (unsigned char*) &this->manifest_[ii].storage_type);
+    if ((right += sizeof (StorageType)) <= buffer.size())
+    {
+      std::copy (&buffer[left], &buffer[right],
+                 (unsigned char*) &this->manifest_[ii].storage_type);
+    }
 
     left = right;
-    right += sizeof (uint32_t);
-    std::copy (&buffer[left], &buffer[right],
-               (unsigned char*) &this->manifest_[ii].descr_length);
+    if ((right += sizeof (uint32_t)) <= buffer.size())
+    {
+      std::copy (&buffer[left], &buffer[right],
+                 (unsigned char*) &this->manifest_[ii].descr_length);
+    }
 
     left = right;
-    right += manifest_[ii].descr_length;
-    std::copy (&buffer[left], &buffer[right],
-               (unsigned char*) &this->manifest_[ii].description);
+    if ((right += manifest_[ii].descr_length) <= buffer.size())
+    {
+      std::copy (&buffer[left], &buffer[right],
+                 (unsigned char*) &this->manifest_[ii].description);
+    }
   }
 
   if (buffer.size() != right)
@@ -1860,16 +1849,15 @@ void Handshake::deserialize(const std::vector<unsigned char>& buffer)
 /******************************************************************************/
 Command::Command ()
 {
-  head_.version      = ISMRMRD_VERSION_MAJOR;
-  head_.entity_type  = ISMRMRD_COMMAND;
-  head_.storage_type = ISMRMRD_CHAR;
-  head_.stream       = ISMRMRD_STREAM_COMMAND;
+  head_.version        = ISMRMRD_VERSION_MAJOR;
+  head_.entity_type    = ISMRMRD_COMMAND;
+  head_.storage_type   = ISMRMRD_STORAGE_NONE;
+  head_.stream         = ISMRMRD_STREAM_COMMAND;
   command_type_        = ISMRMRD_COMMAND_NO_COMMAND;
   command_id_          = 0;
   config_type_         = CONFIGURATION_NONE;
-  memset (config_file_, 0, MAX_CONFIG_FILENAME_LENGTH);
-  memset ((unsigned char*)&entities_[0], 0,
-          MAX_CONFIG_NUM_ENTITIES * sizeof (uint32_t));
+  config_file_length_  = 0;
+  num_entities_        = 0;
 }
 /******************************************************************************/
 uint32_t Command::getVersion () const
@@ -1919,33 +1907,24 @@ void Command::setConfigType (ConfigurationType config_type)
 /******************************************************************************/
 std::string Command::getConfigFile () const
 {
-  return std::string (config_file_);
+  return config_file_;
 }
 /******************************************************************************/
 void Command::setConfigFile (std::string config)
 {
-  if (config.size() == 0 || config.size() > MAX_CONFIG_FILENAME_LENGTH)
-  {
-    throw std::runtime_error ("Invalid configuration filename size");
-  }
-  strncpy (config_file_, config.c_str(),
-           ((MAX_CONFIG_FILENAME_LENGTH <= config.size()) ?
-           MAX_CONFIG_FILENAME_LENGTH : config.size()));
+  config_file_ = config;
+  config_file_length_ = config_file_.size();
 }
 /******************************************************************************/
 std::vector<uint32_t> Command::getConfigEntities () const
 {
-  return std::vector<uint32_t> (entities_, entities_ + sizeof (entities_) /
-                                                      sizeof (uint32_t));
+  return entities_;
 }
 /******************************************************************************/
-void Command::setConfigEntities (std::vector<uint32_t> config)
+void Command::setConfigEntities (std::vector<uint32_t> entities)
 {
-  if (config.size() == 0 || config.size() > MAX_CONFIG_NUM_ENTITIES)
-  {
-    throw std::runtime_error ("Invalid number of configuration entities");
-  }
-  std::copy(std::begin (config), std::end (config), entities_);
+  entities_ = entities;
+  num_entities_ = entities.size();
 }
 /******************************************************************************/
 
@@ -1960,8 +1939,10 @@ std::vector<unsigned char> Command::serialize()
                  sizeof (this->command_type_) +
                  sizeof (this->command_id_) +
                  sizeof (this->config_type_) +
-                 MAX_CONFIG_FILENAME_LENGTH +
-                 MAX_CONFIG_NUM_ENTITIES * sizeof (entities_[0]);
+                 sizeof (this->config_file_length_) +
+                 this->config_file_length_ +
+                 sizeof (this->num_entities_) +
+                 this->num_entities_ * sizeof (entities_[0]);
 
   std::vector<unsigned char> buffer;
   buffer.reserve (bytes);
@@ -1983,13 +1964,22 @@ std::vector<unsigned char> Command::serialize()
              (unsigned char*) &this->config_type_ + sizeof (this->config_type_),
              std::back_inserter (buffer));
 
+  std::copy ((unsigned char*) &this->config_file_length_,
+             (unsigned char*) &this->config_file_length_ +
+                              sizeof (this->config_file_length_),
+             std::back_inserter (buffer));
+
   std::copy ((unsigned char*) &this->config_file_,
-             (unsigned char*) &this->config_file_ + MAX_CONFIG_FILENAME_LENGTH,
+             (unsigned char*) &this->config_file_ + this->config_file_length_,
+             std::back_inserter (buffer));
+
+  std::copy ((unsigned char*) &this->num_entities_,
+             (unsigned char*) &this->num_entities_ + sizeof (this->num_entities_),
              std::back_inserter (buffer));
 
   std::copy ((unsigned char*) &this->entities_,
              (unsigned char*) &this->entities_ +
-             MAX_CONFIG_NUM_ENTITIES *  sizeof (this->entities_[0]),
+             this->num_entities_ *  sizeof (this->entities_[0]),
              std::back_inserter (buffer));
 
   if (buffer.size() != bytes)
@@ -2005,21 +1995,6 @@ std::vector<unsigned char> Command::serialize()
 /******************************************************************************/
 void Command::deserialize (const std::vector<unsigned char>& buffer)
 {
-  size_t expected_bytes = sizeof (CommandHeader) +
-                          sizeof (this->command_type_) +
-                          sizeof (this->command_id_) +
-                          sizeof (this->config_type_) +
-                          MAX_CONFIG_FILENAME_LENGTH +
-                          MAX_CONFIG_NUM_ENTITIES * sizeof (entities_[0]);
-
-  if (buffer.size() != expected_bytes)
-  {
-    //printf ("buffer.size(): %lu\n", buffer.size());
-    //printf ("expected: %lu\n", sizeof (uint32_t) * 2);
-    throw std::runtime_error
-      ("Buffer size does not match the expected size of Command");
-  }
-
   CommandHeader* h_ptr = (CommandHeader*)&buffer[0];
   if (h_ptr->entity_type != ISMRMRD_COMMAND)
   {
@@ -2027,132 +2002,160 @@ void Command::deserialize (const std::vector<unsigned char>& buffer)
   }
 
   int left  = 0;
-  int right = sizeof (CommandHeader);
-  std::copy (&buffer[left], &buffer[right], (unsigned char*) &this->head_);
+  int right = 0;
+  if ((right = sizeof (CommandHeader)) <= buffer.size())
+  {
+    std::copy (&buffer[left], &buffer[right], (unsigned char*) &this->head_);
+  }
 
   left   = right;
-  right += sizeof (this->command_type_);
-  std::copy (&buffer[left], &buffer[right],
-             (unsigned char*) &this->command_type_);
+  if ((right += sizeof (this->command_type_)) <= buffer.size())
+  {
+    std::copy (&buffer[left], &buffer[right],
+               (unsigned char*) &this->command_type_);
+  }
 
   left   = right;
-  right += sizeof (this->command_id_);
-  std::copy (&buffer[left], &buffer[right],
-             (unsigned char*) &this->command_id_);
+  if ((right += sizeof (this->command_id_)) <= buffer.size())
+  {
+    std::copy (&buffer[left], &buffer[right],
+               (unsigned char*) &this->command_id_);
+  }
 
   left   = right;
-  right += sizeof (this->config_type_);
-  std::copy (&buffer[left], &buffer[right],
-             (unsigned char*) &this->config_type_);
+  if ((right += sizeof (this->config_type_)) <= buffer.size())
+  {
+    std::copy (&buffer[left], &buffer[right],
+               (unsigned char*) &this->config_type_);
+  }
 
   left   = right;
-  right += MAX_CONFIG_FILENAME_LENGTH;
-  std::copy (&buffer[left], &buffer[right],
-             (unsigned char*) &this->config_file_);
+  if ((right += sizeof (this->config_file_length_)) <= buffer.size())
+  {
+    std::copy (&buffer[left], &buffer[right],
+               (unsigned char*) &this->config_file_length_);
+  }
 
   left   = right;
-  right += MAX_CONFIG_NUM_ENTITIES * sizeof (this->entities_[0]);
-  std::copy (&buffer[left], &buffer[right], (unsigned char*) &this->entities_);
+  if ((right += this->config_file_length_) <= buffer.size())
+  {
+    std::copy (&buffer[left], &buffer[right],
+               (unsigned char*) &this->config_file_);
+  }
+
+  left   = right;
+  if ((right += sizeof (this->num_entities_)) <= buffer.size())
+  {
+    std::copy (&buffer[left], &buffer[right],
+               (unsigned char*) &this->num_entities_);
+  }
+
+  left   = right;
+  if ((right += this->num_entities_ * sizeof (this->entities_[0])) <= buffer.size())
+  {
+    std::copy (&buffer[left], &buffer[right], (unsigned char*) &this->entities_);
+  }
+
+  if (buffer.size() != right)
+  {
+    std::cout << "size: " << buffer.size() << ", expected: " << right << "\n";
+    throw std::runtime_error ("Buffer size does not match Command class");
+  }
 }
 
 
 /********************************** Error *************************************/
 /******************************************************************************/
-ErrorNotification::ErrorNotification ()
+ErrorReport::ErrorReport ()
 {
   head_.version        = ISMRMRD_VERSION_MAJOR;
-  head_.entity_type    = ISMRMRD_ERROR_NOTIFICATION;
-  head_.storage_type   = ISMRMRD_CHAR;
+  head_.entity_type    = ISMRMRD_ERROR_REPORT;
+  head_.storage_type   = ISMRMRD_STORAGE_NONE;
   head_.stream         = ISMRMRD_STREAM_ERROR;
-  error_type_          = ISMRMRD_ERROR_NO_ERROR;
+  error_type_          = ISMRMRD_ERROR_NONE;
   error_command_type_  = ISMRMRD_COMMAND_NO_COMMAND;
   error_command_id_    = 0;
-  error_entity_type_   = ISMRMRD_ERROR_NOTIFICATION;
-  memset (error_description_, 0, MAX_ERROR_DESCRIPTION_LENGTH);
+  error_entity_type_   = ISMRMRD_ERROR_REPORT;
+  description_length_  = 0;
 }
 /******************************************************************************/
-uint32_t ErrorNotification::getVersion () const
+uint32_t ErrorReport::getVersion () const
 {
   return head_.version;
 }
 /******************************************************************************/
-StorageType ErrorNotification::getStorageType () const
+StorageType ErrorReport::getStorageType () const
 {
   return static_cast<StorageType>(head_.storage_type);
 }
 /******************************************************************************/
-uint32_t ErrorNotification::getStream () const
+uint32_t ErrorReport::getStream () const
 {
   return head_.stream;
 }
 /******************************************************************************/
-ErrorType ErrorNotification::getErrorType () const
+ErrorType ErrorReport::getErrorType () const
 {
   return static_cast<ErrorType>(error_type_);
 }
 /******************************************************************************/
-void ErrorNotification::setErrorType (ErrorType error_type)
+void ErrorReport::setErrorType (ErrorType error_type)
 {
   error_type_ = error_type;
 }
 /******************************************************************************/
-CommandType ErrorNotification::getErrorCommandType () const
+CommandType ErrorReport::getErrorCommandType () const
 {
   return static_cast<CommandType>(error_command_type_);
 }
 /******************************************************************************/
-void ErrorNotification::setErrorCommandType (CommandType command_type)
+void ErrorReport::setErrorCommandType (CommandType command_type)
 {
   error_command_type_ = command_type;
 }
 /******************************************************************************/
-uint32_t ErrorNotification::getErrorCommandId () const
+uint32_t ErrorReport::getErrorCommandId () const
 {
   return error_command_id_;
 }
 /******************************************************************************/
-EntityType ErrorNotification::getErrorEntityType () const
+EntityType ErrorReport::getErrorEntityType () const
 {
   return static_cast<EntityType>(error_entity_type_);
 }
 /******************************************************************************/
-void ErrorNotification::setErrorEntityType (EntityType entity_type)
+void ErrorReport::setErrorEntityType (EntityType entity_type)
 {
   error_entity_type_ = entity_type;
 }
 /******************************************************************************/
-void ErrorNotification::setErrorDescription (std::string description)
+void ErrorReport::setErrorDescription (std::string description)
 {
-  if (description.size() == 0 ||
-      description.size() > MAX_ERROR_DESCRIPTION_LENGTH)
-  {
-    throw std::runtime_error ("Invalid Error Description size");
-  }
-  strncpy (error_description_, description.c_str(),
-           ((MAX_ERROR_DESCRIPTION_LENGTH <= description.size()) ?
-           MAX_ERROR_DESCRIPTION_LENGTH : description.size()));
+  error_description_  = description;
+  description_length_ = error_description_.size();
 }
 /******************************************************************************/
-std::string ErrorNotification::getErrorDescription () const
+std::string ErrorReport::getErrorDescription () const
 {
-  return std::string (error_description_);
+  return error_description_;
 }
 
 /******************************************************************************/
-std::vector<unsigned char> ErrorNotification::serialize()
+std::vector<unsigned char> ErrorReport::serialize()
 {
-  if (this->head_.entity_type != ISMRMRD_ERROR_NOTIFICATION)
+  if (this->head_.entity_type != ISMRMRD_ERROR_REPORT)
   {
     throw std::runtime_error
-      ("Entity type does not match ErrorNotification class");
+      ("Entity type does not match ErrorReport class");
   }
 
-  size_t bytes = sizeof (ErrorNotificationHeader) +
+  size_t bytes = sizeof (ErrorReportHeader) +
                  sizeof (this->error_type_) +
                  sizeof (this->error_command_type_) +
                  sizeof (this->error_command_id_) +
                  sizeof (this->error_entity_type_) +
-                 MAX_ERROR_DESCRIPTION_LENGTH;
+                 sizeof (this->description_length_) +
+                 description_length_;
 
   std::vector<unsigned char> buffer;
   buffer.reserve (bytes);
@@ -2180,15 +2183,20 @@ std::vector<unsigned char> ErrorNotification::serialize()
                sizeof (this->error_entity_type_),
              std::back_inserter (buffer));
 
+  std::copy ((unsigned char*) &this->description_length_,
+             (unsigned char*) &this->description_length_ +
+               sizeof (this->description_length_),
+             std::back_inserter (buffer));
+
   std::copy ((unsigned char*) &this->error_description_,
              (unsigned char*) &this->error_description_ +
-               MAX_ERROR_DESCRIPTION_LENGTH,
+               this->description_length_,
              std::back_inserter (buffer));
 
   if (buffer.size() != bytes)
   {
     throw std::runtime_error
-      ("Serialized size does not match expected ErrorNotification size");
+      ("Serialized size does not match expected ErrorReport size");
   }
 
   return buffer; // Should not be copied on newer compilers due to return
@@ -2196,58 +2204,70 @@ std::vector<unsigned char> ErrorNotification::serialize()
 }
 
 /******************************************************************************/
-void ErrorNotification::deserialize (const std::vector<unsigned char>& buffer)
+void ErrorReport::deserialize (const std::vector<unsigned char>& buffer)
 {
-  size_t expected_bytes = sizeof (ErrorNotificationHeader) +
-                          sizeof (this->error_type_) +
-                          sizeof (this->error_command_type_) +
-                          sizeof (this->error_command_id_) +
-                          sizeof (this->error_entity_type_) +
-                          MAX_ERROR_DESCRIPTION_LENGTH;
-
-  if (buffer.size() != expected_bytes)
-  {
-    //printf ("buffer.size(): %lu\n", buffer.size());
-    //printf ("expected: %lu\n", sizeof (uint32_t) * 2);
-    throw std::runtime_error
-      ("Buffer size does not match the expected size of ErrorNotification");
-  }
-
-  ErrorNotificationHeader* h_ptr = (ErrorNotificationHeader*)&buffer[0];
-  if (h_ptr->entity_type != ISMRMRD_ERROR_NOTIFICATION)
+  ErrorReportHeader* h_ptr = (ErrorReportHeader*)&buffer[0];
+  if (h_ptr->entity_type != ISMRMRD_ERROR_REPORT)
   {
     throw std::runtime_error
-      ("Entity type does not match the ErrorNotification class");
+      ("Entity type does not match the ErrorReport class");
   }
 
   int left  = 0;
-  int right = sizeof (ErrorNotificationHeader);
-  std::copy (&buffer[left], &buffer[right], (unsigned char*) &this->head_);
+  int right = 0;
+  if ((right = sizeof (ErrorReportHeader)) <= buffer.size())
+  {
+    std::copy (&buffer[left], &buffer[right], (unsigned char*) &this->head_);
+  }
 
   left   = right;
-  right += sizeof (this->error_type_);
-  std::copy (&buffer[left], &buffer[right],
-             (unsigned char*) &this->error_type_);
+  if ((right += sizeof (this->error_type_)) <= buffer.size())
+  {
+    std::copy (&buffer[left], &buffer[right],
+               (unsigned char*) &this->error_type_);
+  }
 
   left   = right;
-  right += sizeof (this->error_command_type_);
-  std::copy (&buffer[left], &buffer[right],
-             (unsigned char*) &this->error_command_type_);
+  if ((right += sizeof (this->error_command_type_)) <= buffer.size())
+  {
+    std::copy (&buffer[left], &buffer[right],
+               (unsigned char*) &this->error_command_type_);
+  }
 
   left   = right;
-  right += sizeof (this->error_command_id_);
-  std::copy (&buffer[left], &buffer[right],
-             (unsigned char*) &this->error_command_id_);
+  if ((right += sizeof (this->error_command_id_)) <= buffer.size())
+  {
+    std::copy (&buffer[left], &buffer[right],
+               (unsigned char*) &this->error_command_id_);
+  }
 
   left   = right;
-  right += sizeof (this->error_entity_type_);
-  std::copy (&buffer[left], &buffer[right],
-             (unsigned char*) &this->error_entity_type_);
+  if ((right += sizeof (this->error_entity_type_)) <= buffer.size())
+  {
+    std::copy (&buffer[left], &buffer[right],
+               (unsigned char*) &this->error_entity_type_);
+  }
 
   left   = right;
-  right += MAX_ERROR_DESCRIPTION_LENGTH;
-  std::copy (&buffer[left], &buffer[right],
-             (unsigned char*) &this->error_description_);
+  if ((right += sizeof (this->description_length_)) <= buffer.size())
+  {
+    std::copy (&buffer[left], &buffer[right],
+               (unsigned char*) &this->description_length_);
+  }
+
+  left   = right;
+  if ((right += this->description_length_) <= buffer.size())
+  {
+    std::copy (&buffer[left], &buffer[right],
+               (unsigned char*) &this->error_description_);
+  }
+
+  if (buffer.size() != right)
+  {
+    std::cout << "size: " << buffer.size() << ", expected: " << right << "\n";
+    throw std::runtime_error ("Buffer size does not match ErrorReport class");
+  }
+
 }
 
 } // namespace ISMRMRD

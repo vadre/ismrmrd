@@ -39,10 +39,6 @@ typedef unsigned __int64 uint64_t;
 
 namespace ISMRMRD {
 
-const uint32_t MAX_CLIENT_NAME_LENGTH       =  64;
-const uint32_t MAX_CONFIG_FILENAME_LENGTH   = 512;
-const uint32_t MAX_CONFIG_NUM_ENTITIES      = 128;
-const uint32_t MAX_ERROR_DESCRIPTION_LENGTH = 256;
 
 /** Global Constants */
 enum Constant {
@@ -69,53 +65,55 @@ enum StorageType {
     ISMRMRD_CXFLOAT = 9,   /**< corresponds to complex float  */
     ISMRMRD_CXDOUBLE = 10, /**< corresponds to complex double */
     ISMRMRD_CXSHORT = 9,   /**< corresponds to complex int16_t  */
-    ISMRMRD_CXINT = 10     /**< corresponds to complex int32_t */
+    ISMRMRD_CXINT = 10,    /**< corresponds to complex int32_t */
+    ISMRMRD_STORAGE_NONE = 100 /**< Storage type not applicable */
 };
 
 enum EntityType {
-    ISMRMRD_HANDSHAKE = 0,          /**< first package sent                   */
-    ISMRMRD_COMMAND = 1,            /**< commands to control recon system     */
-    ISMRMRD_MRACQUISITION = 2,      /**< MR raw data                          */
-    ISMRMRD_WAVEFORM = 3,           /**< Gradient, physiology, etc. waveform  */
-    ISMRMRD_IMAGE = 4,              /**< Reconstructed image                  */
-    ISMRMRD_HEADER = 5,             /**< The XML header describing the data   */
-    ISMRMRD_HEADER_WRAPPER = 6,     /**< The wrapper containing XML header    */
-    ISMRMRD_ERROR_NOTIFICATION = 7, /**< Something went wrong                 */
-    ISMRMRD_BLOB = 8                /**< Some binary object, with description */
+    ISMRMRD_HANDSHAKE = 0,       /**< first package sent                   */
+    ISMRMRD_COMMAND = 1,        /**< commands to control recon system     */
+    ISMRMRD_MRACQUISITION = 2,  /**< MR raw data                          */
+    ISMRMRD_WAVEFORM = 3,       /**< Gradient, physiology, etc. waveform  */
+    ISMRMRD_IMAGE = 4,          /**< Reconstructed image                  */
+    ISMRMRD_HEADER = 5,         /**< The XML header describing the data   */
+    ISMRMRD_HEADER_WRAPPER = 6, /**< The wrapper containing XML header    */
+    ISMRMRD_ERROR_REPORT = 7,   /**< Something went wrong                 */
+    ISMRMRD_BLOB = 8            /**< Some binary object, with description */
 };
 
 enum CommandType
 {
-  ISMRMRD_COMMAND_NO_COMMAND           = 1000,
-  ISMRMRD_COMMAND_STOP_FROM_CLIENT     = 1001,
-  ISMRMRD_COMMAND_DONE_FROM_SERVER     = 1002,
-  ISMRMRD_COMMAND_CLOSE_CONNECTION     = 1003,
-  ISMRMRD_COMMAND_CONFIG_IMREC_ONE     = 1004,
-  ISMRMRD_COMMAND_CONFIG_IMREC_TWO     = 1005,
-  ISMRMRD_COMMAND_USER_DEFINED_1       = 2001,
-  ISMRMRD_COMMAND_USER_DEFINED_2       = 2002,
-  ISMRMRD_COMMAND_USER_DEFINED_3       = 2003,
-  ISMRMRD_COMMAND_USER_DEFINED_4       = 2004
+  ISMRMRD_COMMAND_NO_COMMAND         = 1000,
+  ISMRMRD_COMMAND_STOP_FROM_CLIENT   = 1001,
+  ISMRMRD_COMMAND_DONE_FROM_SERVER   = 1002,
+  ISMRMRD_COMMAND_CLOSE_CONNECTION   = 1003,
+  ISMRMRD_COMMAND_CONFIGURATION      = 1004,
+  ISMRMRD_COMMAND_USER_DEFINED_1     = 2001,
+  ISMRMRD_COMMAND_USER_DEFINED_2     = 2002,
+  ISMRMRD_COMMAND_USER_DEFINED_3     = 2003,
+  ISMRMRD_COMMAND_USER_DEFINED_4     = 2004
 };
 
 enum ErrorType
 {
-  ISMRMRD_ERROR_NO_ERROR               = 20000,
-  ISMRMRD_ERROR_INPUT_DATA_ERROR       = 20001,
-  ISMRMRD_ERROR_INTERNAL_ERROR         = 20002,
-  ISMRMRD_ERROR_UNKNOWN_ERROR          = 20003
+  ISMRMRD_ERROR_NONE                 = 20000,
+  ISMRMRD_ERROR_INPUT_DATA_ERROR     = 20001,
+  ISMRMRD_ERROR_MANIFEST_ERROR       = 20002,
+  ISMRMRD_ERROR_INTERNAL_ERROR       = 20003,
+  ISMRMRD_ERROR_UNKNOWN_ERROR        = 20004
 };
 
+//TODO: Not sure how the stream numbers are assigned, or when.
 enum ReservedStream
 {
-  ISMRMRD_STREAM_ACQUISITION_DATA      = 0,
+  //ISMRMRD_STREAM_ACQUISITION_DATA      = 0,
   ISMRMRD_STREAM_ISMRMRD_HEADER        = 1,
-  ISMRMRD_STREAM_WAVEFORM              = 2,
+  //ISMRMRD_STREAM_WAVEFORM              = 2,
   ISMRMRD_STREAM_IMAGE                 = 3,
-  ISMRMRD_STREAM_BLOB                  = 4,
-  ISMRMRD_STREAM_COMMAND               = 5,
-  ISMRMRD_STREAM_ERROR                 = 6,
-  ISMRMRD_STREAM_HANDSHAKE             = 65536
+  //ISMRMRD_STREAM_BLOB                  = 4,
+  ISMRMRD_STREAM_HANDSHAKE             = 65536,
+  ISMRMRD_STREAM_COMMAND               = 65537,
+  ISMRMRD_STREAM_ERROR                 = 65538
 };
 
 /** Acquisition Flags */
@@ -184,53 +182,47 @@ enum ImageFlags {
 
 enum ConnectionStatus
 {
-    CONNECTION_NOT_ASSIGNED          = 200,   /**< Client to server */
-    CONNECTION_REQUEST               = 201,   /**< Client to server */
-    CONNECTION_ACCEPTED              = 202,   /**< Server to client */
-    CONNECTION_DENIED_UNKNOWN_USER   = 301,   /**< Server to client */
-    CONNECTION_DENIED_SERVER_BUSY    = 302,   /**< Server to client */
-    CONNECTION_DENIED_MANIFEST_ERROR = 303    /**< Server to client */
+  CONNECTION_NOT_ASSIGNED          = 200,   /**< Client to server */
+  CONNECTION_REQUEST               = 201,   /**< Client to server */
+  CONNECTION_ACCEPTED              = 202,   /**< Server to client */
+  CONNECTION_DENIED_UNKNOWN_USER   = 301,   /**< Server to client */
+  CONNECTION_DENIED_SERVER_BUSY    = 302,   /**< Server to client */
+  CONNECTION_DENIED_MANIFEST_ERROR = 303    /**< Server to client */
 };
 
 enum ConfigurationType
 {
-    CONFIGURATION_NONE               = 700,
-    CONFIGURATION_FILE               = 701, // Filename in the config buffer
-    CONFIGURATION_ENCLOSED           = 702, // Contents in the config buffer
-    CONFIGURATION_BUILT_IN_1         = 703, // TODO: Should we have built in?
-    CONFIGURATION_BUILT_IN_2         = 704,
-    CONFIGURATION_BUILT_IN_3         = 705
+  CONFIGURATION_NONE               = 700,
+  CONFIGURATION_FILE               = 701, // Filename in the config buffer
+  CONFIGURATION_ENCLOSED           = 702, // Contents in the config buffer
+  CONFIGURATION_BUILT_IN_1         = 703, // Built in configurations are
+  CONFIGURATION_BUILT_IN_2         = 704, //   known to client and server
+  CONFIGURATION_BUILT_IN_3         = 705  //   applications
 };
 
 /// Entity type interface
 class EXPORTISMRMRD Entity
 {
- public:
-    /*virtual uint32_t     getVersion ()     = 0;
-    virtual EntityType   getEntityType ()  = 0;
-    virtual StorageType  getStorageType () = 0;
-    virtual uint32_t     getStream ()      = 0;*/
-    virtual std::vector<unsigned char> serialize() = 0;
-    virtual void deserialize(const std::vector<unsigned char>& buffer) = 0;
+  public:
+
+  virtual ~Entity (){};
+  virtual std::vector<unsigned char> serialize() = 0;
+  virtual void deserialize(const std::vector<unsigned char>& buffer) = 0;
 };
 
  
-struct EntityHeader 
-    : public Entity
+class EntityHeader 
+  : public Entity
 {
+  public:
 
-    // Functions inherited from Entity
-    /*virtual uint32_t     getVersion ();
-    virtual EntityType   getEntityType ();
-    virtual StorageType  getStorageType ();
-    virtual uint32_t     getStream ();*/
-    virtual std::vector<unsigned char> serialize();
-    virtual void deserialize(const std::vector<unsigned char>& buffer);
+  virtual std::vector<unsigned char> serialize();
+  virtual void deserialize(const std::vector<unsigned char>& buffer);
 
-    uint32_t version;       /**< First unsigned int indicates the version */
-    uint32_t entity_type;   /**< Entity type code */
-    uint32_t storage_type;  /**< numeric type of each sample */
-    uint32_t stream;        /**< which stream this belongs to */
+  uint32_t version;       /**< First unsigned int indicates the version */
+  uint32_t entity_type;   /**< Entity type code */
+  uint32_t storage_type;  /**< numeric type of each sample */
+  uint32_t stream;        /**< which stream this belongs to */
 };
 
 struct IsmrmrdManifest
@@ -244,10 +236,10 @@ struct IsmrmrdManifest
 
 struct HandshakeHeader
 {
-    uint32_t version;       /**< First unsigned int indicates the version  */
-    uint32_t entity_type;   /**< Entity type code */
-    uint32_t storage_type;  /**< numeric type of each sample */
-    uint32_t stream;        /**< which stream this belongs to */
+  uint32_t version;       /**< First unsigned int indicates the version  */
+  uint32_t entity_type;   /**< Entity type code */
+  uint32_t storage_type;  /**< numeric type of each sample */
+  uint32_t stream;        /**< which stream this belongs to */
 };
 
 class Handshake
@@ -262,23 +254,20 @@ public:
     uint64_t         getTimestamp () const;
     void             setClientName (std::string name);
     std::string      getClientName () const;
+    uint32_t         setClientNameLength ();
     uint32_t         getClientNameLength () const;
     void             setConnectionStatus (ConnectionStatus status);
     ConnectionStatus getConnectionStatus () const;
-    void             addManifestEntry (ISMRMRD::EntityType  etype,
+    void             addManifestEntry (uint32_t             stream,
+                                       ISMRMRD::EntityType  etype,
                                        ISMRMRD::StorageType stype,
                                        std::string          description);
     uint32_t         getManifestSize () const;
     std::map<uint32_t, IsmrmrdManifest> getManifest () const;
-    bool             verifyManifestEntry (ISMRMRD::EntityType  etype,
-                                          ISMRMRD::StorageType stype,
-                                          std::string          description) const;
+    bool             verifyManifestEntry (uint32_t             stream,
+                                          ISMRMRD::EntityType  etype,
+                                          ISMRMRD::StorageType stype) const;
 
-    // Functions inherited from Entity
-    /*virtual uint32_t     getVersion ();
-    virtual EntityType   getEntityType ();
-    virtual StorageType  getStorageType ();
-    virtual uint32_t     getStream ();*/
     virtual std::vector<unsigned char> serialize();
     virtual void deserialize(const std::vector<unsigned char>& buffer);
 
@@ -319,25 +308,22 @@ public:
     std::vector<uint32_t> getConfigEntities () const;
     void                  setConfigEntities (std::vector<uint32_t> entities);
     
-    // Functions inherited from Entity
-    /*virtual uint32_t     getVersion ();
-    virtual EntityType   getEntityType ();
-    virtual StorageType  getStorageType ();
-    virtual uint32_t     getStream ();*/
     virtual std::vector<unsigned char> serialize();
     virtual void deserialize(const std::vector<unsigned char>& buffer);
 
 protected:
 
-    CommandHeader head_;
-    uint32_t      command_type_; /**< CommandType maps to CommandType enum  */
-    uint32_t      command_id_;   /** ID number used to refer to the command */
-    uint32_t      config_type_;  /**< maps to ConfigurationType enum */
-    char          config_file_[MAX_CONFIG_FILENAME_LENGTH];
-    uint32_t      entities_[MAX_CONFIG_NUM_ENTITIES];
+    CommandHeader         head_;
+    uint32_t              command_type_; /**< CommandType maps to CommandType enum  */
+    uint32_t              command_id_;   /** ID number used to refer to the command */
+    uint32_t              config_type_;  /**< maps to ConfigurationType enum */
+    uint32_t              config_file_length_;  /**< Config file length */
+    std::string           config_file_;  /** Either filename or actual config data */
+    uint32_t              num_entities_;  /**< size of vector entities_ */
+    std::vector<uint32_t> entities_;
 };
 
-struct ErrorNotificationHeader
+struct ErrorReportHeader
 {
     uint32_t version;       /**< First unsigned int indicates the version  */
     uint32_t entity_type;   /**< Entity type code */
@@ -345,11 +331,11 @@ struct ErrorNotificationHeader
     uint32_t stream;        /**< which stream this belongs to */
 };
 
-class ErrorNotification
+class ErrorReport
   : public Entity
 {
 public:
-                          ErrorNotification ();
+                          ErrorReport ();
     uint32_t              getVersion () const;
     StorageType           getStorageType () const;
     uint32_t              getStream () const;
@@ -364,22 +350,18 @@ public:
     std::string           getErrorDescription () const;
     void                  setErrorDescription (std::string description);
 
-    // Functions inherited from Entity
-    /*virtual uint32_t     getVersion ();
-    virtual EntityType   getEntityType ();
-    virtual StorageType  getStorageType ();
-    virtual uint32_t     getStream ();*/
     virtual std::vector<unsigned char> serialize();
     virtual void deserialize(const std::vector<unsigned char>& buffer);
 
 protected:
 
-    ErrorNotificationHeader head_;
+    ErrorReportHeader head_;
     uint32_t      error_type_; /**< maps to ErrorType enum  */
     uint32_t      error_command_type_; /**< maps to CommandType enum  */
     uint32_t      error_command_id_;   /** refers to the command id number*/
     uint32_t      error_entity_type_;  /**< maps to EntityType enum */
-    char          error_description_[MAX_ERROR_DESCRIPTION_LENGTH];
+    uint32_t      description_length_;
+    std::string   error_description_;
 };
 
 /** EncodingCounters keeps track of typical loop counters in MR experiment. */
