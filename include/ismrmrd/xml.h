@@ -349,12 +349,17 @@ namespace ISMRMRD
     EntityType    getEntityType() const;
     StorageType   getStorageType() const;
     uint32_t      getStream() const;
+    bool          isValid() const;
 
+    std::string serializeString();
     // Functions inherited from Entity
     virtual std::vector<unsigned char> serialize();
     virtual void deserialize(const std::vector<unsigned char>& buffer);
 
     private:
+
+    IsmrmrdHeaderWrapper (const IsmrmrdHeaderWrapper&);
+    IsmrmrdHeaderWrapper& operator = (const IsmrmrdHeaderWrapper&);
 
     uint32_t      version_;
     uint32_t      entity_type_;

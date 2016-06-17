@@ -10,7 +10,7 @@ void startServer
 {
   icpServer* server = new icpServer (std::move (session), id);
   delete (server);
-  std::cout << "Server (id " << id << ") finished\n\n";
+  std::cout << "Server (id " << id << ") done\n\n";
   return;
 }
 

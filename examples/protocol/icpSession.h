@@ -5,7 +5,7 @@
 #include <thread>
 #include <functional>
 #include <memory>
-#include <queue>
+#include "icpMTQueue.h"
 #include <utility>
 #include <map>
 #include <time.h>
@@ -97,12 +97,6 @@ class icpSession
 
   private:
 
-  SOCKET_PTR                _sock;
-  bool                      _stop;
-  std::queue<OUT_MSG>       _oq;
-  std::thread               _transmitter;
-  CB_MAP                    _callbacks;
-
   bool     getMessage       ();
   uint32_t getAcqStream     (ENTITY*, STYPE);
   uint32_t receiveFrameInfo (IN_MSG& in_msg);
@@ -113,6 +107,12 @@ class icpSession
   template<typename ...A>
   void     call             (uint32_t index, A&& ... args);
   
+
+  SOCKET_PTR                _sock;
+  bool                      _stop;
+  icpMTQueue<OUT_MSG>       _oq;
+  std::thread               _transmitter;
+  CB_MAP                    _callbacks;
 };
 
 using ICP_SESSION = std::unique_ptr<icpSession>;

@@ -52,11 +52,13 @@ void icpSession::shutdown
 )
 {
   _stop = true;
+  _oq.stop ();
 }
 
 /*******************************************************************************
  ******************************************************************************/
 template<> void icpSession::registerHandler (ICP_CB, ETYPE);
+template class icpMTQueue<OUTPUT_MESSAGE_STRUCTURE>;
 
 /*******************************************************************************
  ******************************************************************************/
@@ -164,6 +166,7 @@ void icpSession::deliver
 {
   ISMRMRD::EntityType  etype = (ISMRMRD::EntityType) in_msg.ehdr.entity_type;
   ISMRMRD::StorageType stype = (ISMRMRD::StorageType) in_msg.ehdr.storage_type;
+
   if (_callbacks.find (etype) == _callbacks.end())
   {
     std::cout << "Warning! received unexpected entity type: " << etype << "\n";
@@ -304,7 +307,6 @@ void icpSession::call
 {
   if (_callbacks.find (index) != _callbacks.end())
   {
-    //TODO needs synchronization
     using func_t = CB_STRUCT <A...>;
     using cb_t   = std::function <void (A...)>;
 
@@ -460,27 +462,17 @@ void icpSession::transmit
 (
 )
 {
-  std::cout << "Transmitter started\n";
+  std::cout << "Transmitter starting\n";
 
-  struct timespec  ts;
-  ts.tv_sec  =     0;
-  ts.tv_nsec =     10000000;
-  int print = 0;
-
-  while (!_stop || _oq.size() > 0)
+  while (!_stop)
   {
-    while (_oq.size() > 0)
+    OUT_MSG msg;
+    if (_oq.pop (msg))
     {
-      OUT_MSG msg;
-      msg = _oq.front();
-      boost::asio::write (*_sock,
-                          boost::asio::buffer (msg.data, msg.data.size()));
-      _oq.pop();
-      print = 0;
+      boost::asio::write (*_sock, boost::asio::buffer (msg.data, msg.data.size()));
     }
-    nanosleep (&ts, NULL);
   }
 
-  std::cout << "Transmitter done!\n";
+  std::cout << "Transmitter done\n";
   return;
 }

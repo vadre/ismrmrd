@@ -4,6 +4,77 @@
 
 /*****************************************************************************
  ****************************************************************************/
+void icpClient::processHandshake
+(
+  HANDSHAKE* msg
+)
+{
+  std::cout << "Received handshake response for \"" << _client_name
+            << "\": name = \"" << msg->getClientName()
+            << "\", status = " << msg->getConnectionStatus() << "\n";
+}
+
+/*****************************************************************************
+ ****************************************************************************/
+void icpClient::processCommand
+(
+  COMMAND* msg
+)
+{
+  switch (msg->getCommandType())
+  {
+    case ISMRMRD::ISMRMRD_COMMAND_DONE_FROM_SERVER:
+
+      std::cout << "Received DONE from server\n";
+      _server_done = true;
+      if (_task_done)
+      {
+        std::cout << "Sending CLOSE_CONNECTION command\n";
+        sendCommand (ISMRMRD::ISMRMRD_COMMAND_CLOSE_CONNECTION, 0);
+        sleep (1);
+        std::cout << "<" << _client_name << "> shutting down\n";
+        _session->shutdown();
+      }
+      break;
+
+    default:
+      std::cout << "Received unexpected command\n";
+      break;
+  }
+}
+
+/*****************************************************************************
+ ****************************************************************************/
+void icpClient::processError
+(
+  ERRREPORT* msg
+)
+{
+  std::cout << "Error Type: " << msg->getErrorType()
+            << ", Error Command: " << msg->getErrorCommandType()
+            << ", Error Command ID: " << msg->getErrorCommandId()
+            << ", Error Entity: " << msg->getErrorEntityType()
+            << ",\nError Description: " << msg->getErrorDescription() << "\n";
+}
+
+/*****************************************************************************
+ ****************************************************************************/
+void icpClient::taskDone
+(
+)
+{
+  _task_done = true;
+  if (_server_done)
+  {
+    std::cout << "Sending CLOSE_CONNECTION command\n";
+    sendCommand (ISMRMRD::ISMRMRD_COMMAND_CLOSE_CONNECTION, 0);
+    std::cout << "Client " << _client_name << " shutting down\n";
+    _session->shutdown();
+  }
+}
+
+/*****************************************************************************
+ ****************************************************************************/
 void icpClient::sendCommand
 (
   ISMRMRD::CommandType cmd_type,
@@ -14,7 +85,6 @@ void icpClient::sendCommand
   msg.setCommandType (cmd_type);
   msg.setCommandId (cmd_id);
   _session->send (&msg, ISMRMRD::ISMRMRD_COMMAND);
-  std::cout << __func__ << ": sent out a command\n";
 
   return;
 }
@@ -31,33 +101,6 @@ void icpClient::sendError
   msg.setErrorType (type);
   msg.setErrorDescription (descr);
   _session->send (&msg, ISMRMRD::ISMRMRD_ERROR_REPORT);
-
-  return;
-}
-
-/*******************************************************************************
- ******************************************************************************/
-void icpClient::writeImage
-(
-  ISMRMRD::Dataset& dset,
-  ISMRMRD::Entity*  ent,
-  STYPE             stype
-)
-{
-  if (stype == ISMRMRD::ISMRMRD_FLOAT)
-  {
-    ISMRMRD::Image<float>* img = static_cast<ISMRMRD::Image<float>*>(ent);
-    dset.appendImage (*img, ISMRMRD::ISMRMRD_STREAM_IMAGE);
-  }
-  else if (stype == ISMRMRD::ISMRMRD_DOUBLE)
-  {
-    ISMRMRD::Image<double>* img = static_cast<ISMRMRD::Image<double>*>(ent);
-    dset.appendImage (*img, ISMRMRD::ISMRMRD_STREAM_IMAGE);
-  }
-  else
-  {
-    std::cout << __func__ << ": Error! Unexpected image storage type\n";
-  }
 
   return;
 }
@@ -84,8 +127,8 @@ void icpClient::beginInput
 (
 )
 {
-  
-  std::cout << __func__ << ": starting\n";
+  std::cout << __func__ << "  starting\n";
+
   sendHandshake ();
 
   ISMRMRD::Command msg;
@@ -93,7 +136,6 @@ void icpClient::beginInput
   msg.setCommandId (0);
   msg.setConfigType (ISMRMRD::CONFIGURATION_BUILT_IN_1);
   _session->send (&msg, ISMRMRD::ISMRMRD_COMMAND);
-  std::cout << __func__ << "Sent out config command\n";
 
   ISMRMRD::Dataset dset (_in_fname, _in_dset);
   std::string xml_head = dset.readHeader();
@@ -112,13 +154,13 @@ void icpClient::beginInput
   {
     sendAcquisitions <int32_t> (dset);
   }
-  // Both FLOAT and CXFLOAT should probably be treated the same here
+  // TODO: FLOAT and CXFLOAT are treated the same here
   else if (xmlHeader.streams[0].storageType == ISMRMRD::ISMRMRD_FLOAT ||
            xmlHeader.streams[0].storageType == ISMRMRD::ISMRMRD_CXFLOAT)
   {
     sendAcquisitions <float> (dset);
   }
-  // Both DOUBLE and CXDOUBLE should probably be treated the same here
+  // TODO: DOUBLE and CXDOUBLE are treated the same here 
   else if (xmlHeader.streams[0].storageType == ISMRMRD::ISMRMRD_DOUBLE ||
            xmlHeader.streams[0].storageType == ISMRMRD::ISMRMRD_CXDOUBLE)
   {
@@ -131,12 +173,11 @@ void icpClient::beginInput
   }
   
   ISMRMRD::Command cmd;
-  cmd.setCommandId (2);
+  cmd.setCommandId (0);
   cmd.setCommandType (ISMRMRD::ISMRMRD_COMMAND_STOP_FROM_CLIENT);
   _session->send (&cmd, ISMRMRD::ISMRMRD_COMMAND);
 
-  uint32_t num_acq = dset.getNumberOfAcquisitions (0);
-  std::cout << "Finished input, " << num_acq << " acqs, sent STOP_FROM_CLIENT\n";
+  std::cout << "Input completed\n";
 
   return;
 }
@@ -149,9 +190,7 @@ void icpClient::sendAcquisitions
   ISMRMRD::Dataset& dset
 )
 {
-  std::cout << __func__ << ": starting\n";
   uint32_t num_acq = dset.getNumberOfAcquisitions (0);
-
   for (int ii = 0; ii < num_acq; ii++)
   {
     ISMRMRD::Acquisition<S> acq = dset.readAcquisition<S> (ii, 0);
@@ -159,7 +198,6 @@ void icpClient::sendAcquisitions
                               ISMRMRD::get_storage_type<S>());
   }
 
-  std::cout << __func__ << ": sent out " << num_acq << " acquisitions \n";
   return;
 }
 
@@ -179,16 +217,14 @@ icpClient::icpClient
   _in_fname        (in_fname),
   _out_fname       (out_fname),
   _in_dset         (in_dataset),
-  _out_dset        (out_dataset)//,
-  //_server_done     (false),
-  //_task_done       (false),
-  //_header_received (false)//,
-  //_input_thread    ()
+  _out_dset        (out_dataset),
+  _server_done     (false),
+  _task_done       (false)//,
+  //_header_received (false)
 {
 
-  std::cout << __func__ << "client name : <"<< client_name << ">\n";
-  std::cout << __func__ << "_client name : <"<< _client_name << ">\n";
-  std::cout << __func__ << "_client name length : <"<< _client_name.size() << ">\n";
+  std::cout << "\""<< _client_name << "\"  starting\n";
+
   using namespace std::placeholders;
 
   std::unique_ptr<icpClientHandshakeHandler> handCB
@@ -206,15 +242,25 @@ icpClient::icpClient
   auto fp3 = std::bind (&icpCallback::receive, *commCB, _1, _2, _3);
   _session->registerHandler ((ICP_CB) fp3, ISMRMRD::ISMRMRD_COMMAND);
 
-  std::unique_ptr<icpClientIsmrmrdHeaderWrapperHandler> headCB
-    (new icpClientIsmrmrdHeaderWrapperHandler (this));
-  auto fp4 = std::bind (&icpCallback::receive, *headCB, _1, _2, _3);
-  _session->registerHandler ((ICP_CB) fp4, ISMRMRD::ISMRMRD_HEADER_WRAPPER);
+  //std::unique_ptr<icpClientIsmrmrdHeaderWrapperHandler> headCB
+    //(new icpClientIsmrmrdHeaderWrapperHandler (this));
+  //auto fp4 = std::bind (&icpCallback::receive, *headCB, _1, _2, _3);
+  //_session->registerHandler ((ICP_CB) fp4, ISMRMRD::ISMRMRD_HEADER_WRAPPER);
 
-  std::unique_ptr<icpClientImageHandler> imCB
-    (new icpClientImageHandler (this));
+  //std::unique_ptr<icpClientImageHandler> imCB
+    //(new icpClientImageHandler (this));
+  //auto fp5 = std::bind (&icpCallback::receive, *imCB, _1, _2, _3);
+  //_session->registerHandler ((ICP_CB) fp5, ISMRMRD::ISMRMRD_IMAGE);
+
+  std::unique_ptr<icpClientImageProcessor> imCB
+    (new icpClientImageProcessor (this, _out_fname, _out_dset));
+
   auto fp5 = std::bind (&icpCallback::receive, *imCB, _1, _2, _3);
   _session->registerHandler ((ICP_CB) fp5, ISMRMRD::ISMRMRD_IMAGE);
+
+  auto fp4 = std::bind (&icpCallback::receive, *imCB, _1, _2, _3);
+  _session->registerHandler ((ICP_CB) fp4, ISMRMRD::ISMRMRD_HEADER_WRAPPER);
+
 
   std::thread it (&icpClient::beginInput, this);
   _session->run ();
@@ -226,10 +272,3 @@ icpClient::icpClient
 
 /*******************************************************************************
  ******************************************************************************/
-/*
-icpClient::~icpClient
-(
-)
-{
-}
-*/

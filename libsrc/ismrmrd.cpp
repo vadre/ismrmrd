@@ -1623,16 +1623,14 @@ uint32_t Handshake::getClientNameLength() const
 /******************************************************************************/
 std::string Handshake::getClientName() const
 {
-  return client_name_;
+  return std::string (client_name_.begin (), client_name_.end ());
 }
 /******************************************************************************/
 void Handshake::setClientName (std::string name)
 {
-  client_name_        = name;
-  std::cout << __func__ << "client_name_ <" << client_name_ << ">\n";
-  std::cout << __func__ << ".size() <" << client_name_.size() << ">\n";
+  std::copy (name.c_str(), name.c_str() + name.length(),
+             back_inserter (client_name_));
   client_name_length_ = client_name_.size();
-  std::cout << __func__ << "length <" << client_name_length_ << ">\n";
 }
 /******************************************************************************/
 void Handshake::addManifestEntry (uint32_t             stream,
@@ -1645,7 +1643,9 @@ void Handshake::addManifestEntry (uint32_t             stream,
   entry.stream       = stream;
   entry.entity_type  = etype;
   entry.storage_type = stype;
-  entry.description  = description;
+  std::copy (description.c_str(), description.c_str() + description.length(),
+             back_inserter (entry.description));
+  //entry.description  = description;
   entry.descr_length = entry.description.size();
     
   manifest_.push_back (entry);
@@ -1728,16 +1728,22 @@ std::vector<unsigned char> Handshake::serialize()
              (unsigned char*) &this->manifest_size_ + sizeof (uint32_t),
              std::back_inserter (buffer));
 
-  std::copy ((unsigned char*) &this->client_name_,
-             (unsigned char*) &this->client_name_ + client_name_.size(),
+  std::copy ((unsigned char*) &this->client_name_[0],
+             (unsigned char*) &this->client_name_[0] +
+                               this->client_name_length_,
              std::back_inserter (buffer));
 
   for (int ii = 0; ii < manifest_size_; ii++)
   {
     std::copy ((unsigned char*) &this->manifest_[ii],
                (unsigned char*) &this->manifest_[ii] +
-               sizeof (uint32_t) * 2 + manifest_[ii].descr_length +
+               sizeof (uint32_t) * 2 +
                sizeof (EntityType) + sizeof (StorageType),
+               std::back_inserter (buffer));
+
+    std::copy ((unsigned char*) &this->manifest_[ii].description[0],
+               (unsigned char*) &this->manifest_[ii].description[0] +
+                                 this->manifest_[ii].descr_length,
                std::back_inserter (buffer));
   }
 
@@ -1797,7 +1803,7 @@ void Handshake::deserialize(const std::vector<unsigned char>& buffer)
   if ((right += client_name_length_) <= buffer.size())
   {
     std::copy (&buffer[left], &buffer[right],
-               (unsigned char*) &this->client_name_);
+               back_inserter (this->client_name_));
   }
 
   for (int ii = 0; ii < manifest_size_ && right <= buffer.size(); ii++)
@@ -1834,7 +1840,7 @@ void Handshake::deserialize(const std::vector<unsigned char>& buffer)
     if ((right += manifest_[ii].descr_length) <= buffer.size())
     {
       std::copy (&buffer[left], &buffer[right],
-                 (unsigned char*) &this->manifest_[ii].description);
+               back_inserter (this->manifest_[ii].description));
     }
   }
 
@@ -1907,12 +1913,13 @@ void Command::setConfigType (ConfigurationType config_type)
 /******************************************************************************/
 std::string Command::getConfigFile () const
 {
-  return config_file_;
+  return std::string (config_file_.begin (), config_file_.end ());
 }
 /******************************************************************************/
 void Command::setConfigFile (std::string config)
 {
-  config_file_ = config;
+  std::copy (config.c_str(), config.c_str() + config.length(),
+             back_inserter (config_file_));
   config_file_length_ = config_file_.size();
 }
 /******************************************************************************/
@@ -1969,8 +1976,8 @@ std::vector<unsigned char> Command::serialize()
                               sizeof (this->config_file_length_),
              std::back_inserter (buffer));
 
-  std::copy ((unsigned char*) &this->config_file_,
-             (unsigned char*) &this->config_file_ + this->config_file_length_,
+  std::copy ((unsigned char*) &this->config_file_[0],
+             (unsigned char*) &this->config_file_[0] + this->config_file_length_,
              std::back_inserter (buffer));
 
   std::copy ((unsigned char*) &this->num_entities_,
@@ -2040,7 +2047,7 @@ void Command::deserialize (const std::vector<unsigned char>& buffer)
   if ((right += this->config_file_length_) <= buffer.size())
   {
     std::copy (&buffer[left], &buffer[right],
-               (unsigned char*) &this->config_file_);
+               back_inserter (this->config_file_));
   }
 
   left   = right;
@@ -2131,13 +2138,14 @@ void ErrorReport::setErrorEntityType (EntityType entity_type)
 /******************************************************************************/
 void ErrorReport::setErrorDescription (std::string description)
 {
-  error_description_  = description;
+  std::copy (description.c_str(), description.c_str() + description.length(),
+             back_inserter (error_description_));
   description_length_ = error_description_.size();
 }
 /******************************************************************************/
 std::string ErrorReport::getErrorDescription () const
 {
-  return error_description_;
+  return std::string (error_description_.begin (), error_description_.end ());
 }
 
 /******************************************************************************/
@@ -2188,8 +2196,8 @@ std::vector<unsigned char> ErrorReport::serialize()
                sizeof (this->description_length_),
              std::back_inserter (buffer));
 
-  std::copy ((unsigned char*) &this->error_description_,
-             (unsigned char*) &this->error_description_ +
+  std::copy ((unsigned char*) &this->error_description_[0],
+             (unsigned char*) &this->error_description_[0] +
                this->description_length_,
              std::back_inserter (buffer));
 
@@ -2259,7 +2267,7 @@ void ErrorReport::deserialize (const std::vector<unsigned char>& buffer)
   if ((right += this->description_length_) <= buffer.size())
   {
     std::copy (&buffer[left], &buffer[right],
-               (unsigned char*) &this->error_description_);
+               back_inserter (this->error_description_));
   }
 
   if (buffer.size() != right)

@@ -231,7 +231,7 @@ struct IsmrmrdManifest
   ISMRMRD::EntityType  entity_type;
   ISMRMRD::StorageType storage_type;
   uint32_t             descr_length;
-  std::string          description;
+  std::vector<char>    description;
 };
 
 struct HandshakeHeader
@@ -272,12 +272,12 @@ public:
     virtual void deserialize(const std::vector<unsigned char>& buffer);
 
 protected:
-    HandshakeHeader  head_;
-    uint64_t         timestamp_;   /**< Session start set by client */
-    uint32_t         conn_status_; /**< Connection Status set by server */
-    uint32_t         client_name_length_;
-    uint32_t         manifest_size_;
-    std::string      client_name_;
+    HandshakeHeader   head_;
+    uint64_t          timestamp_;   /**< Session start set by client */
+    uint32_t          conn_status_; /**< Connection Status set by server */
+    uint32_t          client_name_length_;
+    uint32_t          manifest_size_;
+    std::vector<char> client_name_;
     std::vector<IsmrmrdManifest> manifest_;
 };
 
@@ -318,7 +318,7 @@ protected:
     uint32_t              command_id_;   /** ID number used to refer to the command */
     uint32_t              config_type_;  /**< maps to ConfigurationType enum */
     uint32_t              config_file_length_;  /**< Config file length */
-    std::string           config_file_;  /** Either filename or actual config data */
+    std::vector<char>     config_file_;  /** Either filename or actual config data */
     uint32_t              num_entities_;  /**< size of vector entities_ */
     std::vector<uint32_t> entities_;
 };
@@ -355,13 +355,13 @@ public:
 
 protected:
 
-    ErrorReportHeader head_;
-    uint32_t      error_type_; /**< maps to ErrorType enum  */
-    uint32_t      error_command_type_; /**< maps to CommandType enum  */
-    uint32_t      error_command_id_;   /** refers to the command id number*/
-    uint32_t      error_entity_type_;  /**< maps to EntityType enum */
-    uint32_t      description_length_;
-    std::string   error_description_;
+    ErrorReportHeader  head_;
+    uint32_t           error_type_;         /**< maps to ErrorType enum  */
+    uint32_t           error_command_type_; /**< maps to CommandType enum  */
+    uint32_t           error_command_id_;   /** refers to the command id number*/
+    uint32_t           error_entity_type_;  /**< maps to EntityType enum */
+    uint32_t           description_length_;
+    std::vector<char>  error_description_;
 };
 
 /** EncodingCounters keeps track of typical loop counters in MR experiment. */

@@ -64,7 +64,8 @@ void icpServer::clientAccepted
     ISMRMRD::CONNECTION_ACCEPTED : ISMRMRD::CONNECTION_DENIED_UNKNOWN_USER);
 
   _session->send (msg, ISMRMRD::ISMRMRD_HANDSHAKE);
-    std::cout << __func__ << ": just sent handshake\n";
+    std::cout << __func__ << ": client name = " << msg->getClientName() << "\n";
+    std::cout << __func__ << ": name length = " << msg->getClientNameLength() << "\n";
 
   if (!accepted)
   {

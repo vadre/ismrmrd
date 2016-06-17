@@ -24,7 +24,7 @@ void startClient (ICP_SESSION session, uint32_t id)
                                      in_dset,
                                      out_dset);
   delete (client);
-  std::cout << "Client finished\n\n";
+  std::cout << "Client done\n\n";
   return;
 }
 
