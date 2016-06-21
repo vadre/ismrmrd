@@ -19,6 +19,7 @@ icpSession::~icpSession
 )
 {
   _callbacks.clear();
+  _objects.clear();
 }
 
 /*******************************************************************************
@@ -57,7 +58,7 @@ void icpSession::shutdown
 
 /*******************************************************************************
  ******************************************************************************/
-template<> void icpSession::registerHandler (ICP_CB, ETYPE);
+template<> void icpSession::registerHandler (ICP_CB, ETYPE, icpCallback*);
 template class icpMTQueue<OUTPUT_MESSAGE_STRUCTURE>;
 
 /*******************************************************************************
@@ -164,8 +165,10 @@ void icpSession::deliver
   IN_MSG& in_msg
 )
 {
-  ISMRMRD::EntityType  etype = (ISMRMRD::EntityType) in_msg.ehdr.entity_type;
-  ISMRMRD::StorageType stype = (ISMRMRD::StorageType) in_msg.ehdr.storage_type;
+  uint32_t             version = in_msg.ehdr.version;
+  ISMRMRD::EntityType  etype   = (ISMRMRD::EntityType)  in_msg.ehdr.entity_type;
+  ISMRMRD::StorageType stype   = (ISMRMRD::StorageType) in_msg.ehdr.storage_type;
+  uint32_t             stream  = in_msg.ehdr.stream;
 
   if (_callbacks.find (etype) == _callbacks.end())
   {
@@ -173,29 +176,31 @@ void icpSession::deliver
     return;
   }
 
+  icpCallback* obj = _objects [etype];
+
   if (etype == ISMRMRD::ISMRMRD_HANDSHAKE)
   {
     std::unique_ptr<HANDSHAKE> ent (new (HANDSHAKE));
     ent->deserialize (in_msg.data);
-    call (etype, &(*ent), etype, stype);
+    call (etype, obj, &(*ent), version, etype, stype, stream);
   }
   else if (etype == ISMRMRD::ISMRMRD_COMMAND)
   {
     std::unique_ptr<COMMAND> ent (new (COMMAND));
     ent->deserialize (in_msg.data);
-    call (etype, ent, etype, stype);
+    call (etype, obj, ent, version, etype, stype, stream);
   }
   else if (etype == ISMRMRD::ISMRMRD_HEADER_WRAPPER)
   {
     std::unique_ptr<XMLWRAP> ent (new (XMLWRAP));
     ent->deserialize (in_msg.data);
-    call (etype, &(*ent), etype, stype);
+    call (etype, obj, &(*ent), version, etype, stype, stream);
   }
   else if (etype == ISMRMRD::ISMRMRD_ERROR_REPORT)
   {
     std::unique_ptr<ERRREPORT> ent (new (ERRREPORT));
     ent->deserialize (in_msg.data);
-    call (etype, &(*ent), etype, stype);
+    call (etype, obj, &(*ent), version, etype, stype, stream);
   }
   else if (etype == ISMRMRD::ISMRMRD_MRACQUISITION)
   {
@@ -204,28 +209,28 @@ void icpSession::deliver
       std::unique_ptr<ISMRMRD::Acquisition<int16_t>> ent
         (new ISMRMRD::Acquisition<int16_t>);
       ent->deserialize (in_msg.data);
-      call (etype, &(*ent), etype, stype);
+      call (etype, obj, &(*ent), version, etype, stype, stream);
     }
     else if (stype == ISMRMRD::ISMRMRD_INT)
     {
       std::unique_ptr<ISMRMRD::Acquisition<int32_t>> ent
         (new ISMRMRD::Acquisition<int32_t>);
       ent->deserialize (in_msg.data);
-      call (etype, &(*ent), etype, stype);
+      call (etype, obj, &(*ent), version, etype, stype, stream);
     }
     if (stype == ISMRMRD::ISMRMRD_FLOAT)
     {
       std::unique_ptr<ISMRMRD::Acquisition<float>> ent
         (new ISMRMRD::Acquisition<float>);
       ent->deserialize (in_msg.data);
-      call (etype, &(*ent), etype, stype);
+      call (etype, obj, &(*ent), version, etype, stype, stream);
     }
     else if (stype == ISMRMRD::ISMRMRD_DOUBLE)
     {
       std::unique_ptr<ISMRMRD::Acquisition<double>> ent
         (new ISMRMRD::Acquisition<double>);
       ent->deserialize (in_msg.data);
-      call (etype, &(*ent), etype, stype);
+      call (etype, obj, &(*ent), version, etype, stype, stream);
     }
     else
     {
@@ -239,51 +244,51 @@ void icpSession::deliver
     {
       std::unique_ptr<ISMRMRD::Image<int16_t>> ent (new ISMRMRD::Image<int16_t>);
       ent->deserialize (in_msg.data);
-      call (etype, &(*ent), etype, stype);
+      call (etype, obj, &(*ent), version, etype, stype, stream);
     }
     else if (stype == ISMRMRD::ISMRMRD_USHORT)
     {
       std::unique_ptr<ISMRMRD::Image<uint16_t>> ent (new ISMRMRD::Image<uint16_t>);
       ent->deserialize (in_msg.data);
-      call (etype, &(*ent), etype, stype);
+      call (etype, obj, &(*ent), version, etype, stype, stream);
     }
     else if (stype == ISMRMRD::ISMRMRD_INT)
     {
       std::unique_ptr<ISMRMRD::Image<int32_t>> ent (new ISMRMRD::Image<int32_t>);
       ent->deserialize (in_msg.data);
-      call (etype, &(*ent), etype, stype);
+      call (etype, obj, &(*ent), version, etype, stype, stream);
     }
     else if (stype == ISMRMRD::ISMRMRD_UINT)
     {
       std::unique_ptr<ISMRMRD::Image<uint32_t>> ent (new ISMRMRD::Image<uint32_t>);
       ent->deserialize (in_msg.data);
-      call (etype, &(*ent), etype, stype);
+      call (etype, obj, &(*ent), version, etype, stype, stream);
     }
     else if (stype == ISMRMRD::ISMRMRD_FLOAT)
     {
       std::unique_ptr<ISMRMRD::Image<float>> ent (new ISMRMRD::Image<float>);
       ent->deserialize (in_msg.data);
-      call (etype, &(*ent), etype, stype);
+      call (etype, obj, &(*ent), version, etype, stype, stream);
     }
     else if (stype == ISMRMRD::ISMRMRD_DOUBLE)
     {
       std::unique_ptr<ISMRMRD::Image<double>> ent (new ISMRMRD::Image<double>);
       ent->deserialize (in_msg.data);
-      call (etype, &(*ent), etype, stype);
+      call (etype, obj, &(*ent), version, etype, stype, stream);
     }
     else if (stype == ISMRMRD::ISMRMRD_CXFLOAT)
     {
       std::unique_ptr <ISMRMRD::Image<std::complex<float>>> ent
         (new ISMRMRD::Image<std::complex<float>>);
       ent->deserialize (in_msg.data);
-      call (etype, &(*ent), etype, stype);
+      call (etype, obj, &(*ent), version, etype, stype, stream);
     }
     else if (stype == ISMRMRD::ISMRMRD_CXDOUBLE)
     {
       std::unique_ptr <ISMRMRD::Image<std::complex<double>>> ent
         (new ISMRMRD::Image<std::complex<double>>);
       ent->deserialize (in_msg.data);
-      call (etype, &(*ent), etype, stype);
+      call (etype, obj, &(*ent), etype, stype);
     }
     else
     {
@@ -349,9 +354,11 @@ uint32_t icpSession::getAcqStream
  ******************************************************************************/
 bool icpSession::send
 (
-  ENTITY* entity,
-  ETYPE   etype,
-  STYPE   stype
+  ENTITY*  entity,
+  uint32_t version,
+  ETYPE    etype,
+  STYPE    stype,
+  uint32_t stream
 )
 {
   bool ret_val = true;
@@ -359,60 +366,54 @@ bool icpSession::send
   std::vector <unsigned char> h_buffer;
   std::vector <unsigned char> e_buffer;
 
-  head.version     = ISMRMRD_VERSION_MAJOR;
-  head.entity_type = etype;
+  head.version      = version;
+  head.entity_type  = etype;
+  head.storage_type = stype;
+  head.stream       = stream;
 
-  switch (etype)
-  {
-    case ISMRMRD::ISMRMRD_MRACQUISITION:
+  e_buffer          = entity->serialize();
 
-      head.storage_type = stype;
-      head.stream       = getAcqStream (entity, stype);
-      e_buffer          = entity->serialize();
-      break;
+  //TODO: check etype, stype
+  //switch (etype)
+  //{
+    //case ISMRMRD::ISMRMRD_MRACQUISITION:
 
-    case ISMRMRD::ISMRMRD_IMAGE:
+      //e_buffer          = entity->serialize();
+      //break;
 
-      head.storage_type = stype;
-      head.stream       = ISMRMRD::ISMRMRD_STREAM_IMAGE;
-      e_buffer          = entity->serialize();
-      break;
+    //case ISMRMRD::ISMRMRD_IMAGE:
 
-    case ISMRMRD::ISMRMRD_HEADER_WRAPPER:
+      //e_buffer          = entity->serialize();
+      //break;
 
-      head.storage_type = ISMRMRD::ISMRMRD_CHAR;
-      head.stream       = ISMRMRD::ISMRMRD_STREAM_ISMRMRD_HEADER;
-      e_buffer          = entity->serialize();
-      break;
+    //case ISMRMRD::ISMRMRD_HEADER_WRAPPER:
 
-    case ISMRMRD::ISMRMRD_HANDSHAKE:
+      //e_buffer          = entity->serialize();
+      //break;
 
-      head.storage_type = ISMRMRD::ISMRMRD_CHAR;
-      head.stream       = ISMRMRD::ISMRMRD_STREAM_HANDSHAKE;
-      e_buffer = entity->serialize();
-      break;
+    //case ISMRMRD::ISMRMRD_HANDSHAKE:
 
-    case ISMRMRD::ISMRMRD_COMMAND:
+      //e_buffer = entity->serialize();
+      //break;
 
-      head.storage_type = ISMRMRD::ISMRMRD_CHAR;
-      head.stream       = ISMRMRD::ISMRMRD_STREAM_COMMAND;
-      e_buffer = entity->serialize();
-      break;
+    //case ISMRMRD::ISMRMRD_COMMAND:
 
-    case ISMRMRD::ISMRMRD_ERROR_REPORT:
-      head.storage_type = ISMRMRD::ISMRMRD_CHAR;
-      head.stream       = ISMRMRD::ISMRMRD_STREAM_ERROR;
-      e_buffer = entity->serialize();
-      break;
+      //e_buffer = entity->serialize();
+      //break;
 
-    default:
+    //case ISMRMRD::ISMRMRD_ERROR_REPORT:
 
-      std::cout << __func__ << "Warning: Entity " << head.entity_type
-                << " not processed in this version of icpSession\n";
-      ret_val = false;
+      //e_buffer = entity->serialize();
+      //break;
 
-      break;
-  }
+    //default:
+
+      //std::cout << __func__ << "Warning: Entity " << head.entity_type
+                //<< " not processed in this version of icpSession\n";
+      //ret_val = false;
+
+      //break;
+  //}
 
   if (ret_val)
   {
@@ -466,11 +467,16 @@ void icpSession::transmit
 
   while (!_stop)
   {
+    //std::cout << __func__ << ": 1 \n";
     OUT_MSG msg;
-    if (_oq.pop (msg))
+    //std::cout << __func__ << ": 2 \n";
+    if (_oq.pop (std::ref(msg)))
     {
+    //std::cout << __func__ << ": 3 \n";
       boost::asio::write (*_sock, boost::asio::buffer (msg.data, msg.data.size()));
+    //std::cout << __func__ << ": 4 \n";
     }
+    //std::cout << __func__ << ": 5 \n";
   }
 
   std::cout << "Transmitter done\n";

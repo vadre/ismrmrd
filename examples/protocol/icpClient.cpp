@@ -84,7 +84,8 @@ void icpClient::sendCommand
   ISMRMRD::Command msg;
   msg.setCommandType (cmd_type);
   msg.setCommandId (cmd_id);
-  _session->send (&msg, ISMRMRD::ISMRMRD_COMMAND);
+  _session->send (&msg, ISMRMRD_VERSION_MAJOR, ISMRMRD::ISMRMRD_COMMAND,
+          ISMRMRD::ISMRMRD_STORAGE_NONE, ISMRMRD::ISMRMRD_STREAM_COMMAND);
 
   return;
 }
@@ -100,7 +101,8 @@ void icpClient::sendError
   ISMRMRD::ErrorReport msg;
   msg.setErrorType (type);
   msg.setErrorDescription (descr);
-  _session->send (&msg, ISMRMRD::ISMRMRD_ERROR_REPORT);
+  _session->send (&msg, ISMRMRD_VERSION_MAJOR, ISMRMRD::ISMRMRD_ERROR_REPORT,
+         ISMRMRD::ISMRMRD_STORAGE_NONE, ISMRMRD::ISMRMRD_STREAM_ERRREPORT);
 
   return;
 }
@@ -116,9 +118,8 @@ void icpClient::sendHandshake
   msg.setConnectionStatus (ISMRMRD::CONNECTION_REQUEST);
   msg.setClientName (_client_name);
   // fill in the manifest here
-  _session->send (&msg, ISMRMRD::ISMRMRD_HANDSHAKE);
-
-  return;
+  _session->send (&msg, ISMRMRD_VERSION_MAJOR, ISMRMRD::ISMRMRD_HANDSHAKE,
+              ISMRMRD::ISMRMRD_STORAGE_NONE, ISMRMRD::ISMRMRD_STREAM_HANDSHAKE);
 }
 
 /*******************************************************************************
@@ -135,7 +136,8 @@ void icpClient::beginInput
   msg.setCommandType (ISMRMRD::ISMRMRD_COMMAND_CONFIGURATION);
   msg.setCommandId (0);
   msg.setConfigType (ISMRMRD::CONFIGURATION_BUILT_IN_1);
-  _session->send (&msg, ISMRMRD::ISMRMRD_COMMAND);
+  _session->send (&msg, ISMRMRD_VERSION_MAJOR, ISMRMRD::ISMRMRD_COMMAND,
+      ISMRMRD::ISMRMRD_STORAGE_NONE, ISMRMRD::ISMRMRD_STREAM_COMMAND);
 
   ISMRMRD::Dataset dset (_in_fname, _in_dset);
   std::string xml_head = dset.readHeader();
@@ -144,7 +146,8 @@ void icpClient::beginInput
   ISMRMRD::deserialize (xml_head.c_str(), xmlHeader);
   ISMRMRD::IsmrmrdHeaderWrapper wrapper;
   wrapper.setHeader (xmlHeader);
-  _session->send (&wrapper, ISMRMRD::ISMRMRD_HEADER_WRAPPER); 
+  _session->send (&wrapper, ISMRMRD_VERSION_MAJOR, ISMRMRD::ISMRMRD_HEADER_WRAPPER,
+        ISMRMRD::ISMRMRD_STORAGE_NONE, ISMRMRD::ISMRMRD_STREAM_ISMRMRD_HEADER); 
 
   if (xmlHeader.streams[0].storageType == ISMRMRD::ISMRMRD_SHORT)
   {
@@ -175,11 +178,10 @@ void icpClient::beginInput
   ISMRMRD::Command cmd;
   cmd.setCommandId (0);
   cmd.setCommandType (ISMRMRD::ISMRMRD_COMMAND_STOP_FROM_CLIENT);
-  _session->send (&cmd, ISMRMRD::ISMRMRD_COMMAND);
+  _session->send (&cmd, ISMRMRD_VERSION_MAJOR, ISMRMRD::ISMRMRD_COMMAND,
+          ISMRMRD::ISMRMRD_STORAGE_NONE, ISMRMRD::ISMRMRD_STREAM_COMMAND);
 
   std::cout << "Input completed\n";
-
-  return;
 }
 
 /*******************************************************************************
@@ -194,11 +196,9 @@ void icpClient::sendAcquisitions
   for (int ii = 0; ii < num_acq; ii++)
   {
     ISMRMRD::Acquisition<S> acq = dset.readAcquisition<S> (ii, 0);
-    _session->send (&acq, ISMRMRD::ISMRMRD_MRACQUISITION,
-                              ISMRMRD::get_storage_type<S>());
+    _session->send (&acq, ISMRMRD_VERSION_MAJOR, ISMRMRD::ISMRMRD_MRACQUISITION,
+                              ISMRMRD::get_storage_type<S>(), acq.getStream());
   }
-
-  return;
 }
 
 /*******************************************************************************
@@ -217,9 +217,9 @@ icpClient::icpClient
   _in_fname        (in_fname),
   _out_fname       (out_fname),
   _in_dset         (in_dataset),
-  _out_dset        (out_dataset),
-  _server_done     (false),
-  _task_done       (false)//,
+  _out_dset        (out_dataset)//,
+  //_server_done     (false),
+  //_task_done       (false)//,
   //_header_received (false)
 {
 
@@ -227,39 +227,23 @@ icpClient::icpClient
 
   using namespace std::placeholders;
 
-  std::unique_ptr<icpClientHandshakeHandler> handCB
-    (new icpClientHandshakeHandler (this));
-  auto fp1 = std::bind (&icpCallback::receive, *handCB, _1, _2, _3);
-  _session->registerHandler ((ICP_CB) fp1, ISMRMRD::ISMRMRD_HANDSHAKE);
+  std::unique_ptr<icpClientEntityHandler>
+    entCB (new icpClientEntityHandler (this));
 
-  std::unique_ptr<icpClientErrorReportHandler> errCB
-    (new icpClientErrorReportHandler (this));
-  auto fp2 = std::bind (&icpCallback::receive, *errCB, _1, _2, _3);
-  _session->registerHandler ((ICP_CB) fp2, ISMRMRD::ISMRMRD_ERROR_REPORT);
+  auto fp = std::bind (&icpCallback::receive, *entCB, _1, _2, _3, _4, _5, _6);
 
-  std::unique_ptr<icpClientCommandHandler> commCB
-    (new icpClientCommandHandler (this));
-  auto fp3 = std::bind (&icpCallback::receive, *commCB, _1, _2, _3);
-  _session->registerHandler ((ICP_CB) fp3, ISMRMRD::ISMRMRD_COMMAND);
+  _session->registerHandler ((ICP_CB) fp, ISMRMRD::ISMRMRD_HANDSHAKE, &(*entCB));
+  _session->registerHandler ((ICP_CB) fp, ISMRMRD::ISMRMRD_ERROR_REPORT, &(*entCB));
+  _session->registerHandler ((ICP_CB) fp, ISMRMRD::ISMRMRD_COMMAND, &(*entCB));
 
-  //std::unique_ptr<icpClientIsmrmrdHeaderWrapperHandler> headCB
-    //(new icpClientIsmrmrdHeaderWrapperHandler (this));
-  //auto fp4 = std::bind (&icpCallback::receive, *headCB, _1, _2, _3);
-  //_session->registerHandler ((ICP_CB) fp4, ISMRMRD::ISMRMRD_HEADER_WRAPPER);
-
-  //std::unique_ptr<icpClientImageHandler> imCB
-    //(new icpClientImageHandler (this));
-  //auto fp5 = std::bind (&icpCallback::receive, *imCB, _1, _2, _3);
-  //_session->registerHandler ((ICP_CB) fp5, ISMRMRD::ISMRMRD_IMAGE);
 
   std::unique_ptr<icpClientImageProcessor> imCB
     (new icpClientImageProcessor (this, _out_fname, _out_dset));
 
-  auto fp5 = std::bind (&icpCallback::receive, *imCB, _1, _2, _3);
-  _session->registerHandler ((ICP_CB) fp5, ISMRMRD::ISMRMRD_IMAGE);
+  auto fp1 = std::bind (&icpCallback::receive, *imCB, _1, _2, _3, _4, _5, _6);
 
-  auto fp4 = std::bind (&icpCallback::receive, *imCB, _1, _2, _3);
-  _session->registerHandler ((ICP_CB) fp4, ISMRMRD::ISMRMRD_HEADER_WRAPPER);
+  _session->registerHandler ((ICP_CB) fp1, ISMRMRD::ISMRMRD_IMAGE, &(*imCB));
+  _session->registerHandler ((ICP_CB) fp1, ISMRMRD::ISMRMRD_HEADER_WRAPPER, &(*imCB));
 
 
   std::thread it (&icpClient::beginInput, this);

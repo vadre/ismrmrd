@@ -113,7 +113,7 @@ enum ReservedStream
   //ISMRMRD_STREAM_BLOB                  = 4,
   ISMRMRD_STREAM_HANDSHAKE             = 65536,
   ISMRMRD_STREAM_COMMAND               = 65537,
-  ISMRMRD_STREAM_ERROR                 = 65538
+  ISMRMRD_STREAM_ERRREPORT             = 65538
 };
 
 /** Acquisition Flags */

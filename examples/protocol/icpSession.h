@@ -52,8 +52,9 @@ struct CB_STRUCT : public CB_BASE
   CB_STRUCT (CB p_callback) : callback (p_callback) {}
 };
 
-using ICP_CB = CB_STRUCT <ENTITY*, ETYPE, STYPE>;
+using ICP_CB = CB_STRUCT <icpCallback*, ENTITY*, uint32_t, ETYPE, STYPE, uint32_t>;
 using CB_MAP = std::map<uint32_t, std::unique_ptr<CB_BASE> >;
+using OB_MAP = std::map<uint32_t, icpCallback*>;
 
 /*******************************************************************************
  * Byte order utilities - DO NOT MODIFY!!!
@@ -90,10 +91,9 @@ class icpSession
          ~icpSession     ();
   void   run             ();
   void   shutdown        ();
-  bool   send            (ENTITY*, ETYPE,
-                          STYPE stype = ISMRMRD::ISMRMRD_STORAGE_NONE);
+  bool   send            (ENTITY*, uint32_t version, ETYPE, STYPE, uint32_t stream);
   template <typename F, typename E>
-  void   registerHandler (F func, E etype);
+  void   registerHandler (F func, E etype, icpCallback*);
 
   private:
 
@@ -113,6 +113,7 @@ class icpSession
   icpMTQueue<OUT_MSG>       _oq;
   std::thread               _transmitter;
   CB_MAP                    _callbacks;
+  OB_MAP                    _objects;
 };
 
 using ICP_SESSION = std::unique_ptr<icpSession>;
@@ -123,12 +124,14 @@ using ICP_SESSION = std::unique_ptr<icpSession>;
 template <typename F, typename E>
 void icpSession::registerHandler
 (
-  F  func,
-  E  etype
+  F            func,
+  E            etype,
+  icpCallback* obj
 )
 {
   std::unique_ptr<F> f_uptr (new F (func));
   _callbacks.insert (CB_MAP::value_type (etype, std::move (f_uptr)));
+  _objects.insert (OB_MAP::value_type (etype, obj));
   return;
 }
 

@@ -50,7 +50,7 @@ void icpConnection::startUserApp
 )
 {
   ICP_SESSION session (new icpSession (sock));
-  std::thread (runUserApp, std::move (session), _id++).detach();
+  std::thread (runUserApp, std::move (session)).detach();
 
   asyncAccept ();
 }
@@ -125,7 +125,7 @@ void icpConnection::connect ()
 
   _running = true;
   ICP_SESSION session (new icpSession (sock));
-  std::thread t (runUserApp, std::move (session), 777);
+  std::thread t (runUserApp, std::move (session));
   t.join();
 }
 

@@ -15,7 +15,7 @@ unsigned short    port        = 50050;
 
 /*******************************************************************************
  ******************************************************************************/
-void startClient (ICP_SESSION session, uint32_t id)
+void startClient (ICP_SESSION session)
 {
   icpClient* client = new icpClient (std::move (session),
                                      client_name,

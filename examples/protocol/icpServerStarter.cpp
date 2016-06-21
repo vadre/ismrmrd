@@ -4,13 +4,12 @@
 
 void startServer
 (
-  ICP_SESSION session,
-  uint32_t    id
+  ICP_SESSION session
 )
 {
-  icpServer* server = new icpServer (std::move (session), id);
+  icpServer* server = new icpServer (std::move (session));
   delete (server);
-  std::cout << "Server (id " << id << ") done\n\n";
+  std::cout << "Server done\n\n";
   return;
 }
 

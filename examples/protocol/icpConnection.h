@@ -5,7 +5,7 @@
 #include <thread>
 #include "icpSession.h"
 
-using START_USER_APP_FUNC = void (*) (ICP_SESSION, uint32_t);
+using START_USER_APP_FUNC = void (*) (ICP_SESSION);
 
 /*******************************************************************************
  ******************************************************************************/
@@ -36,6 +36,5 @@ private:
   std::string                    _host;
   unsigned short                 _port;
   bool                           _user_app_registered;
-  int                            _id;
 };
 #endif // ICP_CONNECTION_H */

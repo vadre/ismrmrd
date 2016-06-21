@@ -2078,7 +2078,7 @@ ErrorReport::ErrorReport ()
   head_.version        = ISMRMRD_VERSION_MAJOR;
   head_.entity_type    = ISMRMRD_ERROR_REPORT;
   head_.storage_type   = ISMRMRD_STORAGE_NONE;
-  head_.stream         = ISMRMRD_STREAM_ERROR;
+  head_.stream         = ISMRMRD_STREAM_ERRREPORT;
   error_type_          = ISMRMRD_ERROR_NONE;
   error_command_type_  = ISMRMRD_COMMAND_NO_COMMAND;
   error_command_id_    = 0;
