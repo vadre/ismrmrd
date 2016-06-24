@@ -22,20 +22,21 @@ void icpClientEntityHandler::receive
   uint32_t              stream
 )
 {
+  icpClientEntityHandler* _this = static_cast<icpClientEntityHandler*>(base);
   switch (etype)
   {
     case ISMRMRD::ISMRMRD_HANDSHAKE:
 
-      _client->processHandshake (static_cast<HANDSHAKE*>(entity));
+      _this->_client->processHandshake (static_cast<HANDSHAKE*>(entity));
       break;
 
     case ISMRMRD::ISMRMRD_COMMAND:
-      _client->processCommand (static_cast<COMMAND*>(entity));
+      _this->_client->processCommand (static_cast<COMMAND*>(entity));
       break;
 
     case ISMRMRD::ISMRMRD_ERROR_REPORT:
 
-      _client->processError (static_cast<ERRREPORT*>(entity));
+      _this->_client->processError (static_cast<ERRREPORT*>(entity));
       break;
 
     default:
@@ -72,12 +73,12 @@ void icpClientImageProcessor::receive
   icpClientImageProcessor* _this =
     static_cast<icpClientImageProcessor*>(base);
 
-  if (etype == ISMRMRD::ISMRMRD_HEADER_WRAPPER)
+  if (etype == ISMRMRD::ISMRMRD_HEADER)
   {
     std::cout << "Writing Ismrmrd Header to file\n";
-    std::string hdr =
-      (static_cast<ISMRMRD::IsmrmrdHeaderWrapper*>(entity))->serializeString();
-    //_this->_dset.writeHeader (hdr);
+    ISMRMRD::IsmrmrdHeaderWrapper* wrp =
+      static_cast<ISMRMRD::IsmrmrdHeaderWrapper*>(entity);
+    _this->_dset.writeHeader (wrp->getString ());
   }
   else if (etype == ISMRMRD::ISMRMRD_IMAGE)
   {
@@ -85,35 +86,35 @@ void icpClientImageProcessor::receive
 
     if (stype == ISMRMRD::ISMRMRD_SHORT)
     {
-      writeImage<int16_t> (entity);
+      _this->writeImage<int16_t> (entity);
     }
     else if (stype == ISMRMRD::ISMRMRD_USHORT)
     {
-      writeImage<uint16_t> (entity);
+      _this->writeImage<uint16_t> (entity);
     }
     else if (stype == ISMRMRD::ISMRMRD_INT)
     {
-      writeImage<int32_t> (entity);
+      _this->writeImage<int32_t> (entity);
     }
     else if (stype == ISMRMRD::ISMRMRD_UINT)
     {
-      writeImage<uint32_t> (entity);
+      _this->writeImage<uint32_t> (entity);
     }
     else if (stype == ISMRMRD::ISMRMRD_FLOAT)
     {
-      writeImage<float> (entity);
+      _this->writeImage<float> (entity);
     }
     else if (stype == ISMRMRD::ISMRMRD_DOUBLE)
     {
-      writeImage<double> (entity);
+      _this->writeImage<double> (entity);
     }
     else if (stype == ISMRMRD::ISMRMRD_CXFLOAT)
     {
-      writeImage<std::complex<float>> (entity);
+      _this->writeImage<std::complex<float>> (entity);
     }
     else if (stype == ISMRMRD::ISMRMRD_CXDOUBLE)
     {
-      writeImage<std::complex<double>> (entity);
+      _this->writeImage<std::complex<double>> (entity);
     }
     else
     {
@@ -122,7 +123,7 @@ void icpClientImageProcessor::receive
 
     std::cout << "\nImage processing done" << std::endl;
 
-    _client->taskDone();
+    _this->_client->taskDone();
   }
   else
   {

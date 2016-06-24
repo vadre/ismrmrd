@@ -76,9 +76,8 @@ enum EntityType {
     ISMRMRD_WAVEFORM = 3,       /**< Gradient, physiology, etc. waveform  */
     ISMRMRD_IMAGE = 4,          /**< Reconstructed image                  */
     ISMRMRD_HEADER = 5,         /**< The XML header describing the data   */
-    ISMRMRD_HEADER_WRAPPER = 6, /**< The wrapper containing XML header    */
-    ISMRMRD_ERROR_REPORT = 7,   /**< Something went wrong                 */
-    ISMRMRD_BLOB = 8            /**< Some binary object, with description */
+    ISMRMRD_ERROR_REPORT = 6,   /**< Something went wrong                 */
+    ISMRMRD_BLOB = 7            /**< Some binary object, with description */
 };
 
 enum CommandType
@@ -195,9 +194,12 @@ enum ConfigurationType
   CONFIGURATION_NONE               = 700,
   CONFIGURATION_FILE               = 701, // Filename in the config buffer
   CONFIGURATION_ENCLOSED           = 702, // Contents in the config buffer
-  CONFIGURATION_BUILT_IN_1         = 703, // Built in configurations are
-  CONFIGURATION_BUILT_IN_2         = 704, //   known to client and server
-  CONFIGURATION_BUILT_IN_3         = 705  //   applications
+  CONFIGURATION_RECON_SHORT        = 703,
+  CONFIGURATION_RECON_INT          = 704,
+  CONFIGURATION_RECON_FLOAT        = 705,
+  CONFIGURATION_RECON_DOUBLE       = 706
+  //CONFIGURATION_IMAGE_RECON_1      = 703,
+  //CONFIGURATION_IMAGE_RECON_2      = 704
 };
 
 /// Entity type interface

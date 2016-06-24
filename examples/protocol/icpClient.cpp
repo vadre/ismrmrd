@@ -31,8 +31,7 @@ void icpClient::processCommand
       {
         std::cout << "Sending CLOSE_CONNECTION command\n";
         sendCommand (ISMRMRD::ISMRMRD_COMMAND_CLOSE_CONNECTION, 0);
-        sleep (1);
-        std::cout << "<" << _client_name << "> shutting down\n";
+        std::cout << _client_name << " shutting down\n";
         _session->shutdown();
       }
       break;
@@ -68,7 +67,7 @@ void icpClient::taskDone
   {
     std::cout << "Sending CLOSE_CONNECTION command\n";
     sendCommand (ISMRMRD::ISMRMRD_COMMAND_CLOSE_CONNECTION, 0);
-    std::cout << "Client " << _client_name << " shutting down\n";
+    std::cout << _client_name << " shutting down\n";
     _session->shutdown();
   }
 }
@@ -132,46 +131,81 @@ void icpClient::beginInput
 
   sendHandshake ();
 
-  ISMRMRD::Command msg;
-  msg.setCommandType (ISMRMRD::ISMRMRD_COMMAND_CONFIGURATION);
-  msg.setCommandId (0);
-  msg.setConfigType (ISMRMRD::CONFIGURATION_BUILT_IN_1);
-  _session->send (&msg, ISMRMRD_VERSION_MAJOR, ISMRMRD::ISMRMRD_COMMAND,
-      ISMRMRD::ISMRMRD_STORAGE_NONE, ISMRMRD::ISMRMRD_STREAM_COMMAND);
-
   ISMRMRD::Dataset dset (_in_fname, _in_dset);
   std::string xml_head = dset.readHeader();
 
   ISMRMRD::IsmrmrdHeader xmlHeader;
   ISMRMRD::deserialize (xml_head.c_str(), xmlHeader);
-  ISMRMRD::IsmrmrdHeaderWrapper wrapper;
-  wrapper.setHeader (xmlHeader);
-  _session->send (&wrapper, ISMRMRD_VERSION_MAJOR, ISMRMRD::ISMRMRD_HEADER_WRAPPER,
+
+  ETYPE etype = (ETYPE)xmlHeader.streams[0].entityType;
+  STYPE stype = (STYPE)xmlHeader.streams[0].storageType;
+
+  ISMRMRD::Command msg;
+  msg.setCommandType (ISMRMRD::ISMRMRD_COMMAND_CONFIGURATION);
+  msg.setCommandId (0);
+  
+  if (etype == ISMRMRD::ISMRMRD_MRACQUISITION)
+  {
+    if (stype == ISMRMRD::ISMRMRD_SHORT)
+    {
+      msg.setConfigType (ISMRMRD::CONFIGURATION_RECON_SHORT);
+    }
+    else if (stype == ISMRMRD::ISMRMRD_INT)
+    {
+      msg.setConfigType (ISMRMRD::CONFIGURATION_RECON_INT);
+    }
+    else if (stype == ISMRMRD::ISMRMRD_FLOAT ||
+             stype == ISMRMRD::ISMRMRD_CXFLOAT)
+    {
+      msg.setConfigType (ISMRMRD::CONFIGURATION_RECON_FLOAT);
+    }
+    else if (stype == ISMRMRD::ISMRMRD_DOUBLE ||
+             stype == ISMRMRD::ISMRMRD_CXDOUBLE)
+    {
+      msg.setConfigType (ISMRMRD::CONFIGURATION_RECON_DOUBLE);
+    }
+    else
+    {
+      std::cout << "Warning, unexpected acquisition storage type in file\n";
+      msg.setConfigType (ISMRMRD::CONFIGURATION_NONE);
+    }
+  }
+  else
+  {
+      std::cout << "Warning, unexpected entity type in file\n";
+      msg.setConfigType (ISMRMRD::CONFIGURATION_NONE);
+  }
+  _session->send (&msg, ISMRMRD_VERSION_MAJOR, ISMRMRD::ISMRMRD_COMMAND,
+      ISMRMRD::ISMRMRD_STORAGE_NONE, ISMRMRD::ISMRMRD_STREAM_COMMAND);
+
+
+  ISMRMRD::IsmrmrdHeaderWrapper wrapper (xml_head);
+  _session->send (&wrapper, ISMRMRD_VERSION_MAJOR, ISMRMRD::ISMRMRD_HEADER,
         ISMRMRD::ISMRMRD_STORAGE_NONE, ISMRMRD::ISMRMRD_STREAM_ISMRMRD_HEADER); 
 
-  if (xmlHeader.streams[0].storageType == ISMRMRD::ISMRMRD_SHORT)
+  if (stype == ISMRMRD::ISMRMRD_SHORT)
   {
     sendAcquisitions <int16_t> (dset);
   }
-  else if (xmlHeader.streams[0].storageType == ISMRMRD::ISMRMRD_INT)
+  else if (stype == ISMRMRD::ISMRMRD_INT)
   {
     sendAcquisitions <int32_t> (dset);
   }
   // TODO: FLOAT and CXFLOAT are treated the same here
-  else if (xmlHeader.streams[0].storageType == ISMRMRD::ISMRMRD_FLOAT ||
-           xmlHeader.streams[0].storageType == ISMRMRD::ISMRMRD_CXFLOAT)
+  else if (stype == ISMRMRD::ISMRMRD_FLOAT ||
+           stype == ISMRMRD::ISMRMRD_CXFLOAT)
   {
     sendAcquisitions <float> (dset);
   }
   // TODO: DOUBLE and CXDOUBLE are treated the same here 
-  else if (xmlHeader.streams[0].storageType == ISMRMRD::ISMRMRD_DOUBLE ||
-           xmlHeader.streams[0].storageType == ISMRMRD::ISMRMRD_CXDOUBLE)
+  else if (stype == ISMRMRD::ISMRMRD_DOUBLE ||
+           stype == ISMRMRD::ISMRMRD_CXDOUBLE)
   {
     sendAcquisitions <double> (dset);
   }
   else
   {
-    std::cout << "Acq storage type = " << xmlHeader.streams[0].storageType << "\n";
+    std::cout << "Acq storage type = " << stype << "\n";
     throw std::runtime_error ("Unexpected MR Acquisition storage type");
   }
   
@@ -227,23 +261,17 @@ icpClient::icpClient
 
   using namespace std::placeholders;
 
-  std::unique_ptr<icpClientEntityHandler>
-    entCB (new icpClientEntityHandler (this));
-
-  auto fp = std::bind (&icpCallback::receive, *entCB, _1, _2, _3, _4, _5, _6);
-
-  _session->registerHandler ((ICP_CB) fp, ISMRMRD::ISMRMRD_HANDSHAKE, &(*entCB));
-  _session->registerHandler ((ICP_CB) fp, ISMRMRD::ISMRMRD_ERROR_REPORT, &(*entCB));
-  _session->registerHandler ((ICP_CB) fp, ISMRMRD::ISMRMRD_COMMAND, &(*entCB));
+  _entCB = new icpClientEntityHandler (this);
+  auto fp = std::bind (&icpCallback::receive, _entCB, _1, _2, _3, _4, _5, _6);
+  _session->registerHandler ((ICP_CB) fp, ISMRMRD::ISMRMRD_HANDSHAKE, _entCB);
+  _session->registerHandler ((ICP_CB) fp, ISMRMRD::ISMRMRD_ERROR_REPORT, _entCB);
+  _session->registerHandler ((ICP_CB) fp, ISMRMRD::ISMRMRD_COMMAND, _entCB);
 
 
-  std::unique_ptr<icpClientImageProcessor> imCB
-    (new icpClientImageProcessor (this, _out_fname, _out_dset));
-
-  auto fp1 = std::bind (&icpCallback::receive, *imCB, _1, _2, _3, _4, _5, _6);
-
-  _session->registerHandler ((ICP_CB) fp1, ISMRMRD::ISMRMRD_IMAGE, &(*imCB));
-  _session->registerHandler ((ICP_CB) fp1, ISMRMRD::ISMRMRD_HEADER_WRAPPER, &(*imCB));
+  _imgCB = new icpClientImageProcessor (this, _out_fname, _out_dset);
+  auto fp1 = std::bind (&icpCallback::receive, _imgCB, _1, _2, _3, _4, _5, _6);
+  _session->registerHandler ((ICP_CB) fp1, ISMRMRD::ISMRMRD_IMAGE, _imgCB);
+  _session->registerHandler ((ICP_CB) fp1, ISMRMRD::ISMRMRD_HEADER, _imgCB);
 
 
   std::thread it (&icpClient::beginInput, this);
@@ -251,6 +279,23 @@ icpClient::icpClient
   if (it.joinable())
   {
     it.join();
+  }
+}
+
+/*******************************************************************************
+ ******************************************************************************/
+icpClient::~icpClient
+(
+)
+{
+  if (_entCB)
+  {
+    delete (_entCB);
+  }
+
+  if (_imgCB)
+  {
+    delete (_imgCB);
   }
 }
 

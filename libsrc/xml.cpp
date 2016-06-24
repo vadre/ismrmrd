@@ -852,14 +852,41 @@ namespace ISMRMRD
 
   IsmrmrdHeaderWrapper::IsmrmrdHeaderWrapper
   (
+    IsmrmrdHeader hdr
   )
   : version_      (ISMRMRD_VERSION_MAJOR),
-    entity_type_  (ISMRMRD_HEADER_WRAPPER),
+    entity_type_  (ISMRMRD_HEADER),
+    storage_type_ (ISMRMRD_STORAGE_NONE),
+    stream_       (ISMRMRD_STREAM_ISMRMRD_HEADER)
+  {
+    std::stringstream sstr;
+    ISMRMRD::serialize (hdr, sstr);
+    hdr_ = sstr.str();
+    length_ = hdr_.size();
+  }
+
+  IsmrmrdHeaderWrapper::IsmrmrdHeaderWrapper
+  (
+    std::string hdr // serialized IsmrmrdHeader
+  )
+  : version_      (ISMRMRD_VERSION_MAJOR),
+    entity_type_  (ISMRMRD_HEADER),
     storage_type_ (ISMRMRD_STORAGE_NONE),
     stream_       (ISMRMRD_STREAM_ISMRMRD_HEADER),
-    header_valid_ (false)
+    hdr_          (hdr)
   {
+    hdr_ = hdr;
+    length_ = hdr_.size();
   }
+
+  IsmrmrdHeaderWrapper::IsmrmrdHeaderWrapper
+  (
+    std::vector<unsigned char> wrapper // serialized IsmrmrdHeaderWrapper
+  )
+  {
+    deserialize (wrapper);
+  }
+
 
   uint32_t IsmrmrdHeaderWrapper::getVersion() const
   {
@@ -881,48 +908,76 @@ namespace ISMRMRD
     return stream_;
   }
 
-  bool IsmrmrdHeaderWrapper::isValid() const
-  {
-    return header_valid_;
-  }
-
-  void IsmrmrdHeaderWrapper::setHeader (IsmrmrdHeader hdr)
-  {
-    if (header_valid_)
-    {
-      throw std::runtime_error ("IsmrmrdHeaderWrapper header already set");
-    }
-    header_       = hdr;
-    header_valid_ = true;
-  }
-
   IsmrmrdHeader IsmrmrdHeaderWrapper::getHeader () const
   {
-    if (!header_valid_)
-    {
-      throw std::runtime_error ("IsmrmrdHeaderWrapper header invalid (getHeader)");
-    }
-    return header_;
+    ISMRMRD::IsmrmrdHeader header;
+    ISMRMRD::deserialize (hdr_.c_str(), header);
+    return header;
   }
 
-  std::string IsmrmrdHeaderWrapper::serializeString()
+  void IsmrmrdHeaderWrapper::getHeader (IsmrmrdHeader& head) const
   {
-    if (!header_valid_)
-    {
-      throw std::runtime_error ("IsmrmrdHeaderWrapper header invalid (serialize)");
-    }
+    ISMRMRD::deserialize (hdr_.c_str(), head);
+  }
 
-    std::stringstream sstr;
-    ISMRMRD::serialize (header_, sstr);
-    std::string xml_header = sstr.str();
-    return xml_header;
+  std::string IsmrmrdHeaderWrapper::getString()
+  {
+    return hdr_;
   }
 
   std::vector<unsigned char> IsmrmrdHeaderWrapper::serialize()
   {
-    std::string xml_header = serializeString();
-    std::vector<unsigned char> ret (xml_header.begin(), xml_header.end());
-    return ret;
+    if (this->entity_type_ != ISMRMRD_HEADER)
+    {
+      throw std::runtime_error
+        ("Entity type does not match IsmrmrdHeaderWrapper class");
+    }
+
+    std::vector<unsigned char> ret (hdr_.begin(), hdr_.end());
+    this->length_ = ret.size();
+
+    size_t bytes = sizeof (this->version_) +
+                   sizeof (this->entity_type_) +
+                   sizeof (this->storage_type_) +
+                   sizeof (this->stream_) +
+                   sizeof (this->length_) +
+                   this->length_;
+
+    std::vector<unsigned char> buffer;
+    buffer.reserve (bytes);
+
+    std::copy ((unsigned char*) &this->version_,
+               (unsigned char*) &this->version_ + sizeof (this->version_),
+               std::back_inserter (buffer));
+
+    std::copy ((unsigned char*) &this->entity_type_,
+               (unsigned char*) &this->entity_type_ + sizeof (this->entity_type_),
+               std::back_inserter (buffer));
+
+    std::copy ((unsigned char*) &this->storage_type_,
+               (unsigned char*) &this->storage_type_ + sizeof (this->storage_type_),
+               std::back_inserter (buffer));
+
+    std::copy ((unsigned char*) &this->stream_,
+               (unsigned char*) &this->stream_ + sizeof (this->stream_),
+               std::back_inserter (buffer));
+
+    std::copy ((unsigned char*) &this->length_,
+               (unsigned char*) &this->length_ + sizeof (this->length_),
+               std::back_inserter (buffer));
+
+    std::copy ((unsigned char*) &ret[0],
+               (unsigned char*) &ret[0] + this->length_,
+               std::back_inserter (buffer));
+
+    if (buffer.size() != bytes)
+    {
+      std::cout << "size = " << buffer.size() << ", bytes = " << bytes << "\n";
+      throw std::runtime_error
+        ("Serialized size does not match expected IsmrmrdHeaderWrapper size");
+    }
+
+    return buffer;
   }
 
   void IsmrmrdHeaderWrapper::deserialize
@@ -930,13 +985,59 @@ namespace ISMRMRD
     const std::vector<unsigned char>& buffer
   )
   {
-    if (header_valid_)
+    int left  = 0;
+    int right = 0;
+    if ((right += sizeof (this->version_)) <= buffer.size())
     {
-      throw std::runtime_error ("IsmrmrdHeaderWrapper Header already set");
+      std::copy (&buffer[left], &buffer[right], (unsigned char*) &this->version_);
     }
-    std::string xml (buffer.begin(), buffer.end());
-    ISMRMRD::deserialize (xml.c_str(), header_);
-    header_valid_ = true;
+
+    left = right;
+    if ((right += sizeof (this->entity_type_)) <= buffer.size())
+    {
+      std::copy (&buffer[left], &buffer[right],
+                 (unsigned char*) &this->entity_type_);
+
+      if (this->entity_type_ != ISMRMRD_HEADER)
+      {
+        throw std::runtime_error
+          ("Entity type does not match IsmrmrdHeaderWrapper class");
+      }
+    }
+
+    left = right;
+    if ((right += sizeof (this->storage_type_)) <= buffer.size())
+    {
+      std::copy (&buffer[left], &buffer[right],
+                 (unsigned char*) &this->storage_type_);
+    }
+
+    left = right;
+    if ((right += sizeof (this->stream_)) <= buffer.size())
+    {
+      std::copy (&buffer[left], &buffer[right],
+                 (unsigned char*) &this->stream_);
+    }
+
+    left = right;
+    if ((right += sizeof (this->length_)) <= buffer.size())
+    {
+      std::copy (&buffer[left], &buffer[right],
+                 (unsigned char*) &this->length_);
+    }
+
+    left = right;
+    if ((right += this->length_) <= buffer.size())
+    {
+      this->hdr_ = std::string (&buffer[left], &buffer[right]);
+    }
+
+    if (buffer.size() != right)
+    {
+      std::cout << "size: " << buffer.size() << ", expected: " << right << "\n";
+      throw std::runtime_error
+        ("Buffer size does not match IsmrmrdHeaderWrapper class");
+    }
   }
 
 }

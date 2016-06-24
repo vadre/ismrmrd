@@ -342,16 +342,17 @@ namespace ISMRMRD
   {
     public:
 
-                  IsmrmrdHeaderWrapper();
-    void          setHeader (IsmrmrdHeader hdr);
+                  IsmrmrdHeaderWrapper (IsmrmrdHeader hdr);
+                  IsmrmrdHeaderWrapper (std::string hdr);
+                  IsmrmrdHeaderWrapper (std::vector<unsigned char> wrapper);
     IsmrmrdHeader getHeader () const;
+    void          getHeader (IsmrmrdHeader& head) const;
     uint32_t      getVersion() const;
     EntityType    getEntityType() const;
     StorageType   getStorageType() const;
     uint32_t      getStream() const;
-    bool          isValid() const;
+    std::string   getString();
 
-    std::string serializeString();
     // Functions inherited from Entity
     virtual std::vector<unsigned char> serialize();
     virtual void deserialize(const std::vector<unsigned char>& buffer);
@@ -365,8 +366,8 @@ namespace ISMRMRD
     uint32_t      entity_type_;
     uint32_t      storage_type_;
     uint32_t      stream_;
-    bool          header_valid_;
-    IsmrmrdHeader header_;
+    uint32_t      length_;
+    std::string   hdr_;
   };
 }
 

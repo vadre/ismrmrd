@@ -6,6 +6,8 @@
 #include "icpClient.h"
 #include "icpCallback.h"
 
+/*******************************************************************************
+ ******************************************************************************/
 class icpClientEntityHandler : public icpCallback
 {
   public:
@@ -18,6 +20,8 @@ class icpClientEntityHandler : public icpCallback
   icpClient* _client;
 };
 
+/*******************************************************************************
+ ******************************************************************************/
 class icpClientImageProcessor : public icpCallback
 {
   public:
@@ -40,4 +44,6 @@ class icpClientImageProcessor : public icpCallback
   ISMRMRD::Dataset       _dset;
 };
 
+/*******************************************************************************
+ ******************************************************************************/
 #endif // ICP_CLIENTCALLBACKS_H */

@@ -18,6 +18,7 @@ class icpClient
                          std::string out_fname,
                          std::string in_dataset,
                          std::string out_dataset);
+       ~icpClient       ();
 
   void processHandshake (HANDSHAKE* msg);
   void processCommand   (COMMAND*   msg);
@@ -34,6 +35,8 @@ class icpClient
   void sendAcquisitions (ISMRMRD::Dataset& dset);
 
   ICP_SESSION  _session;
+  icpCallback* _entCB;
+  icpCallback* _imgCB;
   std::string  _client_name;
   std::string  _in_fname;
   std::string  _out_fname;
@@ -41,6 +44,5 @@ class icpClient
   std::string  _out_dset;
   bool         _server_done;
   bool         _task_done;
-
 };
 #endif // ICP_CLIENT_H */

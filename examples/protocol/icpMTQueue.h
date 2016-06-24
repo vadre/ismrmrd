@@ -27,31 +27,21 @@ class icpMTQueue
   /****************************************************************************/
   bool pop (T& data)
   {
-    //std::cout << __func__ << ": 1 \n";
     std::unique_lock<std::mutex> lock (_mtx);
-    //std::cout << __func__ << ": 2 \n";
   
     while (_que.empty () && !_stop)
     {
-    //std::cout << __func__ << ": 3 \n";
       _cvar.wait (lock);
-    //std::cout << __func__ << ": 4 \n";
     }
   
-    //std::cout << __func__ << ": 5 \n";
     if (_stop)
     {
-    //std::cout << __func__ << ": 6 \n";
       _stop = false;
-    //std::cout << __func__ << ": 7 \n";
       return false;
     }
 
-    //std::cout << __func__ << ": 8 \n";
     data = _que.front ();
-    //std::cout << __func__ << ": 9 \n";
     _que.pop ();
-    //std::cout << __func__ << ": 10 \n";
   
     return true;
   }
@@ -59,6 +49,11 @@ class icpMTQueue
   /****************************************************************************/
   void stop ()
   {
+    if (!_que.empty())
+    {
+      usleep ((unsigned int)1000);
+    }
+
     _stop = true;
     _cvar.notify_one ();
   }

@@ -12,23 +12,24 @@ class icpServer
   public:
 
        icpServer       (ICP_SESSION);
-       //~icpServer      ();
+       ~icpServer      ();
 
   void processHandshake (HANDSHAKE* msg);
   void processCommand   (COMMAND*   msg);
   void processError     (ERRREPORT* msg);
   void sendImage        (ENTITY*, uint32_t version, STYPE, uint32_t stream);
+  void sendError        (ISMRMRD::ErrorType type, std::string descr);
   void taskDone         ();
 
   private:
 
-  void sendError       (ISMRMRD::ErrorType type, std::string descr);
   void clientAccepted  (ISMRMRD::Handshake* msg, bool accepted);
   void configure       (COMMAND* cmd);
   void sendCommand     (ISMRMRD::CommandType cmd, uint32_t cmd_id);
 
   ICP_SESSION  _session;
-  bool         _header_received;
+  icpCallback* _entCB;
+  icpCallback* _recCB;
   bool         _client_done;
   bool         _task_done;
 

@@ -100,10 +100,10 @@ class icpSession
   bool     getMessage       ();
   uint32_t getAcqStream     (ENTITY*, STYPE);
   uint32_t receiveFrameInfo (IN_MSG& in_msg);
-  void     deliver          (IN_MSG& in_msg);
+  void     deliver          (IN_MSG  in_msg);
   void     transmit         ();
-  void     queueMessage     (std::vector<unsigned char>& ent,
-                             std::vector<unsigned char>& data);
+  void     queueMessage     (std::vector<unsigned char> ent,
+                             std::vector<unsigned char> data);
   template<typename ...A>
   void     call             (uint32_t index, A&& ... args);
   
@@ -117,6 +117,7 @@ class icpSession
 };
 
 using ICP_SESSION = std::unique_ptr<icpSession>;
+using START_USER_APP_FUNC = void (*) (ICP_SESSION);
 
 /*******************************************************************************
  * Templates

@@ -5,8 +5,6 @@
 #include <thread>
 #include "icpSession.h"
 
-using START_USER_APP_FUNC = void (*) (ICP_SESSION);
-
 /*******************************************************************************
  ******************************************************************************/
 class icpConnection
@@ -37,4 +35,5 @@ private:
   unsigned short                 _port;
   bool                           _user_app_registered;
 };
+
 #endif // ICP_CONNECTION_H */
