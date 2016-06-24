@@ -51,7 +51,7 @@ class icpMTQueue
   {
     if (!_que.empty())
     {
-      usleep ((unsigned int)1000);
+      usleep ((unsigned int)5000);
     }
 
     _stop = true;

@@ -229,6 +229,7 @@ void icpClient::sendAcquisitions
   uint32_t num_acq = dset.getNumberOfAcquisitions (0);
   for (int ii = 0; ii < num_acq; ii++)
   {
+    usleep (500);
     ISMRMRD::Acquisition<S> acq = dset.readAcquisition<S> (ii, 0);
     _session->send (&acq, ISMRMRD_VERSION_MAJOR, ISMRMRD::ISMRMRD_MRACQUISITION,
                               ISMRMRD::get_storage_type<S>(), acq.getStream());

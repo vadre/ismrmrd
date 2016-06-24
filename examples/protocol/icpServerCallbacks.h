@@ -7,6 +7,7 @@
 #include "icpCallback.h"
 #include "fftw3.h"
 
+static std::mutex gmtx;
 /*******************************************************************************
  class icpServerEntityHandler, implementation is in icpServerCallbacks.cpp
  ******************************************************************************/
@@ -204,29 +205,32 @@ class icpServerImageRecon : public icpCallback
       }
     }
 
-    for (uint16_t coil = 0; coil < _num_coils; coil++)
-    {
-      fftwf_complex* tmp =
-        (fftwf_complex*) fftwf_malloc (sizeof (fftwf_complex) * (nX * nY));
-
+    fftwf_plan p;
+    fftwf_complex* tmp;
+    { //lock guard scope begining 
+      std::lock_guard<std::mutex> guard (gmtx);
+      tmp = (fftwf_complex*) fftwf_malloc (sizeof (fftwf_complex) * (nX * nY));
       if (!tmp)
       {
         throw std::runtime_error ("Error allocating storage for FFTW");
       }
+      p = fftwf_plan_dft_2d (nY, nX, tmp ,tmp, FFTW_BACKWARD, FFTW_ESTIMATE);
+    } //lock guard scope end
 
-      fftwf_plan p = fftwf_plan_dft_2d (nY, nX, tmp ,tmp, FFTW_BACKWARD, FFTW_ESTIMATE);
-
+    for (uint16_t coil = 0; coil < _num_coils; coil++)
+    {
       fftshift (reinterpret_cast<std::complex<S>*>(tmp),
                 &buffer.at (0, 0, coil), nX, nY);
-
       fftwf_execute(p);
-
       fftshift (&buffer.at (0, 0, coil),
                 reinterpret_cast<std::complex<S>*>(tmp), nX, nY);
+    }
 
+    { //lock guard scope begining 
+      std::lock_guard<std::mutex> guard (gmtx);
       fftwf_destroy_plan(p);
       fftwf_free(tmp);
-    }
+    } //lock guard scope end
 
     ISMRMRD::Image<S> img (r_space.matrixSize.x, r_space.matrixSize.y, 1, 1);
 

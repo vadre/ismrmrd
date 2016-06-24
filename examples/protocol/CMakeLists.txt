@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 2.8)
 find_package(Boost 1.43 COMPONENTS system thread program_options)
-find_package(FFTW3 COMPONENTS single)
+#find_package(FFTW3 COMPONENTS single)
+find_package(FFTW3 COMPONENTS single double threads)
 
 if (NOT Boost_FOUND)
     message("Boost not found. Not building protocol demo")

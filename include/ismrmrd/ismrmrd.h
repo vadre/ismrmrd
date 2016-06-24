@@ -198,8 +198,6 @@ enum ConfigurationType
   CONFIGURATION_RECON_INT          = 704,
   CONFIGURATION_RECON_FLOAT        = 705,
   CONFIGURATION_RECON_DOUBLE       = 706
-  //CONFIGURATION_IMAGE_RECON_1      = 703,
-  //CONFIGURATION_IMAGE_RECON_2      = 704
 };
 
 /// Entity type interface
@@ -785,10 +783,6 @@ public:
     T &at(uint32_t x, uint32_t y = 0, uint32_t z = 0, uint32_t channel = 0);
 
     // Functions inherited from Entity
-    /*virtual uint32_t     getVersion ();
-    virtual EntityType   getEntityType ();
-    virtual StorageType  getStorageType ();
-    virtual uint32_t     getStream ();*/
     virtual std::vector<unsigned char> serialize();
     virtual void deserialize(const std::vector<unsigned char>& buffer);
 
