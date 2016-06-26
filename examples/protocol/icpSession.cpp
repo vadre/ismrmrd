@@ -33,8 +33,9 @@ void icpSession::run
   {
     if (!getMessage())
     {
-      std::cout << "Error from icpSession::getMessage\n";
-      _stop = true;
+      std::cerr << "Error from icpSession::getMessage\n";
+      std::cerr << "Session shutting down\n";
+      shutdown();
     }
   }
 
@@ -385,8 +386,23 @@ void icpSession::transmit
     OUT_MSG msg;
     if (_oq.pop (std::ref(msg)))
     {
-      boost::asio::write (*_sock,
-                          boost::asio::buffer (msg.data, msg.data.size()));
+      try
+      {
+        boost::asio::write (*_sock,
+                            boost::asio::buffer (msg.data, msg.data.size()));
+      }
+      catch (const boost::system::system_error& e)
+      {
+        std::cerr << e.what() << "\n";
+        std::cerr << "Session shutting down\n";
+        shutdown();
+      }
+      catch (...)
+      {
+        std::cerr << "Unknown exception from boost::asio::write\n";
+        std::cerr << "Session shutting down\n";
+        shutdown ();
+      }
     }
   }
 

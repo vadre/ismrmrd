@@ -18,6 +18,7 @@ class icpServer
   void processCommand   (COMMAND*   msg);
   void processError     (ERRREPORT* msg);
   void sendImage        (ENTITY*, uint32_t version, STYPE, uint32_t stream);
+  void sendHeader       (ISMRMRD::IsmrmrdHeaderWrapper*, ETYPE);
   void sendError        (ISMRMRD::ErrorType type, std::string descr);
   void taskDone         ();
 
@@ -32,7 +33,5 @@ class icpServer
   icpCallback* _recCB;
   bool         _client_done;
   bool         _task_done;
-
-  std::string  _client_name; /* For multiple client testing */
 };
 #endif // ICP_SERVER_H

@@ -27,7 +27,8 @@ class icpClientImageProcessor : public icpCallback
   public:
        icpClientImageProcessor (icpClient*,
                                 std::string fname,
-                                std::string dname);
+                                std::string dname,
+                                std::mutex& mtx);
        ~icpClientImageProcessor () = default;
   void receive (icpCallback*, ENTITY*, uint32_t, ETYPE, STYPE, uint32_t);
 
@@ -37,11 +38,15 @@ class icpClientImageProcessor : public icpCallback
   void writeImage (ISMRMRD::Entity* entity)
   {
     ISMRMRD::Image<S>* img = static_cast<ISMRMRD::Image<S>*>(entity);
-    _dset.appendImage (*img, ISMRMRD::ISMRMRD_STREAM_IMAGE);
+    {
+      std::lock_guard<std::mutex> guard (_mtx);
+      _dset.appendImage (*img, ISMRMRD::ISMRMRD_STREAM_IMAGE);
+    }
   }
 
   icpClient*             _client;
   ISMRMRD::Dataset       _dset;
+  std::mutex&            _mtx;
 };
 
 /*******************************************************************************

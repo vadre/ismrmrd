@@ -27,12 +27,12 @@ class icpClient
 
   private:
 
-  void beginInput ();
+  void beginInput (std::mutex&);
   void sendHandshake ();
   void sendCommand (ISMRMRD::CommandType cmd_type, uint32_t cmd_id);
   void sendError (ISMRMRD::ErrorType type, std::string descr);
   template <typename S>
-  void sendAcquisitions (ISMRMRD::Dataset& dset);
+  void sendAcquisitions (ISMRMRD::Dataset& dset, std::mutex& mtx);
 
   ICP_SESSION  _session;
   icpCallback* _entCB;

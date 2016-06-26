@@ -52,10 +52,12 @@ icpClientImageProcessor::icpClientImageProcessor
 (
   icpClient* client,
   std::string fname,
-  std::string dname
+  std::string dname,
+  std::mutex& mtx
 )
 : _client (client),
-  _dset (fname.c_str(), dname.c_str())
+  _dset (fname.c_str(), dname.c_str()),
+  _mtx (mtx)
 {
 }
 /******************************************************************************/
@@ -75,10 +77,17 @@ void icpClientImageProcessor::receive
 
   if (etype == ISMRMRD::ISMRMRD_HEADER)
   {
-    std::cout << "Writing Ismrmrd Header to file\n";
-    ISMRMRD::IsmrmrdHeaderWrapper* wrp =
-      static_cast<ISMRMRD::IsmrmrdHeaderWrapper*>(entity);
-    _this->_dset.writeHeader (wrp->getString ());
+    std::cout << "NOT Writing Ismrmrd Header to file\n";
+//    ISMRMRD::IsmrmrdHeaderWrapper* wrp =
+//      static_cast<ISMRMRD::IsmrmrdHeaderWrapper*>(entity);
+
+//    std::string tmp = wrp->getString ();
+//    std::cout << "Before dset.writeHeader\n";
+//    {
+//      std::lock_guard<std::mutex> guard (_mtx);
+//      _this->_dset.writeHeader (tmp);
+//    }
+//    std::cout << "After dset.writeHeader\n";
   }
   else if (etype == ISMRMRD::ISMRMRD_IMAGE)
   {

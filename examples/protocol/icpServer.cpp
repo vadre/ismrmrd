@@ -199,6 +199,18 @@ void icpServer::sendError
 
 /*****************************************************************************
  ****************************************************************************/
+void icpServer::sendHeader
+(
+  ISMRMRD::IsmrmrdHeaderWrapper* wrp,
+  ETYPE                          etype
+)
+{
+  _session->send (wrp, wrp->getVersion(), etype,
+                  wrp->getStorageType(), wrp->getStream());
+}
+
+/*****************************************************************************
+ ****************************************************************************/
 icpServer::icpServer
 (
   ICP_SESSION  session

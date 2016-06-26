@@ -16,7 +16,7 @@ void icpConnection::signalHandler
 {
   _this->_acceptor->cancel();
   _this->_io_service.stop();
-  std::cout << "\nConnection teminated\n";
+  std::cout << "\nConnection module exiting\n";
 }
 
 /*******************************************************************************

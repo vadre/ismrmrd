@@ -123,8 +123,7 @@ class icpServerImageRecon : public icpCallback
     _header_received = true;
   
     std::cout << "Received ismrmrd header\n";
-  
-    //_server->sendHeader (entity, ISMRMRD::ISMRMRD_HEADER);
+    _server->sendHeader (wrp, ISMRMRD::ISMRMRD_HEADER); // For dataset testing
   }
 
 /******************************************************************************/

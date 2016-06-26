@@ -2,6 +2,8 @@
 #include "icpClient.h"
 #include "icpClientCallbacks.h"
 
+static std::mutex gmtx;
+
 /*****************************************************************************
  ****************************************************************************/
 void icpClient::processHandshake
@@ -125,14 +127,19 @@ void icpClient::sendHandshake
  ******************************************************************************/
 void icpClient::beginInput
 (
+  std::mutex& mtx
 )
 {
   std::cout << __func__ << "  starting\n";
 
   sendHandshake ();
 
+  std::string xml_head;
   ISMRMRD::Dataset dset (_in_fname, _in_dset);
-  std::string xml_head = dset.readHeader();
+  {
+    std::lock_guard<std::mutex> guard (mtx);
+    xml_head = dset.readHeader();
+  }
 
   ISMRMRD::IsmrmrdHeader xmlHeader;
   ISMRMRD::deserialize (xml_head.c_str(), xmlHeader);
@@ -185,23 +192,23 @@ void icpClient::beginInput
 
   if (stype == ISMRMRD::ISMRMRD_SHORT)
   {
-    sendAcquisitions <int16_t> (dset);
+    sendAcquisitions <int16_t> (dset, mtx);
   }
   else if (stype == ISMRMRD::ISMRMRD_INT)
   {
-    sendAcquisitions <int32_t> (dset);
+    sendAcquisitions <int32_t> (dset, mtx);
   }
   // TODO: FLOAT and CXFLOAT are treated the same here
   else if (stype == ISMRMRD::ISMRMRD_FLOAT ||
            stype == ISMRMRD::ISMRMRD_CXFLOAT)
   {
-    sendAcquisitions <float> (dset);
+    sendAcquisitions <float> (dset, mtx);
   }
   // TODO: DOUBLE and CXDOUBLE are treated the same here 
   else if (stype == ISMRMRD::ISMRMRD_DOUBLE ||
            stype == ISMRMRD::ISMRMRD_CXDOUBLE)
   {
-    sendAcquisitions <double> (dset);
+    sendAcquisitions <double> (dset, mtx);
   }
   else
   {
@@ -223,14 +230,19 @@ void icpClient::beginInput
 template <typename S>
 void icpClient::sendAcquisitions
 (
-  ISMRMRD::Dataset& dset
+  ISMRMRD::Dataset& dset,
+  std::mutex&       mtx
 )
 {
   uint32_t num_acq = dset.getNumberOfAcquisitions (0);
   for (int ii = 0; ii < num_acq; ii++)
   {
-    usleep (500);
-    ISMRMRD::Acquisition<S> acq = dset.readAcquisition<S> (ii, 0);
+    usleep (500); // For testing only
+    ISMRMRD::Acquisition<S> acq;
+    {
+      std::lock_guard<std::mutex> guard (mtx);
+      acq = dset.readAcquisition<S> (ii, 0);
+    }
     _session->send (&acq, ISMRMRD_VERSION_MAJOR, ISMRMRD::ISMRMRD_MRACQUISITION,
                               ISMRMRD::get_storage_type<S>(), acq.getStream());
   }
@@ -269,13 +281,13 @@ icpClient::icpClient
   _session->registerHandler ((ICP_CB) fp, ISMRMRD::ISMRMRD_COMMAND, _entCB);
 
 
-  _imgCB = new icpClientImageProcessor (this, _out_fname, _out_dset);
+  _imgCB = new icpClientImageProcessor (this, _out_fname, _out_dset, gmtx);
   auto fp1 = std::bind (&icpCallback::receive, _imgCB, _1, _2, _3, _4, _5, _6);
   _session->registerHandler ((ICP_CB) fp1, ISMRMRD::ISMRMRD_IMAGE, _imgCB);
   _session->registerHandler ((ICP_CB) fp1, ISMRMRD::ISMRMRD_HEADER, _imgCB);
 
 
-  std::thread it (&icpClient::beginInput, this);
+  std::thread it (&icpClient::beginInput, this, std::ref (gmtx));
   _session->run ();
   if (it.joinable())
   {
