@@ -1,28 +1,28 @@
 #include <iostream>
 #include "icpServerCallbacks.h"
 
+using namespace ISMRMRD::ICP;
+
 /*******************************************************************************
  ******************************************************************************/
-icpServerEntityHandler::icpServerEntityHandler
+ServerEntityHandler::ServerEntityHandler
 (
-  icpServer* server
+  Server* server
 )
 : _server (server)
 {
 }
 /******************************************************************************/
 
-void icpServerEntityHandler::receive
+void ServerEntityHandler::receive
 (
-  icpCallback* base,
-  ENTITY*      entity,
-  uint32_t     version,
-  ETYPE        etype,
-  STYPE        stype,
-  uint32_t     stream
+  Callback* base,
+  ENTITY*      entity
 )
 {
-  icpServerEntityHandler* _this = static_cast<icpServerEntityHandler*>(base);
+  ServerEntityHandler* _this = static_cast<ServerEntityHandler*>(base);
+  ETYPE etype = entity->getEntityType();
+
   switch (etype)
   {
     case ISMRMRD::ISMRMRD_HANDSHAKE:

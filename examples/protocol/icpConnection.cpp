@@ -2,14 +2,16 @@
 #include "icpConnection.h"
 #include "icpSession.h"
 
+namespace ISMRMRD { namespace ICP
+{
 /*******************************************************************************
  ******************************************************************************/
-bool           icpConnection::_running  = false;
-icpConnection* icpConnection::_this     = NULL;
+bool        Connection::_running  = false;
+Connection* Connection::_this     = NULL;
 
 /*******************************************************************************
  ******************************************************************************/
-void icpConnection::signalHandler
+void Connection::signalHandler
 (
   int sig_id
 )
@@ -21,10 +23,10 @@ void icpConnection::signalHandler
 
 /*******************************************************************************
  ******************************************************************************/
-void icpConnection::catchSignal ()
+void Connection::catchSignal ()
 {
   struct sigaction action;
-  action.sa_handler = icpConnection::signalHandler;
+  action.sa_handler = Connection::signalHandler;
   action.sa_flags = 0;
   sigemptyset (&action.sa_mask);
   sigaction (SIGINT, &action, NULL);
@@ -33,23 +35,23 @@ void icpConnection::catchSignal ()
 
 /*******************************************************************************
  ******************************************************************************/
-void icpConnection::asyncAccept ()
+void Connection::asyncAccept ()
 {
 
   SOCKET_PTR sock (new tcp::socket (_io_service));
   _acceptor->async_accept
-    (*sock, bind (&icpConnection::startUserApp, this, sock));
+    (*sock, bind (&Connection::startUserApp, this, sock));
   _io_service.run_one();
 }
 
 /*******************************************************************************
  ******************************************************************************/
-void icpConnection::startUserApp
+void Connection::startUserApp
 (
   SOCKET_PTR sock
 )
 {
-  ICP_SESSION session (new icpSession (sock));
+  SESSION session (new Session (sock));
   std::thread (runUserApp, std::move (session)).detach();
 
   asyncAccept ();
@@ -57,7 +59,7 @@ void icpConnection::startUserApp
 
 /*******************************************************************************
  ******************************************************************************/
-void icpConnection::registerUserApp
+void Connection::registerUserApp
 (
   START_USER_APP_FUNC func_ptr
 )
@@ -74,18 +76,18 @@ void icpConnection::registerUserApp
 /*******************************************************************************
  For server
  ******************************************************************************/
-void icpConnection::start ()
+void Connection::start ()
 {
   if (_running)
   {
-    throw std::runtime_error ("icpConnection is already running\n");
+    throw std::runtime_error ("Connection is already running\n");
   }
   if (!_user_app_registered)
   {
     throw std::runtime_error ("User app not registered\n");
   }
 
-  icpConnection::_this = this;
+  Connection::_this = this;
   _acceptor = std::shared_ptr<tcp::acceptor>
     (new tcp::acceptor (_io_service, tcp::endpoint(tcp::v4(), _port)));
 
@@ -99,11 +101,11 @@ void icpConnection::start ()
 /*******************************************************************************
  For client
  ******************************************************************************/
-void icpConnection::connect ()
+void Connection::connect ()
 {
   if (_running)
   {
-    throw std::runtime_error ("icpConnection is already running\n");
+    throw std::runtime_error ("Connection is already running\n");
   }
   if (!_user_app_registered)
   {
@@ -124,7 +126,7 @@ void icpConnection::connect ()
   }
 
   _running = true;
-  ICP_SESSION session (new icpSession (sock));
+  SESSION session (new Session (sock));
   std::thread t (runUserApp, std::move (session));
   t.join();
 }
@@ -132,7 +134,7 @@ void icpConnection::connect ()
 /*******************************************************************************
  Constructor for server application
  ******************************************************************************/
-icpConnection::icpConnection
+Connection::Connection
 (
   uint16_t p
 )
@@ -143,7 +145,7 @@ icpConnection::icpConnection
 /*******************************************************************************
  Constructor for client application
  ******************************************************************************/
-icpConnection::icpConnection
+Connection::Connection
 (
   std::string host,
   uint16_t    port
@@ -153,3 +155,5 @@ icpConnection::icpConnection
   _user_app_registered (false)
 {
 }
+
+}} // end of namespace ISMRMRD::ICP

@@ -2,11 +2,13 @@
 #include "icpClient.h"
 #include "icpClientCallbacks.h"
 
+using namespace ISMRMRD::ICP;
+
 static std::mutex gmtx;
 
 /*****************************************************************************
  ****************************************************************************/
-void icpClient::processHandshake
+void Client::processHandshake
 (
   HANDSHAKE* msg
 )
@@ -18,21 +20,21 @@ void icpClient::processHandshake
 
 /*****************************************************************************
  ****************************************************************************/
-void icpClient::processCommand
+void Client::processCommand
 (
   COMMAND* msg
 )
 {
   switch (msg->getCommandType())
   {
-    case ISMRMRD::ISMRMRD_COMMAND_DONE_FROM_SERVER:
+    case ISMRMRD_COMMAND_DONE_FROM_SERVER:
 
       std::cout << "Received DONE from server\n";
       _server_done = true;
       if (_task_done)
       {
         std::cout << "Sending CLOSE_CONNECTION command\n";
-        sendCommand (ISMRMRD::ISMRMRD_COMMAND_CLOSE_CONNECTION, 0);
+        sendCommand (ISMRMRD_COMMAND_CLOSE_CONNECTION, 0);
         std::cout << _client_name << " shutting down\n";
         _session->shutdown();
       }
@@ -46,7 +48,7 @@ void icpClient::processCommand
 
 /*****************************************************************************
  ****************************************************************************/
-void icpClient::processError
+void Client::processError
 (
   ERRREPORT* msg
 )
@@ -60,7 +62,7 @@ void icpClient::processError
 
 /*****************************************************************************
  ****************************************************************************/
-void icpClient::taskDone
+void Client::taskDone
 (
 )
 {
@@ -68,7 +70,7 @@ void icpClient::taskDone
   if (_server_done)
   {
     std::cout << "Sending CLOSE_CONNECTION command\n";
-    sendCommand (ISMRMRD::ISMRMRD_COMMAND_CLOSE_CONNECTION, 0);
+    sendCommand (ISMRMRD_COMMAND_CLOSE_CONNECTION, 0);
     std::cout << _client_name << " shutting down\n";
     _session->shutdown();
   }
@@ -76,56 +78,53 @@ void icpClient::taskDone
 
 /*****************************************************************************
  ****************************************************************************/
-void icpClient::sendCommand
+void Client::sendCommand
 (
-  ISMRMRD::CommandType cmd_type,
-  uint32_t             cmd_id
+  CommandType cmd_type,
+  uint32_t    cmd_id
 )
 {
-  ISMRMRD::Command msg;
+  Command msg;
   msg.setCommandType (cmd_type);
   msg.setCommandId (cmd_id);
-  _session->send (&msg, ISMRMRD_VERSION_MAJOR, ISMRMRD::ISMRMRD_COMMAND,
-          ISMRMRD::ISMRMRD_STORAGE_NONE, ISMRMRD::ISMRMRD_STREAM_COMMAND);
+  _session->send (&msg);
 
   return;
 }
 
 /*****************************************************************************
  ****************************************************************************/
-void icpClient::sendError
+void Client::sendError
 (
-  ISMRMRD::ErrorType type,
-  std::string        descr
+  ErrorType    type,
+  std::string  descr
 )
 {
-  ISMRMRD::ErrorReport msg;
+  ErrorReport msg;
   msg.setErrorType (type);
   msg.setErrorDescription (descr);
-  _session->send (&msg, ISMRMRD_VERSION_MAJOR, ISMRMRD::ISMRMRD_ERROR_REPORT,
-         ISMRMRD::ISMRMRD_STORAGE_NONE, ISMRMRD::ISMRMRD_STREAM_ERRREPORT);
+  _session->send (&msg);
 
   return;
 }
 
 /*******************************************************************************
  ******************************************************************************/
-void icpClient::sendHandshake
+void Client::sendHandshake
 (
 )
 {
-  ISMRMRD::Handshake msg;
+  Handshake msg;
   msg.setTimestamp ((uint64_t)std::time(nullptr));
-  msg.setConnectionStatus (ISMRMRD::CONNECTION_REQUEST);
+  msg.setConnectionStatus (CONNECTION_REQUEST);
   msg.setClientName (_client_name);
   // fill in the manifest here
-  _session->send (&msg, ISMRMRD_VERSION_MAJOR, ISMRMRD::ISMRMRD_HANDSHAKE,
-              ISMRMRD::ISMRMRD_STORAGE_NONE, ISMRMRD::ISMRMRD_STREAM_HANDSHAKE);
+  _session->send (&msg);
 }
 
 /*******************************************************************************
  ******************************************************************************/
-void icpClient::beginInput
+void Client::beginInput
 (
   std::mutex& mtx
 )
@@ -135,78 +134,75 @@ void icpClient::beginInput
   sendHandshake ();
 
   std::string xml_head;
-  ISMRMRD::Dataset dset (_in_fname, _in_dset);
+  Dataset dset (_in_fname, _in_dset);
+
   {
     std::lock_guard<std::mutex> guard (mtx);
     xml_head = dset.readHeader();
   }
 
-  ISMRMRD::IsmrmrdHeader xmlHeader;
-  ISMRMRD::deserialize (xml_head.c_str(), xmlHeader);
+  IsmrmrdHeader xmlHeader;
+  deserialize (xml_head.c_str(), xmlHeader);
 
   ETYPE etype = (ETYPE)xmlHeader.streams[0].entityType;
   STYPE stype = (STYPE)xmlHeader.streams[0].storageType;
 
-  ISMRMRD::Command msg;
-  msg.setCommandType (ISMRMRD::ISMRMRD_COMMAND_CONFIGURATION);
+  Command msg;
+  msg.setCommandType (ISMRMRD_COMMAND_CONFIGURATION);
   msg.setCommandId (0);
   
-  if (etype == ISMRMRD::ISMRMRD_MRACQUISITION)
+  if (etype == ISMRMRD_MRACQUISITION)
   {
-    if (stype == ISMRMRD::ISMRMRD_SHORT)
+    if (stype == ISMRMRD_SHORT)
     {
-      msg.setConfigType (ISMRMRD::CONFIGURATION_RECON_SHORT);
+      msg.setConfigType (CONFIGURATION_RECON_SHORT);
     }
-    else if (stype == ISMRMRD::ISMRMRD_INT)
+    else if (stype == ISMRMRD_INT)
     {
-      msg.setConfigType (ISMRMRD::CONFIGURATION_RECON_INT);
+      msg.setConfigType (CONFIGURATION_RECON_INT);
     }
-    else if (stype == ISMRMRD::ISMRMRD_FLOAT ||
-             stype == ISMRMRD::ISMRMRD_CXFLOAT)
+    else if (stype == ISMRMRD_FLOAT ||
+             stype == ISMRMRD_CXFLOAT)
     {
-      msg.setConfigType (ISMRMRD::CONFIGURATION_RECON_FLOAT);
+      msg.setConfigType (CONFIGURATION_RECON_FLOAT);
     }
-    else if (stype == ISMRMRD::ISMRMRD_DOUBLE ||
-             stype == ISMRMRD::ISMRMRD_CXDOUBLE)
+    else if (stype == ISMRMRD_DOUBLE ||
+             stype == ISMRMRD_CXDOUBLE)
     {
-      msg.setConfigType (ISMRMRD::CONFIGURATION_RECON_DOUBLE);
+      msg.setConfigType (CONFIGURATION_RECON_DOUBLE);
     }
     else
     {
       std::cout << "Warning, unexpected acquisition storage type in file\n";
-      msg.setConfigType (ISMRMRD::CONFIGURATION_NONE);
+      msg.setConfigType (CONFIGURATION_NONE);
     }
   }
   else
   {
       std::cout << "Warning, unexpected entity type in file\n";
-      msg.setConfigType (ISMRMRD::CONFIGURATION_NONE);
+      msg.setConfigType (CONFIGURATION_NONE);
   }
-  _session->send (&msg, ISMRMRD_VERSION_MAJOR, ISMRMRD::ISMRMRD_COMMAND,
-      ISMRMRD::ISMRMRD_STORAGE_NONE, ISMRMRD::ISMRMRD_STREAM_COMMAND);
 
+  _session->send (&msg);
+  _session->send (&xmlHeader);
 
-  ISMRMRD::IsmrmrdHeaderWrapper wrapper (xml_head);
-  _session->send (&wrapper, ISMRMRD_VERSION_MAJOR, ISMRMRD::ISMRMRD_HEADER,
-        ISMRMRD::ISMRMRD_STORAGE_NONE, ISMRMRD::ISMRMRD_STREAM_ISMRMRD_HEADER); 
-
-  if (stype == ISMRMRD::ISMRMRD_SHORT)
+  if (stype == ISMRMRD_SHORT)
   {
     sendAcquisitions <int16_t> (dset, mtx);
   }
-  else if (stype == ISMRMRD::ISMRMRD_INT)
+  else if (stype == ISMRMRD_INT)
   {
     sendAcquisitions <int32_t> (dset, mtx);
   }
   // TODO: FLOAT and CXFLOAT are treated the same here
-  else if (stype == ISMRMRD::ISMRMRD_FLOAT ||
-           stype == ISMRMRD::ISMRMRD_CXFLOAT)
+  else if (stype == ISMRMRD_FLOAT ||
+           stype == ISMRMRD_CXFLOAT)
   {
     sendAcquisitions <float> (dset, mtx);
   }
   // TODO: DOUBLE and CXDOUBLE are treated the same here 
-  else if (stype == ISMRMRD::ISMRMRD_DOUBLE ||
-           stype == ISMRMRD::ISMRMRD_CXDOUBLE)
+  else if (stype == ISMRMRD_DOUBLE ||
+           stype == ISMRMRD_CXDOUBLE)
   {
     sendAcquisitions <double> (dset, mtx);
   }
@@ -216,11 +212,10 @@ void icpClient::beginInput
     throw std::runtime_error ("Unexpected MR Acquisition storage type");
   }
   
-  ISMRMRD::Command cmd;
+  Command cmd;
   cmd.setCommandId (0);
-  cmd.setCommandType (ISMRMRD::ISMRMRD_COMMAND_STOP_FROM_CLIENT);
-  _session->send (&cmd, ISMRMRD_VERSION_MAJOR, ISMRMRD::ISMRMRD_COMMAND,
-          ISMRMRD::ISMRMRD_STORAGE_NONE, ISMRMRD::ISMRMRD_STREAM_COMMAND);
+  cmd.setCommandType (ISMRMRD_COMMAND_STOP_FROM_CLIENT);
+  _session->send (&cmd);
 
   std::cout << "Input completed\n";
 }
@@ -228,31 +223,30 @@ void icpClient::beginInput
 /*******************************************************************************
  ******************************************************************************/
 template <typename S>
-void icpClient::sendAcquisitions
+void Client::sendAcquisitions
 (
-  ISMRMRD::Dataset& dset,
-  std::mutex&       mtx
+  Dataset&    dset,
+  std::mutex& mtx
 )
 {
   uint32_t num_acq = dset.getNumberOfAcquisitions (0);
   for (int ii = 0; ii < num_acq; ii++)
   {
     usleep (500); // For testing only
-    ISMRMRD::Acquisition<S> acq;
+    Acquisition<S> acq;
     {
       std::lock_guard<std::mutex> guard (mtx);
       acq = dset.readAcquisition<S> (ii, 0);
     }
-    _session->send (&acq, ISMRMRD_VERSION_MAJOR, ISMRMRD::ISMRMRD_MRACQUISITION,
-                              ISMRMRD::get_storage_type<S>(), acq.getStream());
+    _session->send (&acq);
   }
 }
 
 /*******************************************************************************
  ******************************************************************************/
-icpClient::icpClient
+Client::Client
 (
-  ICP_SESSION      session,
+  SESSION          session,
   std::string      client_name,
   std::string      in_fname,
   std::string      out_fname,
@@ -264,52 +258,40 @@ icpClient::icpClient
   _in_fname        (in_fname),
   _out_fname       (out_fname),
   _in_dset         (in_dataset),
-  _out_dset        (out_dataset)//,
-  //_server_done     (false),
-  //_task_done       (false)//,
-  //_header_received (false)
+  _out_dset        (out_dataset)
 {
 
   std::cout << "\""<< _client_name << "\"  starting\n";
 
   using namespace std::placeholders;
 
-  _entCB = new icpClientEntityHandler (this);
-  auto fp = std::bind (&icpCallback::receive, _entCB, _1, _2, _3, _4, _5, _6);
-  _session->registerHandler ((ICP_CB) fp, ISMRMRD::ISMRMRD_HANDSHAKE, _entCB);
-  _session->registerHandler ((ICP_CB) fp, ISMRMRD::ISMRMRD_ERROR_REPORT, _entCB);
-  _session->registerHandler ((ICP_CB) fp, ISMRMRD::ISMRMRD_COMMAND, _entCB);
+  _callbacks.emplace_back (new ClientEntityHandler (this));
+  auto fp = std::bind (&Callback::receive, _callbacks.back(), _1, _2);
+  _session->registerHandler ((CB) fp, ISMRMRD_HANDSHAKE,    _callbacks.back());
+  _session->registerHandler ((CB) fp, ISMRMRD_ERROR_REPORT, _callbacks.back());
+  _session->registerHandler ((CB) fp, ISMRMRD_COMMAND,      _callbacks.back());
 
 
-  _imgCB = new icpClientImageProcessor (this, _out_fname, _out_dset, gmtx);
-  auto fp1 = std::bind (&icpCallback::receive, _imgCB, _1, _2, _3, _4, _5, _6);
-  _session->registerHandler ((ICP_CB) fp1, ISMRMRD::ISMRMRD_IMAGE, _imgCB);
-  _session->registerHandler ((ICP_CB) fp1, ISMRMRD::ISMRMRD_HEADER, _imgCB);
+  _callbacks.emplace_back
+    (new ClientImageProcessor (this, _out_fname, _out_dset, gmtx));
+  auto fp1 = std::bind (&Callback::receive, _callbacks.back(), _1, _2);
+  _session->registerHandler ((CB) fp1, ISMRMRD_IMAGE,  _callbacks.back());
+  _session->registerHandler ((CB) fp1, ISMRMRD_HEADER, _callbacks.back());
 
 
-  std::thread it (&icpClient::beginInput, this, std::ref (gmtx));
+  std::thread it (&Client::beginInput, this, std::ref (gmtx));
   _session->run ();
-  if (it.joinable())
-  {
-    it.join();
-  }
+
+  if (it.joinable()) it.join();
 }
 
 /*******************************************************************************
  ******************************************************************************/
-icpClient::~icpClient
+Client::~Client
 (
 )
 {
-  if (_entCB)
-  {
-    delete (_entCB);
-  }
-
-  if (_imgCB)
-  {
-    delete (_imgCB);
-  }
+  for (auto cb : _callbacks) if (cb) delete (cb);
 }
 
 /*******************************************************************************

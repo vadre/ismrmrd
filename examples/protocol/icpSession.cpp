@@ -1,8 +1,10 @@
 #include "icpSession.h"
 
+namespace ISMRMRD { namespace ICP
+{
 /*******************************************************************************
  ******************************************************************************/
-icpSession::icpSession
+Session::Session
 (
   SOCKET_PTR sock
 )
@@ -14,7 +16,7 @@ icpSession::icpSession
 
 /*******************************************************************************
  ******************************************************************************/
-icpSession::~icpSession
+Session::~Session
 (
 )
 {
@@ -24,16 +26,16 @@ icpSession::~icpSession
 
 /*******************************************************************************
  ******************************************************************************/
-void icpSession::run
+void Session::run
 (
 )
 {
-  _transmitter = std::thread (&icpSession::transmit, this);
+  _transmitter = std::thread (&Session::transmit, this);
   while (!_stop)
   {
     if (!getMessage())
     {
-      std::cerr << "Error from icpSession::getMessage\n";
+      std::cerr << "Error from Session::getMessage\n";
       std::cerr << "Session shutting down\n";
       shutdown();
     }
@@ -49,7 +51,7 @@ void icpSession::run
 
 /*******************************************************************************
  ******************************************************************************/
-void icpSession::shutdown
+void Session::shutdown
 (
 )
 {
@@ -59,12 +61,12 @@ void icpSession::shutdown
 
 /*******************************************************************************
  ******************************************************************************/
-template<> void icpSession::registerHandler (ICP_CB, ETYPE, icpCallback*);
-template class icpMTQueue<OUTPUT_MESSAGE_STRUCTURE>;
+template<> void Session::registerHandler (CB, ETYPE, Callback*);
+template class MTQueue<OUT_MSG>;
 
 /*******************************************************************************
  ******************************************************************************/
-bool icpSession::getMessage
+bool Session::getMessage
 (
 )
 {
@@ -111,7 +113,7 @@ bool icpSession::getMessage
 
 /*******************************************************************************
  ******************************************************************************/
-uint32_t icpSession::receiveFrameInfo
+uint32_t Session::receiveFrameInfo
 (
   IN_MSG& in_msg
 )
@@ -128,13 +130,13 @@ uint32_t icpSession::receiveFrameInfo
   if (bytes_read == 0)
   {
     std::cout << "Received EOF\n";
-    return ICP_ERROR_SOCKET_EOF;
+    return ERROR_SOCKET_EOF;
   }
   else if (bytes_read != DATAFRAME_SIZE_FIELD_SIZE)
   {
     std::cout << "Error: Read " << bytes_read 
               << ", expected " << DATAFRAME_SIZE_FIELD_SIZE << "\n";
-    return ICP_ERROR_SOCKET_WRONG_LENGTH;
+    return ERROR_SOCKET_WRONG_LENGTH;
   }
 
 
@@ -150,7 +152,7 @@ uint32_t icpSession::receiveFrameInfo
   {
     std::cout << "Error: Read " << bytes_read 
               << ", expected " << ENTITY_HEADER_SIZE << "\n";
-    return ICP_ERROR_SOCKET_WRONG_LENGTH;
+    return ERROR_SOCKET_WRONG_LENGTH;
   }
 
   in_msg.ehdr.deserialize (buffer);
@@ -161,15 +163,13 @@ uint32_t icpSession::receiveFrameInfo
 
 /*******************************************************************************
  ******************************************************************************/
-void icpSession::deliver
+void Session::deliver
 (
   IN_MSG in_msg
 )
 {
-  uint32_t             version = in_msg.ehdr.version;
-  ISMRMRD::EntityType  etype   = (ISMRMRD::EntityType)  in_msg.ehdr.entity_type;
-  ISMRMRD::StorageType stype   = (ISMRMRD::StorageType) in_msg.ehdr.storage_type;
-  uint32_t             stream  = in_msg.ehdr.stream;
+  ETYPE  etype  = (EntityType)  in_msg.ehdr.entity_type;
+  STYPE stype   = (StorageType) in_msg.ehdr.storage_type;
 
   if (_callbacks.find (etype) == _callbacks.end())
   {
@@ -177,56 +177,57 @@ void icpSession::deliver
     return;
   }
 
-  icpCallback* obj = _objects [etype];
+  Callback* obj = _objects [etype];
 
-  if (etype == ISMRMRD::ISMRMRD_HANDSHAKE)
+  if (etype == ISMRMRD_HANDSHAKE)
   {
     HANDSHAKE ent;
     ent.deserialize (in_msg.data);
-    call (etype, obj, &ent, version, etype, stype, stream);
+    call (etype, obj, &ent);
   }
-  else if (etype == ISMRMRD::ISMRMRD_COMMAND)
+  else if (etype == ISMRMRD_COMMAND)
   {
     COMMAND ent;
     ent.deserialize (in_msg.data);
-    call (etype, obj, &ent, version, etype, stype, stream);
+    call (etype, obj, &ent);
   }
-  else if (etype == ISMRMRD::ISMRMRD_HEADER)
+  else if (etype == ISMRMRD_HEADER)
   {
-    XMLWRAP ent (in_msg.data);
-    call (etype, obj, &ent, version, etype, stype, stream);
+    XMLHEAD ent;
+    ent.deserialize (in_msg.data);
+    call (etype, obj, &ent);
   }
-  else if (etype == ISMRMRD::ISMRMRD_ERROR_REPORT)
+  else if (etype == ISMRMRD_ERROR_REPORT)
   {
     ERRREPORT ent;
     ent.deserialize (in_msg.data);
-    call (etype, obj, &ent, version, etype, stype, stream);
+    call (etype, obj, &ent);
   }
-  else if (etype == ISMRMRD::ISMRMRD_MRACQUISITION)
+  else if (etype == ISMRMRD_MRACQUISITION)
   {
-    if (stype == ISMRMRD::ISMRMRD_SHORT)
+    if (stype == ISMRMRD_SHORT)
     {
-      ISMRMRD::Acquisition<int16_t> ent;
+      Acquisition<int16_t> ent;
       ent.deserialize (in_msg.data);
-      call (etype, obj, &ent, version, etype, stype, stream);
+      call (etype, obj, &ent);
     }
-    else if (stype == ISMRMRD::ISMRMRD_INT)
+    else if (stype == ISMRMRD_INT)
     {
-      ISMRMRD::Acquisition<int32_t> ent;
+      Acquisition<int32_t> ent;
       ent.deserialize (in_msg.data);
-      call (etype, obj, &ent, version, etype, stype, stream);
+      call (etype, obj, &ent);
     }
-    if (stype == ISMRMRD::ISMRMRD_FLOAT)
+    if (stype == ISMRMRD_FLOAT)
     {
-      ISMRMRD::Acquisition<float> ent;
+      Acquisition<float> ent;
       ent.deserialize (in_msg.data);
-      call (etype, obj, &ent, version, etype, stype, stream);
+      call (etype, obj, &ent);
     }
-    else if (stype == ISMRMRD::ISMRMRD_DOUBLE)
+    else if (stype == ISMRMRD_DOUBLE)
     {
-      ISMRMRD::Acquisition<double> ent;
+      Acquisition<double> ent;
       ent.deserialize (in_msg.data);
-      call (etype, obj, &ent, version, etype, stype, stream);
+      call (etype, obj, &ent);
     }
     else
     {
@@ -234,53 +235,53 @@ void icpSession::deliver
                 << stype << "\n";
     }
   }
-  else if (etype == ISMRMRD::ISMRMRD_IMAGE)
+  else if (etype == ISMRMRD_IMAGE)
   {
-    if (stype == ISMRMRD::ISMRMRD_SHORT)
+    if (stype == ISMRMRD_SHORT)
     {
-      ISMRMRD::Image<int16_t> ent;
+      Image<int16_t> ent;
       ent.deserialize (in_msg.data);
-      call (etype, obj, &ent, version, etype, stype, stream);
+      call (etype, obj, &ent);
     }
-    else if (stype == ISMRMRD::ISMRMRD_USHORT)
+    else if (stype == ISMRMRD_USHORT)
     {
-      ISMRMRD::Image<uint16_t> ent;
+      Image<uint16_t> ent;
       ent.deserialize (in_msg.data);
-      call (etype, obj, &ent, version, etype, stype, stream);
+      call (etype, obj, &ent);
     }
-    else if (stype == ISMRMRD::ISMRMRD_INT)
+    else if (stype == ISMRMRD_INT)
     {
-      ISMRMRD::Image<int32_t> ent;
+      Image<int32_t> ent;
       ent.deserialize (in_msg.data);
-      call (etype, obj, &ent, version, etype, stype, stream);
+      call (etype, obj, &ent);
     }
-    else if (stype == ISMRMRD::ISMRMRD_UINT)
+    else if (stype == ISMRMRD_UINT)
     {
-      ISMRMRD::Image<uint32_t> ent;
+      Image<uint32_t> ent;
       ent.deserialize (in_msg.data);
-      call (etype, obj, &ent, version, etype, stype, stream);
+      call (etype, obj, &ent);
     }
-    else if (stype == ISMRMRD::ISMRMRD_FLOAT)
+    else if (stype == ISMRMRD_FLOAT)
     {
-      ISMRMRD::Image<float> ent;
+      Image<float> ent;
       ent.deserialize (in_msg.data);
-      call (etype, obj, &ent, version, etype, stype, stream);
+      call (etype, obj, &ent);
     }
-    else if (stype == ISMRMRD::ISMRMRD_DOUBLE)
+    else if (stype == ISMRMRD_DOUBLE)
     {
-      ISMRMRD::Image<double> ent;
+      Image<double> ent;
       ent.deserialize (in_msg.data);
-      call (etype, obj, &ent, version, etype, stype, stream);
+      call (etype, obj, &ent);
     }
-    else if (stype == ISMRMRD::ISMRMRD_CXFLOAT)
+    else if (stype == ISMRMRD_CXFLOAT)
     {
-      ISMRMRD::Image<std::complex<float>> ent;
+      Image<std::complex<float>> ent;
       ent.deserialize (in_msg.data);
-      call (etype, obj, &ent, version, etype, stype, stream);
+      call (etype, obj, &ent);
     }
-    else if (stype == ISMRMRD::ISMRMRD_CXDOUBLE)
+    else if (stype == ISMRMRD_CXDOUBLE)
     {
-      ISMRMRD::Image<std::complex<double>> ent;
+      Image<std::complex<double>> ent;
       ent.deserialize (in_msg.data);
       call (etype, obj, &ent, etype, stype);
     }
@@ -298,7 +299,7 @@ void icpSession::deliver
 /*******************************************************************************
  ******************************************************************************/
 template<typename ...A>
-void icpSession::call
+void Session::call
 (
   uint32_t index,
   A&&      ... args
@@ -306,10 +307,10 @@ void icpSession::call
 {
   if (_callbacks.find (index) != _callbacks.end())
   {
-    using func_t = CB_STRUCT <A...>;
+    using func_t = CbStruct <A...>;
     using cb_t   = std::function <void (A...)>;
 
-    const CB_BASE& base = *_callbacks[index];
+    const CbBase& base = *_callbacks[index];
     const cb_t& func = static_cast <const func_t&> (base).callback;
 
     func (std::forward <A> (args)...);
@@ -318,21 +319,17 @@ void icpSession::call
 
 /*******************************************************************************
  ******************************************************************************/
-bool icpSession::send
+bool Session::send
 (
-  ENTITY*  entity,
-  uint32_t version,
-  ETYPE    etype,
-  STYPE    stype,
-  uint32_t stream
+  ENTITY*  entity
 )
 {
-  ISMRMRD::EntityHeader head;
+  EntityHeader head;
 
-  head.version      = version;
-  head.entity_type  = etype;
-  head.storage_type = stype;
-  head.stream       = stream;
+  head.version      = entity->getVersion();
+  head.entity_type  = entity->getEntityType();
+  head.storage_type = entity->getStorageType();
+  head.stream       = entity->getStream();
 
   std::vector <unsigned char> h_buffer = head.serialize();
   std::vector <unsigned char> e_buffer = entity->serialize();
@@ -344,7 +341,7 @@ bool icpSession::send
 
 /*****************************************************************************
  ****************************************************************************/
-void icpSession::queueMessage
+void Session::queueMessage
 (
   std::vector<unsigned char> ent,
   std::vector<unsigned char> data
@@ -375,7 +372,7 @@ void icpSession::queueMessage
 /*******************************************************************************
  * Thread TODO: needs synchronization
  ******************************************************************************/
-void icpSession::transmit
+void Session::transmit
 (
 )
 {
@@ -408,3 +405,4 @@ void icpSession::transmit
 
   std::cout << "Transmitter done\n";
 }
+}} // end of namespace ISMRMRD::ICP

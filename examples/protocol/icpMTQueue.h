@@ -7,13 +7,18 @@
 
 #include <iostream>
 
+namespace ISMRMRD { namespace ICP
+{
+
+/*******************************************************************************
+ ******************************************************************************/
 template <typename T>
-class icpMTQueue
+class MTQueue
 {
   public:
 
-  icpMTQueue ()  = default;
-  ~icpMTQueue () = default;
+  MTQueue ()  = default;
+  ~MTQueue () = default;
 
   /****************************************************************************/
   void push (const T& data)
@@ -59,8 +64,8 @@ class icpMTQueue
   }
 
   /****************************************************************************/
-  icpMTQueue (const icpMTQueue&)             = delete;
-  icpMTQueue& operator = (const icpMTQueue&) = delete;
+  MTQueue (const MTQueue&)             = delete;
+  MTQueue& operator = (const MTQueue&) = delete;
 
   private:
 
@@ -70,4 +75,5 @@ class icpMTQueue
   std::condition_variable  _cvar;
 };
 
+}} // end of namespace ISMRMRD::ICP
 #endif //ICPMTQUEUE_H

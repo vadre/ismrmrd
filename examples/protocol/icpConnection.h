@@ -5,14 +5,16 @@
 #include <thread>
 #include "icpSession.h"
 
+namespace ISMRMRD { namespace ICP
+{
 /*******************************************************************************
  ******************************************************************************/
-class icpConnection
+class Connection
 {
 public:
 
-       icpConnection   (uint16_t port);
-       icpConnection   (std::string host, uint16_t port);
+       Connection      (uint16_t port);
+       Connection      (std::string host, uint16_t port);
   void start           ();
   void connect         ();
   void registerUserApp (START_USER_APP_FUNC func_ptr);
@@ -27,7 +29,7 @@ private:
   START_USER_APP_FUNC  runUserApp;
 
   static bool                    _running;
-  static icpConnection*          _this;
+  static Connection*             _this;
 
   boost::asio::io_service        _io_service;
   std::shared_ptr<tcp::acceptor> _acceptor;
@@ -36,4 +38,5 @@ private:
   bool                           _user_app_registered;
 };
 
+}} // end of namespace ISMRMRD::ICP
 #endif // ICP_CONNECTION_H */

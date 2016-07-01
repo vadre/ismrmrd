@@ -2,14 +2,16 @@
 #include "icpConnection.h"
 #include "icpSession.h"
 
+using namespace ISMRMRD::ICP;
+
 /*******************************************************************************
  ******************************************************************************/
 void startServer
 (
-  ICP_SESSION session
+  SESSION session
 )
 {
-  icpServer* server = new icpServer (std::move (session));
+  Server* server = new Server (std::move (session));
   delete (server);
   std::cout << "Server done ==============================================\n\n";
   return;
@@ -35,9 +37,9 @@ int main
   }
 
   std::cout << "ISMRMRD Server app starts with port number " << port << '\n';
-  std::cout << "To connect to a different port, restart: icpServer <port>\n\n";
+  std::cout << "To connect to a different port, restart: Server <port>\n\n";
 
-  icpConnection server_conn (port);
+  Connection server_conn (port);
   server_conn.registerUserApp ((START_USER_APP_FUNC) &startServer);
   server_conn.start();
 

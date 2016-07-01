@@ -2,11 +2,12 @@
 #include <functional>
 #include "icpServerCallbacks.h"
 
+using namespace ISMRMRD::ICP;
 using namespace std::placeholders;
 
 /*******************************************************************************
  ******************************************************************************/
-void icpServer::processHandshake
+void Server::processHandshake
 (
   HANDSHAKE* msg
 )
@@ -17,29 +18,29 @@ void icpServer::processHandshake
 
 /*******************************************************************************
  ******************************************************************************/
-void icpServer::processCommand
+void Server::processCommand
 (
   COMMAND* msg
 )
 {
   switch (msg->getCommandType())
   {
-    case ISMRMRD::ISMRMRD_COMMAND_CONFIGURATION:
+    case ISMRMRD_COMMAND_CONFIGURATION:
 
       configure (msg);
       break;
 
-    case ISMRMRD::ISMRMRD_COMMAND_STOP_FROM_CLIENT:
+    case ISMRMRD_COMMAND_STOP_FROM_CLIENT:
 
       std::cout << "Received STOP command\n";
       _client_done = true;
       if (_task_done)
       {
-        sendCommand (ISMRMRD::ISMRMRD_COMMAND_DONE_FROM_SERVER, 0);
+        sendCommand (ISMRMRD_COMMAND_DONE_FROM_SERVER, 0);
       }
       break;
 
-    case ISMRMRD::ISMRMRD_COMMAND_CLOSE_CONNECTION:
+    case ISMRMRD_COMMAND_CLOSE_CONNECTION:
 
       std::cout << "Received CLOSE command\n";
       _session->shutdown();
@@ -54,7 +55,7 @@ void icpServer::processCommand
 
 /*******************************************************************************
  ******************************************************************************/
-void icpServer::processError
+void Server::processError
 (
   ERRREPORT* msg
 )
@@ -68,63 +69,57 @@ void icpServer::processError
 
 /*******************************************************************************
  ******************************************************************************/
-void icpServer::taskDone
+void Server::taskDone
 (
 )
 {
   _task_done = true;
-  if (_client_done)
-  {
-    sendCommand (ISMRMRD::ISMRMRD_COMMAND_DONE_FROM_SERVER, 0);
-  }
+
+  if (_client_done) sendCommand (ISMRMRD_COMMAND_DONE_FROM_SERVER, 0);
 }
 
 /*******************************************************************************
  ******************************************************************************/
-void icpServer::configure
+void Server::configure
 (
   COMMAND* msg
 )
 {
-  if (msg->getConfigType() == ISMRMRD::CONFIGURATION_RECON_SHORT)
+  if (msg->getConfigType() == CONFIGURATION_RECON_SHORT)
   {
     std::cout << "Received config request for image recon short\n";
 
-    _recCB = new icpServerImageRecon<int16_t> (this);
-    auto fp = std::bind (&icpCallback::receive, _recCB, _1, _2, _3, _4, _5, _6);
-    _session->registerHandler ((ICP_CB) fp, ISMRMRD::ISMRMRD_HEADER, _recCB);
-    _session->registerHandler ((ICP_CB) fp,
-      ISMRMRD::ISMRMRD_MRACQUISITION, _recCB);
+    _callbacks.emplace_back (new ServerImageRecon<int16_t> (this));
+    auto fp = std::bind (&Callback::receive, _callbacks.back(), _1, _2);
+    _session->registerHandler ((CB)fp, ISMRMRD_HEADER, _callbacks.back());
+    _session->registerHandler ((CB)fp, ISMRMRD_MRACQUISITION, _callbacks.back());
   }
-  else if (msg->getConfigType() == ISMRMRD::CONFIGURATION_RECON_INT)
+  else if (msg->getConfigType() == CONFIGURATION_RECON_INT)
   {
     std::cout << "Received config request for image recon int\n";
 
-    _recCB = new icpServerImageRecon<int32_t> (this);
-    auto fp = std::bind (&icpCallback::receive, _recCB, _1, _2, _3, _4, _5, _6);
-    _session->registerHandler ((ICP_CB) fp, ISMRMRD::ISMRMRD_HEADER, _recCB);
-    _session->registerHandler ((ICP_CB) fp,
-      ISMRMRD::ISMRMRD_MRACQUISITION, _recCB);
+    _callbacks.emplace_back (new ServerImageRecon<int32_t> (this));
+    auto fp = std::bind (&Callback::receive, _callbacks.back(), _1, _2);
+    _session->registerHandler ((CB)fp, ISMRMRD_HEADER, _callbacks.back());
+    _session->registerHandler ((CB)fp, ISMRMRD_MRACQUISITION, _callbacks.back());
   }
-  else if (msg->getConfigType() == ISMRMRD::CONFIGURATION_RECON_FLOAT)
+  else if (msg->getConfigType() == CONFIGURATION_RECON_FLOAT)
   {
     std::cout << "Received config request for image recon float\n";
 
-    _recCB = new icpServerImageRecon<float> (this);
-    auto fp = std::bind (&icpCallback::receive, _recCB, _1, _2, _3, _4, _5, _6);
-    _session->registerHandler ((ICP_CB) fp, ISMRMRD::ISMRMRD_HEADER, _recCB);
-    _session->registerHandler ((ICP_CB) fp,
-      ISMRMRD::ISMRMRD_MRACQUISITION, _recCB);
+    _callbacks.emplace_back (new ServerImageRecon<float> (this));
+    auto fp = std::bind (&Callback::receive, _callbacks.back(), _1, _2);
+    _session->registerHandler ((CB)fp, ISMRMRD_HEADER, _callbacks.back());
+    _session->registerHandler ((CB)fp, ISMRMRD_MRACQUISITION, _callbacks.back());
   }
-  else if (msg->getConfigType() == ISMRMRD::CONFIGURATION_RECON_DOUBLE)
+  else if (msg->getConfigType() == CONFIGURATION_RECON_DOUBLE)
   {
     std::cout << "Received config request for image recon double\n";
 
-    _recCB = new icpServerImageRecon<double> (this);
-    auto fp = std::bind (&icpCallback::receive, _recCB, _1, _2, _3, _4, _5, _6);
-    _session->registerHandler ((ICP_CB) fp, ISMRMRD::ISMRMRD_HEADER, _recCB);
-    _session->registerHandler ((ICP_CB) fp,
-      ISMRMRD::ISMRMRD_MRACQUISITION, _recCB);
+    _callbacks.emplace_back (new ServerImageRecon<double> (this));
+    auto fp = std::bind (&Callback::receive, _callbacks.back(), _1, _2);
+    _session->registerHandler ((CB)fp, ISMRMRD_HEADER, _callbacks.back());
+    _session->registerHandler ((CB)fp, ISMRMRD_MRACQUISITION, _callbacks.back());
   }
   else
   {
@@ -134,49 +129,44 @@ void icpServer::configure
 
 /*****************************************************************************
  ****************************************************************************/
-void icpServer::sendCommand
+void Server::sendCommand
 (
-  ISMRMRD::CommandType cmd_type,
+  CommandType cmd_type,
   uint32_t             cmd_id
 )
 {
-  ISMRMRD::Command msg;
+  Command msg;
   msg.setCommandType (cmd_type);
   msg.setCommandId (cmd_id);
-  _session->send (&msg, ISMRMRD_VERSION_MAJOR, ISMRMRD::ISMRMRD_COMMAND,
-        ISMRMRD::ISMRMRD_STORAGE_NONE, ISMRMRD::ISMRMRD_STREAM_COMMAND);
+  _session->send (&msg);
 }
 
 /*****************************************************************************
  ****************************************************************************/
-void icpServer::sendImage
+void Server::sendEntity
 (
-  ENTITY*  ent,
-  uint32_t version,
-  STYPE    stype,
-  uint32_t stream
+  ENTITY*  ent
 )
 {
-  _session->send (ent, version, ISMRMRD::ISMRMRD_IMAGE, stype, stream);
+  _session->send (ent);
 }
 
 /*****************************************************************************
  ****************************************************************************/
-void icpServer::clientAccepted
+void Server::clientAccepted
 (
-  ISMRMRD::Handshake* msg,
+  Handshake* msg,
   bool                accepted
 )
 {
   msg->setConnectionStatus ((accepted) ?
-    ISMRMRD::CONNECTION_ACCEPTED : ISMRMRD::CONNECTION_DENIED_UNKNOWN_USER);
+    CONNECTION_ACCEPTED : CONNECTION_DENIED_UNKNOWN_USER);
 
-  _session->send (msg, ISMRMRD_VERSION_MAJOR, ISMRMRD::ISMRMRD_HANDSHAKE,
-       ISMRMRD::ISMRMRD_STORAGE_NONE, ISMRMRD::ISMRMRD_STREAM_HANDSHAKE);
+  _session->send (msg);
 
   if (!accepted)
   {
-    sendCommand (ISMRMRD::ISMRMRD_COMMAND_DONE_FROM_SERVER, 0);
+    sendCommand (ISMRMRD_COMMAND_DONE_FROM_SERVER, 0);
     std::cout << "Client not accepted, server DONE\n";
     _session->shutdown();
   }
@@ -184,63 +174,42 @@ void icpServer::clientAccepted
 
 /*****************************************************************************
  ****************************************************************************/
-void icpServer::sendError
+void Server::sendError
 (
-  ISMRMRD::ErrorType type,
+  ErrorType type,
   std::string        descr
 )
 {
-  ISMRMRD::ErrorReport msg;
+  ErrorReport msg;
   msg.setErrorType (type);
   msg.setErrorDescription (descr);
-  _session->send (&msg, ISMRMRD_VERSION_MAJOR, ISMRMRD::ISMRMRD_ERROR_REPORT,
-      ISMRMRD::ISMRMRD_STORAGE_NONE, ISMRMRD::ISMRMRD_STREAM_ERRREPORT);
+  _session->send (&msg);
 }
 
 /*****************************************************************************
  ****************************************************************************/
-void icpServer::sendHeader
+Server::Server
 (
-  ISMRMRD::IsmrmrdHeaderWrapper* wrp,
-  ETYPE                          etype
-)
-{
-  _session->send (wrp, wrp->getVersion(), etype,
-                  wrp->getStorageType(), wrp->getStream());
-}
-
-/*****************************************************************************
- ****************************************************************************/
-icpServer::icpServer
-(
-  ICP_SESSION  session
+  SESSION  session
 )
 : _session (std::move (session))
 {
 
-  _entCB = new icpServerEntityHandler (this);
-  auto fp = std::bind (&icpCallback::receive, _entCB, _1, _2, _3, _4, _5, _6);
+  _callbacks.emplace_back (new ServerEntityHandler (this));
+  auto fp = std::bind (&Callback::receive, _callbacks.back(), _1, _2);
 
-  _session->registerHandler ((ICP_CB) fp, ISMRMRD::ISMRMRD_HANDSHAKE, _entCB);
-  _session->registerHandler ((ICP_CB) fp, ISMRMRD::ISMRMRD_ERROR_REPORT, _entCB);
-  _session->registerHandler ((ICP_CB) fp, ISMRMRD::ISMRMRD_COMMAND, _entCB);
+  _session->registerHandler ((CB) fp, ISMRMRD_HANDSHAKE, _callbacks.back());
+  _session->registerHandler ((CB) fp, ISMRMRD_ERROR_REPORT, _callbacks.back());
+  _session->registerHandler ((CB) fp, ISMRMRD_COMMAND, _callbacks.back());
 
   _session->run ();
 }
 
 /*******************************************************************************
  ******************************************************************************/
-icpServer::~icpServer
+Server::~Server
 (
 )
 {
-  if (_entCB)
-  {
-    delete (_entCB);
-  }
-
-  if (_recCB)
-  {
-    delete (_recCB);
-  }
+  for (auto cb : _callbacks) if (cb) delete (cb);
 }

@@ -7,24 +7,27 @@
 #include "icpCallback.h"
 #include "fftw3.h"
 
+namespace ISMRMRD { namespace ICP
+{
+
 static std::mutex gmtx;
 /*******************************************************************************
- class icpServerEntityHandler, implementation is in icpServerCallbacks.cpp
+ class ServerEntityHandler, implementation is in ServerCallbacks.cpp
  ******************************************************************************/
-class icpServerEntityHandler : public icpCallback
+class ServerEntityHandler : public Callback
 {
   public:
-          icpServerEntityHandler (icpServer*);
-          ~icpServerEntityHandler () = default;
-  void    receive (icpCallback*, ENTITY*, uint32_t, ETYPE, STYPE, uint32_t);
+          ServerEntityHandler (Server*);
+          ~ServerEntityHandler () = default;
+  void    receive (Callback*, ENTITY*);
 
   private:
 
-  icpServer* _server;
+  Server* _server;
 };
 
 /*******************************************************************************
- Class template icpServerImageRecon and implementation below -
+ Class template ServerImageRecon and implementation below -
  ******************************************************************************/
 template <typename T>
 void circshift(T *out, const T *in, int xdim, int ydim, int xshift, int yshift)
@@ -44,13 +47,13 @@ void circshift(T *out, const T *in, int xdim, int ydim, int xshift, int yshift)
 
 /******************************************************************************/
 template <typename S>
-class icpServerImageRecon : public icpCallback
+class ServerImageRecon : public Callback
 {
   public:
 
-  icpServerImageRecon
+  ServerImageRecon
   (
-    icpServer* server
+    Server* server
   )
   : _server            (server),
     _header_received   (false),
@@ -60,33 +63,30 @@ class icpServerImageRecon : public icpCallback
     _num_coils         (0)
   {}
 
-  ~icpServerImageRecon () = default;
+  ~ServerImageRecon () = default;
 
 /******************************************************************************/
   void receive
   (
-    icpCallback* base,
-    ENTITY*      entity,
-    uint32_t     version,
-    ETYPE        etype,
-    STYPE        stype,
-    uint32_t     stream
+    Callback* base,
+    ENTITY*      entity
   )
   {
-    icpServerImageRecon<S>* _this = static_cast<icpServerImageRecon<S>*>(base);
+    ServerImageRecon<S>* _this = static_cast<ServerImageRecon<S>*>(base);
+    ETYPE etype = entity->getEntityType();
 
-    if (etype == ISMRMRD::ISMRMRD_HEADER)
+    if (etype == ISMRMRD_HEADER)
     {
       _this->processHeader (entity);
     }
-    else if (etype == ISMRMRD::ISMRMRD_MRACQUISITION)
+    else if (etype == ISMRMRD_MRACQUISITION)
     {
       if (_this->_stop_acqs)
       {
         std::cout << "Warning! Image Recon received extra acquisition\n";
         return;
       }
-      _this->processAcquisition (entity, version, stype, stream);
+      _this->processAcquisition (entity);
     }
     else
     {
@@ -97,8 +97,8 @@ class icpServerImageRecon : public icpCallback
 /******************************************************************************/
   private:
 
-  icpServer*                           _server;
-  ISMRMRD::IsmrmrdHeader               _header;
+  Server*                           _server;
+  IsmrmrdHeader               _header;
   bool                                 _header_received;
   bool                                 _stop_acqs;
   uint32_t                             _expected_num_acqs;
@@ -106,8 +106,8 @@ class icpServerImageRecon : public icpCallback
   uint32_t                             _version;
   uint32_t                             _stream;
   uint32_t                             _num_coils;
-  ISMRMRD::StorageType                 _stype;
-  std::queue<ISMRMRD::Acquisition<S>>  _acqs;
+  StorageType                 _stype;
+  std::queue<Acquisition<S>>  _acqs;
 
 /******************************************************************************/
   void processHeader
@@ -115,33 +115,27 @@ class icpServerImageRecon : public icpCallback
     ENTITY* entity
   )
   {
-    ISMRMRD::IsmrmrdHeaderWrapper* wrp =
-        dynamic_cast<ISMRMRD::IsmrmrdHeaderWrapper*>(entity);
-    std::string hdr_str = wrp->getString();
-    _header = wrp->getHeader();
+    _header = *dynamic_cast<IsmrmrdHeader*>(entity);
     _expected_num_acqs = _header.encoding[0].encodedSpace.matrixSize.y;
     _header_received = true;
   
     std::cout << "Received ismrmrd header\n";
-    _server->sendHeader (wrp, ISMRMRD::ISMRMRD_HEADER); // For dataset testing
+    _server->sendEntity (&_header); // For dataset testing
   }
 
 /******************************************************************************/
   void processAcquisition
   (
-    ENTITY*                 entity,
-    uint32_t                version,
-    STYPE                   stype,
-    uint32_t                stream
+    ENTITY* entity
   )
   {
-    ISMRMRD::Acquisition<S>* a = static_cast<ISMRMRD::Acquisition<S>*>(entity);
+    Acquisition<S>* a = static_cast<Acquisition<S>*>(entity);
 
     if (_params_set)
     {
-      if (_version   != version  ||
-          _stype     != stype    ||
-          _stream    != stream   ||
+      if (_version   != entity->getVersion()     ||
+          _stype     != entity->getStorageType() ||
+          _stream    != entity->getStream()      ||
           _num_coils != a->getActiveChannels())
       {
         std::cout << "Warning! inconsistent acquisition header parameters\n";
@@ -151,9 +145,9 @@ class icpServerImageRecon : public icpCallback
     }
     else
     {
-      _version    = version;
-      _stype      = stype;
-      _stream     = stream;
+      _version    = entity->getVersion();
+      _stype      = entity->getStorageType();
+      _stream     = entity->getStream();
       _num_coils  = a->getActiveChannels();
       _params_set = true;
     }
@@ -173,8 +167,8 @@ class icpServerImageRecon : public icpCallback
     unsigned int num_acqs = _acqs.size();
     std::cout << __func__ << " starting with " << num_acqs << " acquisitions\n";
 
-    ISMRMRD::EncodingSpace e_space = _header.encoding[0].encodedSpace;
-    ISMRMRD::EncodingSpace r_space = _header.encoding[0].reconSpace;
+    EncodingSpace e_space = _header.encoding[0].encodedSpace;
+    EncodingSpace r_space = _header.encoding[0].reconSpace;
 
     if (e_space.matrixSize.z != 1)
     {
@@ -188,11 +182,11 @@ class icpServerImageRecon : public icpCallback
     dims.push_back (nX);
     dims.push_back (nY);
     dims.push_back (_num_coils);
-    ISMRMRD::NDArray<std::complex<S> > buffer (dims);
+    NDArray<std::complex<S> > buffer (dims);
 
     for (unsigned int ii = 0; ii < num_acqs; ii++)
     {
-      ISMRMRD::Acquisition<S> acq = _acqs.front ();
+      Acquisition<S> acq = _acqs.front ();
       _acqs.pop ();
       uint32_t ind = acq.getEncodingCounters().kspace_encode_step_1;
 
@@ -231,7 +225,7 @@ class icpServerImageRecon : public icpCallback
       fftwf_free(tmp);
     } //lock guard scope end
 
-    ISMRMRD::Image<S> img (r_space.matrixSize.x, r_space.matrixSize.y, 1, 1);
+    Image<S> img (r_space.matrixSize.x, r_space.matrixSize.y, 1, 1);
 
     //If there is oversampling in the readout direction remove it
     uint16_t offset = ((e_space.matrixSize.x - r_space.matrixSize.x) / 2);
@@ -251,18 +245,14 @@ class icpServerImageRecon : public icpCallback
     }
 
     // The following are extra guidance we can put in the image header
-    img.setStream (ISMRMRD_VERSION_MAJOR);
-    img.setStream (ISMRMRD::ISMRMRD_STREAM_IMAGE); //TODO: ???
-    img.setImageType (ISMRMRD::ISMRMRD_IMTYPE_MAGNITUDE);
+    //img.setStream (config.getStream(&img)); //TODO: ???
+    img.setImageType (ISMRMRD_IMTYPE_MAGNITUDE);
     img.setSlice (0);
     img.setFieldOfView (r_space.fieldOfView_mm.x,
                          r_space.fieldOfView_mm.y,
                          r_space.fieldOfView_mm.z);
 
-    _server->sendImage (&img, img.getVersion(),
-                        img.getStorageType(),
-                        img.getStream());
-
+    _server->sendEntity (&img);
     _server->taskDone();
     std::cout << "Image reconstruction done\n";
   }
@@ -272,5 +262,5 @@ class icpServerImageRecon : public icpCallback
 
 /*******************************************************************************
  ******************************************************************************/
-
+}} // end of namespace scope
 #endif //ICP_SERVERCALLBACKS_H

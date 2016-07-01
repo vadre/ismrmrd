@@ -3,6 +3,8 @@
 #include "icpConnection.h"
 #include <boost/program_options.hpp>
 
+using namespace ISMRMRD::ICP;
+
 namespace po = boost::program_options;
 
 std::string       client_name = "Client 1";
@@ -15,9 +17,9 @@ unsigned short    port        = 50050;
 
 /*******************************************************************************
  ******************************************************************************/
-void startClient (ICP_SESSION session)
+void startClient (SESSION session)
 {
-  icpClient* client = new icpClient (std::move (session),
+  Client* client = new Client (std::move (session),
                                      client_name,
                                      in_fname,
                                      out_fname,
@@ -75,9 +77,9 @@ int main
 
   std::cout << "Using client name <" << client_name << ">, host IP address <"
             << host << ">, and port <" << port << ">" << std::endl;
-  std::cout << "Re-start with: icpClient -h to see all options\n" << std::endl;
+  std::cout << "Re-start with: Client -h to see all options\n" << std::endl;
 
-  icpConnection client_conn (host, port);
+  Connection client_conn (host, port);
   client_conn.registerUserApp ((START_USER_APP_FUNC) &startClient);
   client_conn.connect();
 

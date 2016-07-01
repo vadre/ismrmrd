@@ -320,7 +320,23 @@ namespace ISMRMRD
   };
 
   struct IsmrmrdHeader
+  : public Entity
   {
+    virtual uint32_t  getVersion () const
+      { return version; }
+
+    virtual uint32_t  getStream ()  const
+      { return ISMRMRD_HEADER_STREAM; }
+
+    virtual EntityType  getEntityType ()  const
+      { return ISMRMRD_HEADER; }
+
+    virtual StorageType getStorageType () const
+      { return ISMRMRD_STORAGE_NONE; }
+
+    virtual std::vector<unsigned char> serialize();
+    virtual void deserialize(const std::vector<unsigned char>& buffer);
+
     Optional<long> version;
     Optional<SubjectInformation> subjectInformation;
     Optional<StudyInformation> studyInformation;
@@ -337,38 +353,6 @@ namespace ISMRMRD
   EXPORTISMRMRD void deserialize(const char* xml, IsmrmrdHeader& h);
   EXPORTISMRMRD void serialize(const IsmrmrdHeader& h, std::ostream& o);
 
-  class IsmrmrdHeaderWrapper
-     : public Entity
-  {
-    public:
-
-                  IsmrmrdHeaderWrapper (IsmrmrdHeader hdr);
-                  IsmrmrdHeaderWrapper (std::string hdr);
-                  IsmrmrdHeaderWrapper (std::vector<unsigned char> wrapper);
-    IsmrmrdHeader getHeader () const;
-    void          getHeader (IsmrmrdHeader& head) const;
-    uint32_t      getVersion() const;
-    EntityType    getEntityType() const;
-    StorageType   getStorageType() const;
-    uint32_t      getStream() const;
-    std::string   getString();
-
-    // Functions inherited from Entity
-    virtual std::vector<unsigned char> serialize();
-    virtual void deserialize(const std::vector<unsigned char>& buffer);
-
-    private:
-
-    IsmrmrdHeaderWrapper (const IsmrmrdHeaderWrapper&);
-    IsmrmrdHeaderWrapper& operator = (const IsmrmrdHeaderWrapper&);
-
-    uint32_t      version_;
-    uint32_t      entity_type_;
-    uint32_t      storage_type_;
-    uint32_t      stream_;
-    uint32_t      length_;
-    std::string   hdr_;
-  };
 }
 
 /** @} */

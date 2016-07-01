@@ -1,14 +1,15 @@
 #ifndef ICP_CALLBACK_H
 #define ICP_CALLBACK_H
-class icpCallback
+
+namespace ISMRMRD { namespace ICP
+{
+
+class Callback
 {
   public:
-  virtual          ~icpCallback() = default;
-  virtual void     receive (icpCallback*         instance,
-                            ISMRMRD::Entity*     entity,
-                            uint32_t             version,
-                            ISMRMRD::EntityType  etype,
-                            ISMRMRD::StorageType stype,
-                            uint32_t             stream) = 0;
+  virtual      ~Callback() = default;
+  virtual void receive (Callback* instance, Entity* entity) = 0;
 };
+
+}} // end of namespace
 #endif //ICP_CALLBACK_H

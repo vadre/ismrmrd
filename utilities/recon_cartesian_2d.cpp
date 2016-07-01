@@ -159,7 +159,7 @@ int main(int argc, char** argv)
     
     //Let's write the reconstructed image into the same data file
     //d.appendImage("cpp", img_out);
-    d.appendImage(img_out, ISMRMRD::ISMRMRD_STREAM_IMAGE);
+    d.appendImage(img_out, ISMRMRD::UNRESERVED_STREAM_START + 100); // stream unimportant
 
     return 0;
 }

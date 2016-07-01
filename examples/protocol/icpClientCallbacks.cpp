@@ -1,40 +1,39 @@
 #include <iostream>
 #include "icpClientCallbacks.h"
 
+using namespace ISMRMRD::ICP;
 /*******************************************************************************
  ******************************************************************************/
-icpClientEntityHandler::icpClientEntityHandler
+ClientEntityHandler::ClientEntityHandler
 (
-  icpClient* client
+  Client* client
 )
 : _client (client)
 {
 }
 /******************************************************************************/
 
-void icpClientEntityHandler::receive
+void ClientEntityHandler::receive
 (
-  icpCallback*          base,
-  ISMRMRD::Entity*      entity,
-  uint32_t              version,
-  ISMRMRD::EntityType   etype,
-  ISMRMRD::StorageType  stype,
-  uint32_t              stream
+  Callback*     base,
+  Entity* entity
 )
 {
-  icpClientEntityHandler* _this = static_cast<icpClientEntityHandler*>(base);
+  ClientEntityHandler* _this = static_cast<ClientEntityHandler*>(base);
+  ETYPE etype = entity->getEntityType();
+
   switch (etype)
   {
-    case ISMRMRD::ISMRMRD_HANDSHAKE:
+    case ISMRMRD_HANDSHAKE:
 
       _this->_client->processHandshake (static_cast<HANDSHAKE*>(entity));
       break;
 
-    case ISMRMRD::ISMRMRD_COMMAND:
+    case ISMRMRD_COMMAND:
       _this->_client->processCommand (static_cast<COMMAND*>(entity));
       break;
 
-    case ISMRMRD::ISMRMRD_ERROR_REPORT:
+    case ISMRMRD_ERROR_REPORT:
 
       _this->_client->processError (static_cast<ERRREPORT*>(entity));
       break;
@@ -48,9 +47,9 @@ void icpClientEntityHandler::receive
 
 /*******************************************************************************
  ******************************************************************************/
-icpClientImageProcessor::icpClientImageProcessor
+ClientImageProcessor::ClientImageProcessor
 (
-  icpClient* client,
+  Client* client,
   std::string fname,
   std::string dname,
   std::mutex& mtx
@@ -62,24 +61,21 @@ icpClientImageProcessor::icpClientImageProcessor
 }
 /******************************************************************************/
 
-void icpClientImageProcessor::receive
+void ClientImageProcessor::receive
 (
-  icpCallback*          base,
-  ISMRMRD::Entity*      entity,
-  uint32_t              version,
-  ISMRMRD::EntityType   etype,
-  ISMRMRD::StorageType  stype,
-  uint32_t              stream
+  Callback*          base,
+  Entity*      entity
 )
 {
-  icpClientImageProcessor* _this =
-    static_cast<icpClientImageProcessor*>(base);
+  ClientImageProcessor* _this = static_cast<ClientImageProcessor*>(base);
+  ETYPE etype = entity->getEntityType();
+  STYPE stype = entity->getStorageType();
 
-  if (etype == ISMRMRD::ISMRMRD_HEADER)
+  if (etype == ISMRMRD_HEADER)
   {
     std::cout << "NOT Writing Ismrmrd Header to file\n";
-//    ISMRMRD::IsmrmrdHeaderWrapper* wrp =
-//      static_cast<ISMRMRD::IsmrmrdHeaderWrapper*>(entity);
+//    IsmrmrdHeaderWrapper* wrp =
+//      static_cast<IsmrmrdHeaderWrapper*>(entity);
 
 //    std::string tmp = wrp->getString ();
 //    std::cout << "Before dset.writeHeader\n";
@@ -89,39 +85,39 @@ void icpClientImageProcessor::receive
 //    }
 //    std::cout << "After dset.writeHeader\n";
   }
-  else if (etype == ISMRMRD::ISMRMRD_IMAGE)
+  else if (etype == ISMRMRD_IMAGE)
   {
     std::cout << "Writing image to file\n";
 
-    if (stype == ISMRMRD::ISMRMRD_SHORT)
+    if (stype == ISMRMRD_SHORT)
     {
       _this->writeImage<int16_t> (entity);
     }
-    else if (stype == ISMRMRD::ISMRMRD_USHORT)
+    else if (stype == ISMRMRD_USHORT)
     {
       _this->writeImage<uint16_t> (entity);
     }
-    else if (stype == ISMRMRD::ISMRMRD_INT)
+    else if (stype == ISMRMRD_INT)
     {
       _this->writeImage<int32_t> (entity);
     }
-    else if (stype == ISMRMRD::ISMRMRD_UINT)
+    else if (stype == ISMRMRD_UINT)
     {
       _this->writeImage<uint32_t> (entity);
     }
-    else if (stype == ISMRMRD::ISMRMRD_FLOAT)
+    else if (stype == ISMRMRD_FLOAT)
     {
       _this->writeImage<float> (entity);
     }
-    else if (stype == ISMRMRD::ISMRMRD_DOUBLE)
+    else if (stype == ISMRMRD_DOUBLE)
     {
       _this->writeImage<double> (entity);
     }
-    else if (stype == ISMRMRD::ISMRMRD_CXFLOAT)
+    else if (stype == ISMRMRD_CXFLOAT)
     {
       _this->writeImage<std::complex<float>> (entity);
     }
-    else if (stype == ISMRMRD::ISMRMRD_CXDOUBLE)
+    else if (stype == ISMRMRD_CXDOUBLE)
     {
       _this->writeImage<std::complex<double>> (entity);
     }

@@ -6,49 +6,58 @@
 #include "icpClient.h"
 #include "icpCallback.h"
 
+namespace ISMRMRD { namespace ICP
+{
 /*******************************************************************************
  ******************************************************************************/
-class icpClientEntityHandler : public icpCallback
+class ClientEntityHandler : public Callback
 {
   public:
-          icpClientEntityHandler (icpClient*);
-          ~icpClientEntityHandler () = default;
-  void    receive (icpCallback*, ENTITY*, uint32_t, ETYPE, STYPE, uint32_t);
+          ClientEntityHandler (Client*);
+          ~ClientEntityHandler () = default;
+  void    receive (Callback*, ENTITY*);
 
   private:
 
-  icpClient* _client;
+  Client* _client;
 };
 
 /*******************************************************************************
  ******************************************************************************/
-class icpClientImageProcessor : public icpCallback
+class ClientImageProcessor : public Callback
 {
   public:
-       icpClientImageProcessor (icpClient*,
+       ClientImageProcessor (Client*,
                                 std::string fname,
                                 std::string dname,
                                 std::mutex& mtx);
-       ~icpClientImageProcessor () = default;
-  void receive (icpCallback*, ENTITY*, uint32_t, ETYPE, STYPE, uint32_t);
+       ~ClientImageProcessor () = default;
+  void receive (Callback*, ENTITY*);
 
   private:
 
   template<typename S>
   void writeImage (ISMRMRD::Entity* entity)
   {
+    std::cout << "writeImage: 1\t";
     ISMRMRD::Image<S>* img = static_cast<ISMRMRD::Image<S>*>(entity);
     {
+    std::cout << "writeImage: 2\t";
       std::lock_guard<std::mutex> guard (_mtx);
-      _dset.appendImage (*img, ISMRMRD::ISMRMRD_STREAM_IMAGE);
+    std::cout << "writeImage: 3\t";
+      _dset.appendImage (*img, img->getStream());
+    std::cout << "writeImage: 4\t";
     }
+    std::cout << "writeImage: 5\n";
   }
 
-  icpClient*             _client;
+  Client*             _client;
   ISMRMRD::Dataset       _dset;
   std::mutex&            _mtx;
 };
 
 /*******************************************************************************
  ******************************************************************************/
+
+}} //end of namespace scope
 #endif // ICP_CLIENTCALLBACKS_H */

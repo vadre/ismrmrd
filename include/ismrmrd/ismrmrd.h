@@ -39,6 +39,7 @@ typedef unsigned __int64 uint64_t;
 
 namespace ISMRMRD {
 
+const std::string ISMRMRD_DATA_ID = "qQqq";
 
 /** Global Constants */
 enum Constant {
@@ -105,14 +106,13 @@ enum ErrorType
 //TODO: Not sure how the stream numbers are assigned, or when.
 enum ReservedStream
 {
-  //ISMRMRD_STREAM_ACQUISITION_DATA      = 0,
-  ISMRMRD_STREAM_ISMRMRD_HEADER        = 1,
-  //ISMRMRD_STREAM_WAVEFORM              = 2,
-  ISMRMRD_STREAM_IMAGE                 = 3,
-  //ISMRMRD_STREAM_BLOB                  = 4,
-  ISMRMRD_STREAM_HANDSHAKE             = 65536,
-  ISMRMRD_STREAM_COMMAND               = 65537,
-  ISMRMRD_STREAM_ERRREPORT             = 65538
+  HANDSHAKE_STREAM             = 0,
+  COMMAND_STREAM               = 1,
+  ERROR_REPORT_STREAM          = 2,
+  ISMRMRD_HEADER_STREAM        = 50,
+  BLOB_STREAM                  = 100,
+  UNRESERVED_STREAM_START      = 1000,
+  UNRESERVED_STREAM_END        = 4000000000 // stream type is uint32_t
 };
 
 /** Acquisition Flags */
@@ -205,24 +205,43 @@ class EXPORTISMRMRD Entity
 {
   public:
 
-  virtual ~Entity (){};
+  virtual             ~Entity (){};
+
+  virtual uint32_t    getVersion ()     const = 0;
+  virtual EntityType  getEntityType ()  const = 0;
+  virtual StorageType getStorageType () const = 0;
+  virtual uint32_t    getStream ()      const = 0;
+
   virtual std::vector<unsigned char> serialize() = 0;
   virtual void deserialize(const std::vector<unsigned char>& buffer) = 0;
 };
 
  
 class EntityHeader 
-  : public Entity
+: public Entity
 {
   public:
+
+  void setId   () { id = ISMRMRD_DATA_ID; };
+  bool checkId () { return id == ISMRMRD_DATA_ID; };
+
+  virtual uint32_t  getVersion () const { return version; }
+  virtual uint32_t  getStream ()  const { return stream; }
+
+  virtual EntityType  getEntityType ()  const
+    { return static_cast<EntityType>(entity_type); }
+
+  virtual StorageType getStorageType () const
+    { return static_cast<StorageType>(storage_type); }
 
   virtual std::vector<unsigned char> serialize();
   virtual void deserialize(const std::vector<unsigned char>& buffer);
 
-  uint32_t version;       /**< First unsigned int indicates the version */
-  uint32_t entity_type;   /**< Entity type code */
-  uint32_t storage_type;  /**< numeric type of each sample */
-  uint32_t stream;        /**< which stream this belongs to */
+  std::string id;            /**< ISMRMRD data identity field */
+  uint32_t    version;       /**< First unsigned int indicates the version */
+  uint32_t    entity_type;   /**< Entity type code */
+  uint32_t    storage_type;  /**< numeric type of each sample */
+  uint32_t    stream;        /**< which stream this belongs to */
 };
 
 struct IsmrmrdManifest
@@ -243,201 +262,232 @@ struct HandshakeHeader
 };
 
 class Handshake
-  : public Entity
+: public Entity
 {
-public:
-                     Handshake ();
-    uint32_t         getVersion () const;
-    StorageType      getStorageType () const;
-    uint32_t         getStream () const;
-    void             setTimestamp (uint64_t timestamp_);
-    uint64_t         getTimestamp () const;
-    void             setClientName (std::string name);
-    std::string      getClientName () const;
-    uint32_t         setClientNameLength ();
-    uint32_t         getClientNameLength () const;
-    void             setConnectionStatus (ConnectionStatus status);
-    ConnectionStatus getConnectionStatus () const;
-    void             addManifestEntry (uint32_t             stream,
-                                       ISMRMRD::EntityType  etype,
-                                       ISMRMRD::StorageType stype,
-                                       std::string          description);
-    uint32_t         getManifestSize () const;
-    std::map<uint32_t, IsmrmrdManifest> getManifest () const;
-    bool             verifyManifestEntry (uint32_t             stream,
-                                          ISMRMRD::EntityType  etype,
-                                          ISMRMRD::StorageType stype) const;
+  public:
+                   Handshake ();
+  void             setTimestamp (uint64_t timestamp_);
+  uint64_t         getTimestamp () const;
+  void             setClientName (std::string name);
+  std::string      getClientName () const;
+  uint32_t         setClientNameLength ();
+  uint32_t         getClientNameLength () const;
+  void             setConnectionStatus (ConnectionStatus status);
+  ConnectionStatus getConnectionStatus () const;
+  void             addManifestEntry (uint32_t             stream,
+                                     ISMRMRD::EntityType  etype,
+                                     ISMRMRD::StorageType stype,
+                                     std::string          description);
+  uint32_t         getManifestSize () const;
+  std::map<uint32_t, IsmrmrdManifest> getManifest () const;
+  bool             verifyManifestEntry (uint32_t             stream,
+                                        ISMRMRD::EntityType  etype,
+                                        ISMRMRD::StorageType stype) const;
 
-    virtual std::vector<unsigned char> serialize();
-    virtual void deserialize(const std::vector<unsigned char>& buffer);
+  virtual uint32_t getVersion () const { return head_.version; }
+  virtual uint32_t getStream ()  const { return head_.stream; }
 
-protected:
-    HandshakeHeader   head_;
-    uint64_t          timestamp_;   /**< Session start set by client */
-    uint32_t          conn_status_; /**< Connection Status set by server */
-    uint32_t          client_name_length_;
-    uint32_t          manifest_size_;
-    std::vector<char> client_name_;
-    std::vector<IsmrmrdManifest> manifest_;
+  virtual EntityType getEntityType ()  const
+    { return static_cast<EntityType>(head_.entity_type); }
+
+  virtual StorageType getStorageType () const
+    { return static_cast<StorageType>(head_.storage_type); }
+
+  virtual std::vector<unsigned char> serialize();
+  virtual void deserialize(const std::vector<unsigned char>& buffer);
+
+  protected:
+
+  HandshakeHeader   head_;
+  uint64_t          timestamp_;   /**< Session start set by client */
+  uint32_t          conn_status_; /**< Connection Status set by server */
+  uint32_t          client_name_length_;
+  uint32_t          manifest_size_;
+  std::vector<char> client_name_;
+  std::vector<IsmrmrdManifest> manifest_;
 };
 
 struct CommandHeader
 {
-    uint32_t version;       /**< First unsigned int indicates the version  */
-    uint32_t entity_type;   /**< Entity type code */
-    uint32_t storage_type;  /**< numeric type of each sample */
-    uint32_t stream;        /**< which stream this belongs to */
+  uint32_t version;       /**< First unsigned int indicates the version  */
+  uint32_t entity_type;   /**< Entity type code */
+  uint32_t storage_type;  /**< numeric type of each sample */
+  uint32_t stream;        /**< which stream this belongs to */
 };
 
 class Command
-  : public Entity
+: public Entity
 {
-public:
-                          Command ();
-    uint32_t              getVersion () const;
-    StorageType           getStorageType () const;
-    uint32_t              getStream () const;
-    CommandType           getCommandType () const;
-    void                  setCommandType (CommandType command_type);
-    uint32_t              getCommandId () const;
-    void                  setCommandId (uint32_t command_id);
-    ConfigurationType     getConfigType () const;
-    void                  setConfigType (ConfigurationType config_type);
-    std::string           getConfigFile () const;
-    void                  setConfigFile (std::string config_file);
-    std::vector<uint32_t> getConfigEntities () const;
-    void                  setConfigEntities (std::vector<uint32_t> entities);
+  public:
+                        Command ();
+  CommandType           getCommandType () const;
+  void                  setCommandType (CommandType command_type);
+  uint32_t              getCommandId () const;
+  void                  setCommandId (uint32_t command_id);
+  ConfigurationType     getConfigType () const;
+  void                  setConfigType (ConfigurationType config_type);
+  std::string           getConfigFile () const;
+  void                  setConfigFile (std::string config_file);
+  std::vector<uint32_t> getConfigEntities () const;
+  void                  setConfigEntities (std::vector<uint32_t> entities);
     
-    virtual std::vector<unsigned char> serialize();
-    virtual void deserialize(const std::vector<unsigned char>& buffer);
+  virtual uint32_t getVersion () const { return head_.version; }
+  virtual uint32_t getStream ()  const { return head_.stream; }
 
-protected:
+  virtual EntityType getEntityType ()  const
+    { return static_cast<EntityType>(head_.entity_type); }
 
-    CommandHeader         head_;
-    uint32_t              command_type_; /**< CommandType maps to CommandType enum  */
-    uint32_t              command_id_;   /** ID number used to refer to the command */
-    uint32_t              config_type_;  /**< maps to ConfigurationType enum */
-    uint32_t              config_file_length_;  /**< Config file length */
-    std::vector<char>     config_file_;  /** Either filename or actual config data */
-    uint32_t              num_entities_;  /**< size of vector entities_ */
-    std::vector<uint32_t> entities_;
+  virtual StorageType getStorageType () const
+    { return static_cast<StorageType>(head_.storage_type); }
+
+  virtual std::vector<unsigned char> serialize();
+  virtual void deserialize(const std::vector<unsigned char>& buffer);
+
+  protected:
+
+  CommandHeader         head_;
+  uint32_t              command_type_; /**< CommandType maps to CommandType enum  */
+  uint32_t              command_id_;   /** ID number used to refer to the command */
+  uint32_t              config_type_;  /**< maps to ConfigurationType enum */
+  uint32_t              config_file_length_;  /**< Config file length */
+  std::vector<char>     config_file_;  /** Either filename or actual config data */
+  uint32_t              num_entities_;  /**< size of vector entities_ */
+  std::vector<uint32_t> entities_;
 };
 
 struct ErrorReportHeader
 {
-    uint32_t version;       /**< First unsigned int indicates the version  */
-    uint32_t entity_type;   /**< Entity type code */
-    uint32_t storage_type;  /**< numeric type of each sample */
-    uint32_t stream;        /**< which stream this belongs to */
+  uint32_t version;       /**< First unsigned int indicates the version  */
+  uint32_t entity_type;   /**< Entity type code */
+  uint32_t storage_type;  /**< numeric type of each sample */
+  uint32_t stream;        /**< which stream this belongs to */
 };
 
 class ErrorReport
-  : public Entity
+: public Entity
 {
-public:
-                          ErrorReport ();
-    uint32_t              getVersion () const;
-    StorageType           getStorageType () const;
-    uint32_t              getStream () const;
-    ErrorType             getErrorType () const;
-    void                  setErrorType (ErrorType error_type);
-    CommandType           getErrorCommandType () const;
-    void                  setErrorCommandType (CommandType command_type);
-    uint32_t              getErrorCommandId () const;
-    void                  setErrorCommandId (uint32_t command_id);
-    EntityType            getErrorEntityType () const;
-    void                  setErrorEntityType (EntityType entity_type);
-    std::string           getErrorDescription () const;
-    void                  setErrorDescription (std::string description);
+  public:
+                        ErrorReport ();
+  ErrorType             getErrorType () const;
+  void                  setErrorType (ErrorType error_type);
+  CommandType           getErrorCommandType () const;
+  void                  setErrorCommandType (CommandType command_type);
+  uint32_t              getErrorCommandId () const;
+  void                  setErrorCommandId (uint32_t command_id);
+  EntityType            getErrorEntityType () const;
+  void                  setErrorEntityType (EntityType entity_type);
+  std::string           getErrorDescription () const;
+  void                  setErrorDescription (std::string description);
 
-    virtual std::vector<unsigned char> serialize();
-    virtual void deserialize(const std::vector<unsigned char>& buffer);
+  virtual uint32_t getVersion () const { return head_.version; }
+  virtual uint32_t getStream ()  const { return head_.stream; }
 
-protected:
+  virtual EntityType getEntityType ()  const
+    { return static_cast<EntityType>(head_.entity_type); }
 
-    ErrorReportHeader  head_;
-    uint32_t           error_type_;         /**< maps to ErrorType enum  */
-    uint32_t           error_command_type_; /**< maps to CommandType enum  */
-    uint32_t           error_command_id_;   /** refers to the command id number*/
-    uint32_t           error_entity_type_;  /**< maps to EntityType enum */
-    uint32_t           description_length_;
-    std::vector<char>  error_description_;
+  virtual StorageType getStorageType () const
+    { return static_cast<StorageType>(head_.storage_type); }
+
+  virtual std::vector<unsigned char> serialize();
+  virtual void deserialize(const std::vector<unsigned char>& buffer);
+
+  protected:
+
+  ErrorReportHeader  head_;
+  uint32_t           error_type_;         /**< maps to ErrorType enum  */
+  uint32_t           error_command_type_; /**< maps to CommandType enum  */
+  uint32_t           error_command_id_;   /** refers to the command id number*/
+  uint32_t           error_entity_type_;  /**< maps to EntityType enum */
+  uint32_t           description_length_;
+  std::vector<char>  error_description_;
 };
 
 /** EncodingCounters keeps track of typical loop counters in MR experiment. */
-struct EncodingCounters {
-    uint32_t kspace_encode_step_0;    /**< e.g. used for spectroscopic imaging */
-    uint32_t kspace_encode_step_1;    /**< e.g. phase encoding line number */
-    uint32_t kspace_encode_step_2;    /**< e.g. partition encoding number */
-    uint32_t average;                 /**< e.g. signal average number */
-    uint32_t slice;                   /**< e.g. imaging slice number */
-    uint32_t contrast;                /**< e.g. echo number in multi-echo */
-    uint32_t phase;                   /**< e.g. cardiac phase number */
-    uint32_t repetition;              /**< e.g. dynamic number for dynamic scanning */
-    uint32_t set;                     /**< e.g. flow encoding set */
-    uint32_t segment;                 /**< e.g. segment number for segmented acquisition */
-    uint32_t user[ISMRMRD_USER_INTS]; /**< Free user parameters */
+struct EncodingCounters
+{
+  uint32_t kspace_encode_step_0;    /**< e.g. used for spectroscopic imaging */
+  uint32_t kspace_encode_step_1;    /**< e.g. phase encoding line number */
+  uint32_t kspace_encode_step_2;    /**< e.g. partition encoding number */
+  uint32_t average;                 /**< e.g. signal average number */
+  uint32_t slice;                   /**< e.g. imaging slice number */
+  uint32_t contrast;                /**< e.g. echo number in multi-echo */
+  uint32_t phase;                   /**< e.g. cardiac phase number */
+  uint32_t repetition;              /**< e.g. dynamic number for dynamic scanning */
+  uint32_t set;                     /**< e.g. flow encoding set */
+  uint32_t segment;                 /**< e.g. segment number for segmented acquisition */
+  uint32_t user[ISMRMRD_USER_INTS]; /**< Free user parameters */
 };
 
 /** Header for each MR acquisition. */
-struct AcquisitionHeader {
-    uint32_t version;                                    /**< First unsigned int indicates the version  */
-    uint32_t entity_type;                                /**< Entity type code */
-    uint32_t storage_type;                               /**< numeric type of each sample */
-    uint32_t stream;                                     /**< which stream this belongs to */
-    uint64_t time_stamp;                                 /**< Experiment time stamp - in nano seconds */
-    uint64_t flags;                                      /**< bit field with flags */
-    uint32_t scan_counter;                               /**< Current acquisition number in the measurement */
-    uint32_t physiology_time_stamp[ISMRMRD_PHYS_STAMPS]; /**< Physiology time stamps, e.g. ecg, breating, etc. */
-    uint32_t number_of_samples;                          /**< Number of samples acquired */
-    uint32_t available_channels;                         /**< Available coils */
-    uint32_t active_channels;                            /**< Active coils on current acquisiton */
-    uint64_t channel_mask[ISMRMRD_CHANNEL_MASKS];        /**< Mask to indicate which channels are active. Support for 1024 channels */
-    uint32_t discard_pre;                                /**< Samples to be discarded at the beginning of  acquisition */
-    uint32_t discard_post;                               /**< Samples to be discarded at the end of acquisition */
-    uint32_t center_sample;                              /**< Sample at the center of k-space */
-    uint32_t encoding_space_ref;                         /**< Reference to an encoding space, typically only one per acquisition */
-    uint32_t trajectory_dimensions;                      /**< Indicates the dimensionality of the trajectory vector (0 means no trajectory) */
-    uint32_t dwell_time_ns;                              /**< Time between samples in nano seconds, sampling BW */
-    float position[3];                                   /**< Three-dimensional spatial offsets from isocenter */
-    float read_dir[3];                                   /**< Directional cosines of the readout/frequency encoding */
-    float phase_dir[3];                                  /**< Directional cosines of the phase */
-    float slice_dir[3];                                  /**< Directional cosines of the slice direction */
-    float patient_table_position[3];                     /**< Patient table off-center */
-    EncodingCounters idx;                                /**< Encoding loop counters, see above */
-    int32_t user_int[ISMRMRD_USER_INTS];                 /**< Free user parameters */
-    float user_float[ISMRMRD_USER_FLOATS];               /**< Free user parameters */
+struct AcquisitionHeader
+{
+  uint32_t version;              /**< First unsigned int indicates the version  */
+  uint32_t entity_type;          /**< Entity type code */
+  uint32_t storage_type;         /**< numeric type of each sample */
+  uint32_t stream;               /**< which stream this belongs to */
+  uint64_t time_stamp;           /**< Experiment time stamp - in nano seconds */
+  uint64_t flags;                /**< bit field with flags */
+  uint32_t scan_counter;         /**< Current acquisition number in the measurement */
+  uint32_t physiology_time_stamp[ISMRMRD_PHYS_STAMPS]; /**< Physiology time stamps,
+                                                            e.g. ecg, breating, etc. */
+  uint32_t number_of_samples;    /**< Number of samples acquired */
+  uint32_t available_channels;   /**< Available coils */
+  uint32_t active_channels;      /**< Active coils on current acquisiton */
+  uint64_t channel_mask[ISMRMRD_CHANNEL_MASKS]; /**< Mask to indicate which channels are
+                                                     active. Support for 1024 channels */
+  uint32_t discard_pre;          /**< Samples to be discarded at the beginning of
+                                      acquisition */
+  uint32_t discard_post;         /**< Samples to be discarded at the end of
+                                      acquisition */
+  uint32_t center_sample;        /**< Sample at the center of k-space */
+  uint32_t encoding_space_ref;   /**< Reference to an encoding space, typically only
+                                      one per acquisition */
+  uint32_t trajectory_dimensions; /**< Indicates the dimensionality of the trajectory
+                                       vector (0 means no trajectory) */
+  uint32_t dwell_time_ns;        /**< Time between samples in nano seconds,
+                                      sampling BW */
+  float position[3];             /**< Three-dimensional spatial offsets from isocenter */
+  float read_dir[3];             /**< Directional cosines of the readout/frequency
+                                      encoding */
+  float phase_dir[3];            /**< Directional cosines of the phase */
+  float slice_dir[3];            /**< Directional cosines of the slice direction */
+  float patient_table_position[3];  /**< Patient table off-center */
+  EncodingCounters idx;          /**< Encoding loop counters, see above */
+  int32_t user_int[ISMRMRD_USER_INTS];     /**< Free user parameters */
+  float user_float[ISMRMRD_USER_FLOATS];   /**< Free user parameters */
 };
 
 /** Header for each Image. */
-struct ImageHeader {
-    uint32_t version;                                    /**< First unsigned int indicates the version */
-    uint32_t entity_type;                                /**< Entity type code */
-    uint32_t storage_type;                               /**< numeric type of each sample */
-    uint32_t stream;                                     /**< which stream this belongs to */
-    uint64_t time_stamp;                                 /**< Experiment time stamp - in nano seconds */
-    uint64_t flags;                                      /**< bit field with flags */
-    uint32_t matrix_size[3];                             /**< Pixels in the 3 spatial dimensions */
-    float field_of_view[3];                              /**< Size (in mm) of the 3 spatial dimensions */
-    uint32_t channels;                                   /**< Number of receive channels */
-    float position[3];                                   /**< Three-dimensional spatial offsets from isocenter */
-    float read_dir[3];                                   /**< Directional cosines of the readout/frequency encoding */
-    float phase_dir[3];                                  /**< Directional cosines of the phase */
-    float slice_dir[3];                                  /**< Directional cosines of the slice direction */
-    float patient_table_position[3];                     /**< Patient table off-center */
-    uint32_t average;                                    /**< e.g. signal average number */
-    uint32_t slice;                                      /**< e.g. imaging slice number */
-    uint32_t contrast;                                   /**< e.g. echo number in multi-echo */
-    uint32_t phase;                                      /**< e.g. cardiac phase number */
-    uint32_t repetition;                                 /**< e.g. dynamic number for dynamic scanning */
-    uint32_t set;                                        /**< e.g. flow encodning set */
-    uint32_t physiology_time_stamp[ISMRMRD_PHYS_STAMPS]; /**< Physiology time stamps, e.g. ecg, breathing, etc. */
-    uint32_t image_type;                                 /**< e.g. magnitude, phase, complex, real, imag, etc. */
-    uint32_t image_index;                                /**< e.g. image number in series of images */
-    uint32_t image_series_index;                         /**< e.g. series number */
-    int32_t user_int[ISMRMRD_USER_INTS];                 /**< Free user parameters */
-    float user_float[ISMRMRD_USER_FLOATS];               /**< Free user parameters */
-    uint32_t attribute_string_len;                       /**< Length of attributes string */
+struct ImageHeader
+{
+  uint32_t version;        /**< First unsigned int indicates the version */
+  uint32_t entity_type;    /**< Entity type code */
+  uint32_t storage_type;   /**< numeric type of each sample */
+  uint32_t stream;         /**< which stream this belongs to */
+  uint64_t time_stamp;     /**< Experiment time stamp - in nano seconds */
+  uint64_t flags;          /**< bit field with flags */
+  uint32_t matrix_size[3]; /**< Pixels in the 3 spatial dimensions */
+  float field_of_view[3];  /**< Size (in mm) of the 3 spatial dimensions */
+  uint32_t channels;       /**< Number of receive channels */
+  float position[3];       /**< Three-dimensional spatial offsets from isocenter */
+  float read_dir[3];       /**< Directional cosines of the readout/frequency encoding */
+  float phase_dir[3];      /**< Directional cosines of the phase */
+  float slice_dir[3];      /**< Directional cosines of the slice direction */
+  float patient_table_position[3];        /**< Patient table off-center */
+  uint32_t average;        /**< e.g. signal average number */
+  uint32_t slice;          /**< e.g. imaging slice number */
+  uint32_t contrast;       /**< e.g. echo number in multi-echo */
+  uint32_t phase;          /**< e.g. cardiac phase number */
+  uint32_t repetition;     /**< e.g. dynamic number for dynamic scanning */
+  uint32_t set;            /**< e.g. flow encodning set */
+  uint32_t physiology_time_stamp[ISMRMRD_PHYS_STAMPS]; /**< Physiology time stamps,
+                                e.g. ecg, breathing, etc. */
+  uint32_t image_type;     /**< e.g. magnitude, phase, complex, real, imag, etc. */
+  uint32_t image_index;    /**< e.g. image number in series of images */
+  uint32_t image_series_index;            /**< e.g. series number */
+  int32_t user_int[ISMRMRD_USER_INTS];    /**< Free user parameters */
+  float user_float[ISMRMRD_USER_FLOATS];  /**< Free user parameters */
+  uint32_t attribute_string_len;          /**< Length of attributes string */
 };
 
 #pragma pack(pop) /* Restore old alignment */
@@ -452,390 +502,425 @@ bool operator==(const ImageHeader &h1, const ImageHeader &h2);
 /// Allowed data types for Images and NDArrays
 template <typename T> EXPORTISMRMRD StorageType get_storage_type();
 
-/// Existing Entity Types
-//template <typename T> EXPORTISMRMRD EntityType get_entity_type();
-
 /// Convenience class for flags
-class EXPORTISMRMRD FlagBit {
-public:
-    FlagBit(unsigned short b)
-        : bitmask_(0) {
-        if (b > 0) {
-            bitmask_ = 1;
-            bitmask_ = (bitmask_ << (b - 1));
-        }
-    }
+class EXPORTISMRMRD FlagBit
+{
+  public:
 
-    bool isSet(const uint64_t &m) const {
-        return ((m & bitmask_) > 0);
+  FlagBit(unsigned short b)
+  : bitmask_(0)
+  {
+    if (b > 0)
+    {
+      bitmask_ = 1;
+      bitmask_ = (bitmask_ << (b - 1));
     }
+  }
 
-    uint64_t bitmask_;
+  bool isSet (const uint64_t &m) const
+  {
+    return ((m & bitmask_) > 0);
+  }
+
+  uint64_t bitmask_;
 };
 
 /// MR Acquisition type
-template <typename T> class EXPORTISMRMRD Acquisition
-    : public Entity
+template <typename T>
+class EXPORTISMRMRD Acquisition
+: public Entity
 {
-public:
-    Acquisition(uint32_t num_samples = 0, uint32_t active_channels = 1, uint32_t trajectory_dimensions = 0);
+  public:
+  Acquisition (uint32_t num_samples           = 0,
+               uint32_t active_channels       = 1,
+               uint32_t trajectory_dimensions = 0);
 
-    uint32_t getVersion() const;
+  void setStream(uint32_t);
 
-    StorageType getStorageType() const;
+  uint32_t getScanCounter() const;
+  void setScanCounter(uint32_t);
 
-    uint32_t getStream() const;
-    void setStream(uint32_t);
+  uint64_t getTimeStamp() const;
+  void setTimeStamp(uint64_t);
 
-    uint32_t getScanCounter() const;
-    void setScanCounter(uint32_t);
+  uint32_t getPhysiologyTimeStamp(int idx);
+  void setPhysiologyTimeStamp(int idx, uint32_t ts);
 
-    uint64_t getTimeStamp() const;
-    void setTimeStamp(uint64_t);
+  uint32_t getNumberOfSamples() const;
+  void setNumberOfSamples(uint32_t);
 
-    uint32_t getPhysiologyTimeStamp(int idx);
-    void setPhysiologyTimeStamp(int idx, uint32_t ts);
+  uint32_t getAvailableChannels() const;
+  void setAvailableChannels(uint32_t);
 
-    uint32_t getNumberOfSamples() const;
-    void setNumberOfSamples(uint32_t);
+  uint32_t getActiveChannels() const;
+  void setActiveChannels(uint32_t);
 
-    uint32_t getAvailableChannels() const;
-    void setAvailableChannels(uint32_t);
+  uint64_t getChannelMask(int idx);
+  void setChannelMask(int idx, uint64_t mask);
 
-    uint32_t getActiveChannels() const;
-    void setActiveChannels(uint32_t);
+  uint32_t getDiscardPre() const;
+  void setDiscardPre(uint32_t);
 
-    uint64_t getChannelMask(int idx);
-    void setChannelMask(int idx, uint64_t mask);
+  uint32_t getDiscardPost() const;
+  void setDiscardPost(uint32_t);
 
-    uint32_t getDiscardPre() const;
-    void setDiscardPre(uint32_t);
+  uint32_t getCenterSample() const;
+  void setCenterSample(uint32_t);
 
-    uint32_t getDiscardPost() const;
-    void setDiscardPost(uint32_t);
+  uint32_t getEncodingSpaceRef() const;
+  void setEncodingSpaceRef(uint32_t);
 
-    uint32_t getCenterSample() const;
-    void setCenterSample(uint32_t);
+  uint32_t getTrajectoryDimensions() const;
+  void setTrajectoryDimensions(uint32_t);
 
-    uint32_t getEncodingSpaceRef() const;
-    void setEncodingSpaceRef(uint32_t);
+  uint32_t getDwellTime_ns() const;
+  void setDwellTime_ns(uint32_t);
 
-    uint32_t getTrajectoryDimensions() const;
-    void setTrajectoryDimensions(uint32_t);
+  float getPositionX() const;
+  float getPositionY() const;
+  float getPositionZ() const;
+  void setPosition(float, float, float);
+  void setPositionX(float);
+  void setPositionY(float);
+  void setPositionZ(float);
 
-    uint32_t getDwellTime_ns() const;
-    void setDwellTime_ns(uint32_t);
+  float getReadDirectionX() const;
+  float getReadDirectionY() const;
+  float getReadDirectionZ() const;
+  void setReadDirection(float, float, float);
+  void setReadDirectionX(float);
+  void setReadDirectionY(float);
+  void setReadDirectionZ(float);
 
-    float getPositionX() const;
-    float getPositionY() const;
-    float getPositionZ() const;
-    void setPosition(float, float, float);
-    void setPositionX(float);
-    void setPositionY(float);
-    void setPositionZ(float);
+  float getPhaseDirectionX() const;
+  float getPhaseDirectionY() const;
+  float getPhaseDirectionZ() const;
+  void setPhaseDirection(float, float, float);
+  void setPhaseDirectionX(float);
+  void setPhaseDirectionY(float);
+  void setPhaseDirectionZ(float);
 
-    float getReadDirectionX() const;
-    float getReadDirectionY() const;
-    float getReadDirectionZ() const;
-    void setReadDirection(float, float, float);
-    void setReadDirectionX(float);
-    void setReadDirectionY(float);
-    void setReadDirectionZ(float);
+  float getSliceDirectionX() const;
+  float getSliceDirectionY() const;
+  float getSliceDirectionZ() const;
+  void setSliceDirection(float, float, float);
+  void setSliceDirectionX(float);
+  void setSliceDirectionY(float);
+  void setSliceDirectionZ(float);
 
-    float getPhaseDirectionX() const;
-    float getPhaseDirectionY() const;
-    float getPhaseDirectionZ() const;
-    void setPhaseDirection(float, float, float);
-    void setPhaseDirectionX(float);
-    void setPhaseDirectionY(float);
-    void setPhaseDirectionZ(float);
+  float getPatientTablePositionX() const;
+  float getPatientTablePositionY() const;
+  float getPatientTablePositionZ() const;
+  void setPatientTablePosition(float, float, float);
+  void setPatientTablePositionX(float);
+  void setPatientTablePositionY(float);
+  void setPatientTablePositionZ(float);
 
-    float getSliceDirectionX() const;
-    float getSliceDirectionY() const;
-    float getSliceDirectionZ() const;
-    void setSliceDirection(float, float, float);
-    void setSliceDirectionX(float);
-    void setSliceDirectionY(float);
-    void setSliceDirectionZ(float);
+  EncodingCounters &getEncodingCounters();
+  const EncodingCounters &getEncodingCounters() const;
+  void setEncodingCounters(const EncodingCounters &);
 
-    float getPatientTablePositionX() const;
-    float getPatientTablePositionY() const;
-    float getPatientTablePositionZ() const;
-    void setPatientTablePosition(float, float, float);
-    void setPatientTablePositionX(float);
-    void setPatientTablePositionY(float);
-    void setPatientTablePositionZ(float);
+  int32_t getUserInt(int idx) const;
+  void setUserInt(int idx, int32_t val);
 
-    EncodingCounters &getEncodingCounters();
-    const EncodingCounters &getEncodingCounters() const;
-    void setEncodingCounters(const EncodingCounters &);
+  float getUserFloat(int idx) const;
+  void setUserFloat(int idx, float val);
 
-    int32_t getUserInt(int idx) const;
-    void setUserInt(int idx, int32_t val);
+  // Sizes
+  void resize (uint32_t num_samples,
+               uint32_t active_channels = 1,
+               uint32_t trajectory_dimensions = 0);
 
-    float getUserFloat(int idx) const;
-    void setUserFloat(int idx, float val);
+  size_t getNumberOfDataElements() const;
+  size_t getNumberOfTrajElements() const;
 
-    // Sizes
-    void resize(uint32_t num_samples, uint32_t active_channels = 1,
-                uint32_t trajectory_dimensions = 0);
-    size_t getNumberOfDataElements() const;
-    size_t getNumberOfTrajElements() const;
+  // Header, data and trajectory accessors
+  AcquisitionHeader &getHead();
+  const AcquisitionHeader &getHead() const;
+  void setHead(const AcquisitionHeader &other);
 
-    // Header, data and trajectory accessors
-    AcquisitionHeader &getHead();
-    const AcquisitionHeader &getHead() const;
-    void setHead(const AcquisitionHeader &other);
+  std::vector<std::complex<T> > &getData();
+  const std::vector<std::complex<T> > &getData() const;
+  void setData(const std::vector<std::complex<T> > &data);
+  /** Returns a reference to a data point */
+  std::complex<T> &at(uint32_t sample, uint32_t channel);
 
-    std::vector<std::complex<T> > &getData();
-    const std::vector<std::complex<T> > &getData() const;
-    void setData(const std::vector<std::complex<T> > &data);
-    /** Returns a reference to a data point */
-    std::complex<T> &at(uint32_t sample, uint32_t channel);
+  const std::vector<float> &getTraj() const;
+  void setTraj(const std::vector<float> &traj);
+  /** Returns a reference to a trajectory point */
+  float &trajAt(uint32_t dimension, uint32_t sample);
 
-    const std::vector<float> &getTraj() const;
-    void setTraj(const std::vector<float> &traj);
-    /** Returns a reference to a trajectory point */
-    float &trajAt(uint32_t dimension, uint32_t sample);
+  // Flag methods
+  uint64_t getFlags() const;
+  void setFlags(uint64_t val);
+  bool isFlagSet(uint64_t val) const;
+  void setFlag(uint64_t val);
+  void clearFlag(uint64_t val);
+  void clearAllFlags();
 
-    // Flag methods
-    uint64_t getFlags() const;
-    void setFlags(uint64_t val);
-    bool isFlagSet(uint64_t val) const;
-    void setFlag(uint64_t val);
-    void clearFlag(uint64_t val);
-    void clearAllFlags();
+  bool isFlagSet (const FlagBit &val) const { return isFlagSet(val.bitmask_); }
+  void setFlag   (const FlagBit &val)       { setFlag(val.bitmask_); }
+  void clearFlag (const FlagBit &val)       { clearFlag(val.bitmask_); }
 
-    bool isFlagSet(const FlagBit &val) const { return isFlagSet(val.bitmask_); }
-    void setFlag(const FlagBit &val) { setFlag(val.bitmask_); }
-    void clearFlag(const FlagBit &val) { clearFlag(val.bitmask_); }
-
-    // Channel mask methods
-    bool isChannelActive(uint32_t chan) const;
-    void setChannelActive(uint32_t chan);
-    void setChannelNotActive(uint32_t chan);
-    void setAllChannelsNotActive();
+  // Channel mask methods
+  bool isChannelActive (uint32_t chan) const;
+  void setChannelActive (uint32_t chan);
+  void setChannelNotActive (uint32_t chan);
+  void setAllChannelsNotActive ();
 
 
-    // Functions inherited from Entity
-    /*virtual uint32_t     getVersion ();
-    virtual EntityType   getEntityType ();
-    virtual StorageType  getStorageType ();
-    virtual uint32_t     getStream ();*/
-    virtual std::vector<unsigned char> serialize();
-    virtual void deserialize(const std::vector<unsigned char>& buffer);
+  // Functions inherited from Entity
+  virtual uint32_t     getVersion ()     const { return head_.version; }
+  virtual uint32_t     getStream ()      const { return head_.stream; }
 
-protected:
-    void makeConsistent();
+  virtual EntityType   getEntityType ()  const
+    { return static_cast<EntityType>(head_.entity_type); }
 
-    AcquisitionHeader head_;
-    std::vector<float> traj_;
-    std::vector<std::complex< T > > data_;
+  virtual StorageType  getStorageType () const
+    { return static_cast<StorageType>(head_.storage_type); }
+
+  virtual std::vector<unsigned char> serialize();
+  virtual void deserialize(const std::vector<unsigned char>& buffer);
+
+  protected:
+
+  void makeConsistent();
+
+  AcquisitionHeader head_;
+  std::vector<float> traj_;
+  std::vector<std::complex< T > > data_;
 };
 
 
 /// MR Image type
 template <typename T>
 class EXPORTISMRMRD Image
-    : public Entity {
-public:
-    // Constructors
-    Image(uint32_t matrix_size_x = 0, uint32_t matrix_size_y = 1,
-          uint32_t matrix_size_z = 1, uint32_t channels = 1);
+: public Entity
+{
+  public:
+  // Constructors
+  Image (uint32_t matrix_size_x = 0,
+         uint32_t matrix_size_y = 1,
+         uint32_t matrix_size_z = 1,
+         uint32_t channels = 1);
 
-    // Image dimensions
-    void resize(uint32_t matrix_size_x, uint32_t matrix_size_y, uint32_t matrix_size_z, uint32_t channels);
+  // Image dimensions
+  void resize (uint32_t matrix_size_x,
+               uint32_t matrix_size_y,
+               uint32_t matrix_size_z,
+               uint32_t channels);
 
-    uint32_t getStream () const;
-    void setStream (uint32_t stream);
+  //uint32_t getStream () const;
+  void setStream (uint32_t stream);
 
-    uint32_t getMatrixSizeX() const;
-    uint32_t getMatrixSizeY() const;
-    uint32_t getMatrixSizeZ() const;
-    void setMatrixSizeX(uint32_t x);
-    void setMatrixSizeY(uint32_t y);
-    void setMatrixSizeZ(uint32_t z);
+  uint32_t getMatrixSizeX() const;
+  uint32_t getMatrixSizeY() const;
+  uint32_t getMatrixSizeZ() const;
+  void setMatrixSizeX(uint32_t x);
+  void setMatrixSizeY(uint32_t y);
+  void setMatrixSizeZ(uint32_t z);
 
-    uint32_t getNumberOfChannels() const;
-    void setNumberOfChannels(uint32_t channels);
+  uint32_t getNumberOfChannels() const;
+  void setNumberOfChannels(uint32_t channels);
 
-    // Field of view
-    float getFieldOfViewX() const;
-    float getFieldOfViewY() const;
-    float getFieldOfViewZ() const;
-    void setFieldOfView(float fov_x, float fov_y, float fov_z);
-    void setFieldOfViewX(float f);
-    void setFieldOfViewY(float f);
-    void setFieldOfViewZ(float f);
+  // Field of view
+  float getFieldOfViewX() const;
+  float getFieldOfViewY() const;
+  float getFieldOfViewZ() const;
+  void setFieldOfView(float fov_x, float fov_y, float fov_z);
+  void setFieldOfViewX(float f);
+  void setFieldOfViewY(float f);
+  void setFieldOfViewZ(float f);
 
-    // Positions and orientations
-    float getPositionX() const;
-    float getPositionY() const;
-    float getPositionZ() const;
-    void setPosition(float x, float y, float z);
-    void setPositionX(float x);
-    void setPositionY(float y);
-    void setPositionZ(float z);
+  // Positions and orientations
+  float getPositionX() const;
+  float getPositionY() const;
+  float getPositionZ() const;
+  void setPosition(float x, float y, float z);
+  void setPositionX(float x);
+  void setPositionY(float y);
+  void setPositionZ(float z);
 
-    float getReadDirectionX() const;
-    float getReadDirectionY() const;
-    float getReadDirectionZ() const;
-    void setReadDirection(float x, float y, float z);
-    void setReadDirectionX(float x);
-    void setReadDirectionY(float y);
-    void setReadDirectionZ(float z);
+  float getReadDirectionX() const;
+  float getReadDirectionY() const;
+  float getReadDirectionZ() const;
+  void setReadDirection(float x, float y, float z);
+  void setReadDirectionX(float x);
+  void setReadDirectionY(float y);
+  void setReadDirectionZ(float z);
 
-    float getPhaseDirectionX() const;
-    float getPhaseDirectionY() const;
-    float getPhaseDirectionZ() const;
-    void setPhaseDirection(float x, float y, float z);
-    void setPhaseDirectionX(float x);
-    void setPhaseDirectionY(float y);
-    void setPhaseDirectionZ(float z);
+  float getPhaseDirectionX() const;
+  float getPhaseDirectionY() const;
+  float getPhaseDirectionZ() const;
+  void setPhaseDirection(float x, float y, float z);
+  void setPhaseDirectionX(float x);
+  void setPhaseDirectionY(float y);
+  void setPhaseDirectionZ(float z);
 
-    float getSliceDirectionX() const;
-    float getSliceDirectionY() const;
-    float getSliceDirectionZ() const;
-    void setSliceDirection(float x, float y, float z);
-    void setSliceDirectionX(float x);
-    void setSliceDirectionY(float y);
-    void setSliceDirectionZ(float z);
+  float getSliceDirectionX() const;
+  float getSliceDirectionY() const;
+  float getSliceDirectionZ() const;
+  void setSliceDirection(float x, float y, float z);
+  void setSliceDirectionX(float x);
+  void setSliceDirectionY(float y);
+  void setSliceDirectionZ(float z);
 
-    float getPatientTablePositionX() const;
-    float getPatientTablePositionY() const;
-    float getPatientTablePositionZ() const;
-    void setPatientTablePosition(float x, float y, float z);
-    void setPatientTablePositionX(float x);
-    void setPatientTablePositionY(float y);
-    void setPatientTablePositionZ(float z);
+  float getPatientTablePositionX() const;
+  float getPatientTablePositionY() const;
+  float getPatientTablePositionZ() const;
+  void setPatientTablePosition(float x, float y, float z);
+  void setPatientTablePositionX(float x);
+  void setPatientTablePositionY(float y);
+  void setPatientTablePositionZ(float z);
 
-    // Attributes
-    uint32_t getVersion() const;
+  // Counters and labels
+  uint32_t getAverage() const;
+  void setAverage(uint32_t average);
 
-    StorageType getStorageType() const;
+  uint32_t getSlice() const;
+  void setSlice(uint32_t slice);
 
-    // Counters and labels
-    uint32_t getAverage() const;
-    void setAverage(uint32_t average);
+  uint32_t getContrast() const;
+  void setContrast(uint32_t contrast);
 
-    uint32_t getSlice() const;
-    void setSlice(uint32_t slice);
+  uint32_t getPhase() const;
+  void setPhase(uint32_t phase);
 
-    uint32_t getContrast() const;
-    void setContrast(uint32_t contrast);
+  uint32_t getRepetition() const;
+  void setRepetition(uint32_t repetition);
 
-    uint32_t getPhase() const;
-    void setPhase(uint32_t phase);
+  uint32_t getSet() const;
+  void setSet(uint32_t set);
 
-    uint32_t getRepetition() const;
-    void setRepetition(uint32_t repetition);
+  uint64_t getTimeStamp() const;
+  void setTimeStamp(uint64_t acquisition_time_stamp);
 
-    uint32_t getSet() const;
-    void setSet(uint32_t set);
+  uint32_t getPhysiologyTimeStamp(unsigned int idx) const;
+  void setPhysiologyTimeStamp(unsigned int idx, uint32_t value);
 
-    uint64_t getTimeStamp() const;
-    void setTimeStamp(uint64_t acquisition_time_stamp);
+  uint32_t getImageType() const;
+  void setImageType(uint32_t image_type);
 
-    uint32_t getPhysiologyTimeStamp(unsigned int idx) const;
-    void setPhysiologyTimeStamp(unsigned int idx, uint32_t value);
+  uint32_t getImageIndex() const;
+  void setImageIndex(uint32_t image_index);
 
-    uint32_t getImageType() const;
-    void setImageType(uint32_t image_type);
+  uint32_t getImageSeriesIndex() const;
+  void setImageSeriesIndex(uint32_t image_series_index);
 
-    uint32_t getImageIndex() const;
-    void setImageIndex(uint32_t image_index);
+  // User parameters
+  float getUserFloat(unsigned int index) const;
+  void setUserFloat(unsigned int index, float value);
 
-    uint32_t getImageSeriesIndex() const;
-    void setImageSeriesIndex(uint32_t image_series_index);
+  int32_t getUserInt(unsigned int index) const;
+  void setUserInt(unsigned int index, int32_t value);
 
-    // User parameters
-    float getUserFloat(unsigned int index) const;
-    void setUserFloat(unsigned int index, float value);
+  // Flags
+  uint64_t getFlags() const;
+  void setFlags(uint64_t flags);
+  bool isFlagSet(uint64_t val) const;
+  void setFlag(uint64_t val);
+  void clearFlag(uint64_t val);
+  void clearAllFlags();
 
-    int32_t getUserInt(unsigned int index) const;
-    void setUserInt(unsigned int index, int32_t value);
+  // Header
+  ImageHeader &getHead();
+  const ImageHeader &getHead() const;
+  void setHead(const ImageHeader &head);
 
-    // Flags
-    uint64_t getFlags() const;
-    void setFlags(uint64_t flags);
-    bool isFlagSet(uint64_t val) const;
-    void setFlag(uint64_t val);
-    void clearFlag(uint64_t val);
-    void clearAllFlags();
+  // Attribute string
+  void getAttributeString(std::string &attr) const;
+  const std::string &getAttributeString() const;
+  void setAttributeString(const std::string &attr);
+  size_t getAttributeStringLength() const;
 
-    // Header
-    ImageHeader &getHead();
-    const ImageHeader &getHead() const;
-    void setHead(const ImageHeader &head);
+  size_t getNumberOfElements() const;
 
-    // Attribute string
-    void getAttributeString(std::string &attr) const;
-    const std::string &getAttributeString() const;
-    void setAttributeString(const std::string &attr);
-    size_t getAttributeStringLength() const;
+  std::vector<T> &getData();
+  const std::vector<T> &getData() const;
 
-    size_t getNumberOfElements() const;
+  /** Returns a reference to the image data **/
+  T &at(uint32_t x, uint32_t y = 0, uint32_t z = 0, uint32_t channel = 0);
 
-    std::vector<T> &getData();
-    const std::vector<T> &getData() const;
+  // Functions inherited from Entity
+  virtual uint32_t  getVersion () const { return head_.version; }
+  virtual uint32_t  getStream ()  const { return head_.stream; }
 
-    /** Returns a reference to the image data **/
-    T &at(uint32_t x, uint32_t y = 0, uint32_t z = 0, uint32_t channel = 0);
+  virtual EntityType   getEntityType ()  const
+    { return static_cast<EntityType>(head_.entity_type); }
 
-    // Functions inherited from Entity
-    virtual std::vector<unsigned char> serialize();
-    virtual void deserialize(const std::vector<unsigned char>& buffer);
+  virtual StorageType  getStorageType () const
+    { return static_cast<StorageType>(head_.storage_type); }
 
-protected:
-    void makeConsistent();
+  virtual std::vector<unsigned char> serialize();
+  virtual void deserialize(const std::vector<unsigned char>& buffer);
 
-    ImageHeader head_;
-    std::string attribute_string_;
-    std::vector<T> data_;
+  protected:
+  void makeConsistent();
+
+  ImageHeader head_;
+  std::string attribute_string_;
+  std::vector<T> data_;
 };
 
 /// N-Dimensional array type
 template <typename T>
-class EXPORTISMRMRD NDArray {
-public:
-    // Constructors, destructor and copy
-    NDArray();
-    NDArray(const std::vector<size_t> &dims);
+class EXPORTISMRMRD NDArray
+{
+  public:
 
-    // Accessors and mutators
-    uint32_t getVersion() const;
-    StorageType getStorageType() const;
+  // Constructors, destructor and copy
+  NDArray();
+  NDArray(const std::vector<size_t> &dims);
 
-    uint32_t getNDim() const;
-    const std::vector<size_t> &getDims();
+  // Accessors and mutators
+  uint32_t getVersion() const;
+  StorageType getStorageType() const;
 
-    void resize(const std::vector<size_t> &dims);
-    size_t getNumberOfElements() const;
+  uint32_t getNDim() const;
+  const  std::vector<size_t>& getDims();
 
-    std::vector<T> &getData();
-    const std::vector<T> &getData() const;
+  void   resize (const std::vector<size_t> &dims);
+  size_t getNumberOfElements() const;
 
-    // Returns a reference to the image data
-    T &at(uint32_t x, uint32_t y = 0, uint32_t z = 0, uint32_t w = 0, uint32_t n = 0, uint32_t m = 0, uint32_t l = 0);
+  std::vector<T> &getData();
+  const std::vector<T> &getData() const;
 
-protected:
-    void makeConsistent();
+  // Returns a reference to the image data
+  T &at (uint32_t x,
+         uint32_t y = 0,
+         uint32_t z = 0,
+         uint32_t w = 0,
+         uint32_t n = 0,
+         uint32_t m = 0,
+         uint32_t l = 0);
 
-    uint32_t version_;
-    std::vector<size_t> dims_;
-    std::vector<T> data_;
+  protected:
+
+  void makeConsistent();
+
+  uint32_t version_;
+  std::vector<size_t> dims_;
+  std::vector<T> data_;
 };
 
 // Rotations and Quaternions
 
 /// Calculates the determinant of the matrix and return the sign
-EXPORTISMRMRD int sign_of_directions(float read_dir[3], float phase_dir[3], float slice_dir[3]);
+EXPORTISMRMRD int sign_of_directions (float read_dir[3],
+                                      float phase_dir[3],
+                                      float slice_dir[3]);
 
 /// Creates a normalized quaternion from a 3x3 rotation matrix
-EXPORTISMRMRD void directions_to_quaternion(float read_dir[3], float phase_dir[3], float slice_dir[3], float quat[4]);
+EXPORTISMRMRD void directions_to_quaternion (float read_dir[3],
+                                             float phase_dir[3],
+                                             float slice_dir[3],
+                                             float quat[4]);
 
 /// Converts a quaternion of the form | a b c d | to a 3x3 rotation matrix
-EXPORTISMRMRD void quaternion_to_directions(float quat[4], float read_dir[3], float phase_dir[3], float slice_dir[3]);
+EXPORTISMRMRD void quaternion_to_directions (float quat[4],
+                                             float read_dir[3],
+                                             float phase_dir[3],
+                                             float slice_dir[3]);
 
 /** @} */
 
