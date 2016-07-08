@@ -122,7 +122,7 @@ void Dataset::createGroup (const std::string& path)
             if (!H5Lexists(file_.getId(), current_path.c_str(), H5P_DEFAULT))
             {
                 file_.createGroup(current_path.c_str());
-std::cout << __func__ << ": created group = " << current_path << "\n";
+//std::cout << __func__ << ": created group = " << current_path << "\n";
             }
         }
     }
@@ -223,7 +223,7 @@ void Dataset::writeImageHeader
   {
     DataSpace mspace1(dims.size(), &dims[0], &max_dims[0]);
     im_dataset = DataSet (file_.createDataSet(im_head_path_.c_str(), dtype, mspace1));
-    std::cout <<__func__<<": Created dataset for " << im_head_path_ << "\n";
+    //std::cout <<__func__<<": Created dataset for " << im_head_path_ << "\n";
   }
   else
   {
@@ -439,7 +439,7 @@ void Dataset::readFromDataSet(const std::string& path, const DataType& dtype,
 {
   if (!linkExists(path))
   {
-    std::cout << __func__ << ": path = " << path << "\n";
+    //std::cout << __func__ << ": path = " << path << "\n";
     throw std::runtime_error("Data path does not exist in dataset");
   }
 

@@ -16,6 +16,8 @@ void Client::processHandshake
   std::cout << "Received handshake response for \"" << _client_name
             << "\": name = \"" << msg->getClientName()
             << "\", status = " << msg->getConnectionStatus() << "\n";
+
+  _manifest = msg->getManifest ();
 }
 
 /*****************************************************************************
@@ -118,7 +120,90 @@ void Client::sendHandshake
   msg.setTimestamp ((uint64_t)std::time(nullptr));
   msg.setConnectionStatus (CONNECTION_REQUEST);
   msg.setClientName (_client_name);
-  // fill in the manifest here
+  msg.addManifestEntry (5000,
+                        ISMRMRD_MRACQUISITION,
+                        ISMRMRD_SHORT,
+                        std::string ("file"),
+                        std::string ("Image Reconstruction"));
+
+  msg.addManifestEntry (5001,
+                        ISMRMRD_MRACQUISITION,
+                        ISMRMRD_INT,
+                        std::string ("file"),
+                        std::string ("Image Reconstruction"));
+
+  msg.addManifestEntry (5002,
+                        ISMRMRD_MRACQUISITION,
+                        ISMRMRD_FLOAT,
+                        std::string ("file"),
+                        std::string ("Image Reconstruction"));
+
+  msg.addManifestEntry (5003,
+                        ISMRMRD_MRACQUISITION,
+                        ISMRMRD_DOUBLE,
+                        std::string ("file"),
+                        std::string ("Image Reconstruction"));
+
+  msg.addManifestEntry (ISMRMRD_HEADER_STREAM,
+                        ISMRMRD_HEADER,
+                        ISMRMRD_STORAGE_NONE,
+                        std::string ("file"),
+                        std::string ("ISMRMRD Header"));
+
+  msg.addManifestEntry (6000,
+                        ISMRMRD_IMAGE,
+                        ISMRMRD_SHORT,
+                        std::string ("server"),
+                        std::string ("Image Reconstruction"));
+
+  msg.addManifestEntry (6001,
+                        ISMRMRD_IMAGE,
+                        ISMRMRD_USHORT,
+                        std::string ("server"),
+                        std::string ("Image Reconstruction"));
+
+  msg.addManifestEntry (6002,
+                        ISMRMRD_IMAGE,
+                        ISMRMRD_INT,
+                        std::string ("server"),
+                        std::string ("Image Reconstruction"));
+
+  msg.addManifestEntry (6003,
+                        ISMRMRD_IMAGE,
+                        ISMRMRD_UINT,
+                        std::string ("server"),
+                        std::string ("Image Reconstruction"));
+
+  msg.addManifestEntry (6004,
+                        ISMRMRD_IMAGE,
+                        ISMRMRD_FLOAT,
+                        std::string ("server"),
+                        std::string ("Image Reconstruction"));
+
+  msg.addManifestEntry (6005,
+                        ISMRMRD_IMAGE,
+                        ISMRMRD_DOUBLE,
+                        std::string ("server"),
+                        std::string ("Image Reconstruction"));
+
+  msg.addManifestEntry (6006,
+                        ISMRMRD_IMAGE,
+                        ISMRMRD_CXFLOAT,
+                        std::string ("server"),
+                        std::string ("Image Reconstruction"));
+
+  msg.addManifestEntry (6007,
+                        ISMRMRD_IMAGE,
+                        ISMRMRD_CXDOUBLE,
+                        std::string ("server"),
+                        std::string ("Image Reconstruction"));
+
+  msg.addManifestEntry (10000,
+                        ISMRMRD_BLOB,
+                        ISMRMRD_STORAGE_NONE,
+                        std::string ("Device 1"),
+                        std::string ("Device 1 Data"));
+
   _session->send (&msg);
 }
 
@@ -146,6 +231,7 @@ void Client::beginInput
 
   ETYPE etype = (ETYPE)xmlHeader.streams[0].entityType;
   STYPE stype = (STYPE)xmlHeader.streams[0].storageType;
+
 
   Command msg;
   msg.setCommandType (ISMRMRD_COMMAND_CONFIGURATION);
@@ -267,22 +353,23 @@ Client::Client
 
   _callbacks.emplace_back (new ClientEntityHandler (this));
   auto fp = std::bind (&Callback::receive, _callbacks.back(), _1, _2);
-  _session->registerHandler ((CB) fp, ISMRMRD_HANDSHAKE,    _callbacks.back());
-  _session->registerHandler ((CB) fp, ISMRMRD_ERROR_REPORT, _callbacks.back());
-  _session->registerHandler ((CB) fp, ISMRMRD_COMMAND,      _callbacks.back());
+  _session->registerHandler ((CB) fp, _callbacks.back(), HANDSHAKE_STREAM);
+  _session->registerHandler ((CB) fp, _callbacks.back(), ERROR_REPORT_STREAM);
+  _session->registerHandler ((CB) fp, _callbacks.back(), COMMAND_STREAM);
 
 
   _callbacks.emplace_back
     (new ClientImageProcessor (this, _out_fname, _out_dset, gmtx));
   auto fp1 = std::bind (&Callback::receive, _callbacks.back(), _1, _2);
-  _session->registerHandler ((CB) fp1, ISMRMRD_IMAGE,  _callbacks.back());
-  _session->registerHandler ((CB) fp1, ISMRMRD_HEADER, _callbacks.back());
+  _session->registerHandler ((CB) fp1, _callbacks.back(), ISMRMRD_IMAGE);
+  _session->registerHandler ((CB) fp1, _callbacks.back(), ISMRMRD_HEADER_STREAM);
 
+  sendHandshake ();
 
-  std::thread it (&Client::beginInput, this, std::ref (gmtx));
+  //std::thread it (&Client::beginInput, this, std::ref (gmtx));
   _session->run ();
 
-  if (it.joinable()) it.join();
+  //if (it.joinable()) it.join();
 }
 
 /*******************************************************************************

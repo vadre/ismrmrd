@@ -61,7 +61,8 @@ void Session::shutdown
 
 /*******************************************************************************
  ******************************************************************************/
-template<> void Session::registerHandler (CB, ETYPE, Callback*);
+template<> bool Session::registerHandler (CB, Callback*, uint32_t, uint32_t);
+template<> bool Session::deregister (CB, Callback*, uint32_t, uint32_t);
 template class MTQueue<OUT_MSG>;
 
 /*******************************************************************************
@@ -106,7 +107,7 @@ bool Session::getMessage
     return false;
   }
 
-  deliver (in_msg);
+  getSubscribers (in_msg);
 
   return true;
 }
@@ -155,7 +156,22 @@ uint32_t Session::receiveFrameInfo
     return ERROR_SOCKET_WRONG_LENGTH;
   }
 
-  in_msg.ehdr.deserialize (buffer);
+  try
+  {
+    in_msg.ehdr.deserialize (buffer);
+  }
+  catch (std::runtime_error& e)
+  {
+    std::cout << "Error deserializing entity header: " << e.what() << '\n';
+    return ENTITY_HEAD_DESERIALIZE_ERROR;
+  }
+
+  if (in_msg.ehdr.id != ISMRMRD_DATA_ID)
+  {
+    std::cout << "id = " << in_msg.ehdr.id << ", expected: " <<ISMRMRD_DATA_ID << '\n';
+    return NOT_ISMRMRD_DATA;
+  }
+
   in_msg.data_size = in_msg.size - ENTITY_HEADER_SIZE;
 
   return 0;
@@ -163,45 +179,90 @@ uint32_t Session::receiveFrameInfo
 
 /*******************************************************************************
  ******************************************************************************/
-void Session::deliver
+CB_IT Session::getNextKey
+(
+  std::string prefix,
+  CB_IT       it
+)
+{
+  while (it != _callbacks.end())
+  {
+    const std::string& key = it->first;
+    if (key.compare (0, prefix.size(), prefix) == 0)
+    {
+      return it;
+    }
+  }
+
+  return _callbacks.end();
+}
+
+/*******************************************************************************
+ ******************************************************************************/
+void Session::getSubscribers
 (
   IN_MSG in_msg
 )
 {
-  ETYPE  etype  = (EntityType)  in_msg.ehdr.entity_type;
-  STYPE stype   = (StorageType) in_msg.ehdr.storage_type;
+  std::string prefix = std::to_string (in_msg.ehdr.stream) + std::string ("_");
+  CB_IT cit = _callbacks.lower_bound (prefix);
 
-  if (_callbacks.find (etype) == _callbacks.end())
+  if (cit == _callbacks.end())
   {
-    std::cout << "Warning! received unexpected entity type: " << etype << "\n";
+    std::cout << "Warning! received unexpected stream: "
+              << in_msg.ehdr.stream << "\n";
     return;
   }
 
-  Callback* obj = _objects [etype];
+  getNextKey (prefix, cit);
+
+  while (cit != _callbacks.end())
+  {
+    std::string key = cit->first;
+    if (_objects.find (key) == _objects.end())
+    {
+      throw std::runtime_error ("Objects and Callbacks maps don't match");
+    }
+
+    deliver (in_msg, key);
+    cit = getNextKey (prefix, ++cit);
+  }
+}
+/*******************************************************************************
+ ******************************************************************************/
+void Session::deliver
+(
+  IN_MSG      in_msg,
+  std::string key
+)
+{
+  ETYPE     etype  = (EntityType)  in_msg.ehdr.entity_type;
+  STYPE     stype  = (StorageType) in_msg.ehdr.storage_type;
+  Callback* obj    = _objects [key];
 
   if (etype == ISMRMRD_HANDSHAKE)
   {
     HANDSHAKE ent;
     ent.deserialize (in_msg.data);
-    call (etype, obj, &ent);
+    call (key, obj, &ent);
   }
   else if (etype == ISMRMRD_COMMAND)
   {
     COMMAND ent;
     ent.deserialize (in_msg.data);
-    call (etype, obj, &ent);
+    call (key, obj, &ent);
   }
   else if (etype == ISMRMRD_HEADER)
   {
     XMLHEAD ent;
     ent.deserialize (in_msg.data);
-    call (etype, obj, &ent);
+    call (key, obj, &ent);
   }
   else if (etype == ISMRMRD_ERROR_REPORT)
   {
     ERRREPORT ent;
     ent.deserialize (in_msg.data);
-    call (etype, obj, &ent);
+    call (key, obj, &ent);
   }
   else if (etype == ISMRMRD_MRACQUISITION)
   {
@@ -209,25 +270,25 @@ void Session::deliver
     {
       Acquisition<int16_t> ent;
       ent.deserialize (in_msg.data);
-      call (etype, obj, &ent);
+      call (key, obj, &ent);
     }
     else if (stype == ISMRMRD_INT)
     {
       Acquisition<int32_t> ent;
       ent.deserialize (in_msg.data);
-      call (etype, obj, &ent);
+      call (key, obj, &ent);
     }
     if (stype == ISMRMRD_FLOAT)
     {
       Acquisition<float> ent;
       ent.deserialize (in_msg.data);
-      call (etype, obj, &ent);
+      call (key, obj, &ent);
     }
     else if (stype == ISMRMRD_DOUBLE)
     {
       Acquisition<double> ent;
       ent.deserialize (in_msg.data);
-      call (etype, obj, &ent);
+      call (key, obj, &ent);
     }
     else
     {
@@ -241,49 +302,49 @@ void Session::deliver
     {
       Image<int16_t> ent;
       ent.deserialize (in_msg.data);
-      call (etype, obj, &ent);
+      call (key, obj, &ent);
     }
     else if (stype == ISMRMRD_USHORT)
     {
       Image<uint16_t> ent;
       ent.deserialize (in_msg.data);
-      call (etype, obj, &ent);
+      call (key, obj, &ent);
     }
     else if (stype == ISMRMRD_INT)
     {
       Image<int32_t> ent;
       ent.deserialize (in_msg.data);
-      call (etype, obj, &ent);
+      call (key, obj, &ent);
     }
     else if (stype == ISMRMRD_UINT)
     {
       Image<uint32_t> ent;
       ent.deserialize (in_msg.data);
-      call (etype, obj, &ent);
+      call (key, obj, &ent);
     }
     else if (stype == ISMRMRD_FLOAT)
     {
       Image<float> ent;
       ent.deserialize (in_msg.data);
-      call (etype, obj, &ent);
+      call (key, obj, &ent);
     }
     else if (stype == ISMRMRD_DOUBLE)
     {
       Image<double> ent;
       ent.deserialize (in_msg.data);
-      call (etype, obj, &ent);
+      call (key, obj, &ent);
     }
     else if (stype == ISMRMRD_CXFLOAT)
     {
       Image<std::complex<float>> ent;
       ent.deserialize (in_msg.data);
-      call (etype, obj, &ent);
+      call (key, obj, &ent);
     }
     else if (stype == ISMRMRD_CXDOUBLE)
     {
       Image<std::complex<double>> ent;
       ent.deserialize (in_msg.data);
-      call (etype, obj, &ent, etype, stype);
+      call (key, obj, &ent);
     }
     else
     {
@@ -301,16 +362,16 @@ void Session::deliver
 template<typename ...A>
 void Session::call
 (
-  uint32_t index,
+  std::string  key,
   A&&      ... args
 )
 {
-  if (_callbacks.find (index) != _callbacks.end())
+  if (_callbacks.find (key) != _callbacks.end())
   {
     using func_t = CbStruct <A...>;
     using cb_t   = std::function <void (A...)>;
 
-    const CbBase& base = *_callbacks[index];
+    const CbBase& base = *_callbacks[key];
     const cb_t& func = static_cast <const func_t&> (base).callback;
 
     func (std::forward <A> (args)...);
@@ -326,6 +387,7 @@ bool Session::send
 {
   EntityHeader head;
 
+  head.id           = ISMRMRD_DATA_ID;
   head.version      = entity->getVersion();
   head.entity_type  = entity->getEntityType();
   head.storage_type = entity->getStorageType();

@@ -28,9 +28,9 @@ class ClientImageProcessor : public Callback
 {
   public:
        ClientImageProcessor (Client*,
-                                std::string fname,
-                                std::string dname,
-                                std::mutex& mtx);
+                             std::string fname,
+                             std::string dname,
+                             std::mutex& mtx);
        ~ClientImageProcessor () = default;
   void receive (Callback*, ENTITY*);
 

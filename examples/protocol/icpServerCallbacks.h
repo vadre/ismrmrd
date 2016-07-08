@@ -246,6 +246,7 @@ class ServerImageRecon : public Callback
 
     // The following are extra guidance we can put in the image header
     //img.setStream (config.getStream(&img)); //TODO: ???
+    img.setStream (1000); // TODO: remove this!!
     img.setImageType (ISMRMRD_IMTYPE_MAGNITUDE);
     img.setSlice (0);
     img.setFieldOfView (r_space.fieldOfView_mm.x,

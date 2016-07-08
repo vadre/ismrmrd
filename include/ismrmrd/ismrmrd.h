@@ -39,7 +39,7 @@ typedef unsigned __int64 uint64_t;
 
 namespace ISMRMRD {
 
-const std::string ISMRMRD_DATA_ID = "qQqq";
+const char ISMRMRD_DATA_ID[4] = {'M', 'R', 'I', 'D'};
 
 /** Global Constants */
 enum Constant {
@@ -244,12 +244,14 @@ class EntityHeader
   uint32_t    stream;        /**< which stream this belongs to */
 };
 
-struct IsmrmrdManifest
+struct Manifest
 {
   uint32_t             stream;
   ISMRMRD::EntityType  entity_type;
   ISMRMRD::StorageType storage_type;
+  uint32_t             source_length;
   uint32_t             descr_length;
+  std::vector<char>    source;
   std::vector<char>    description;
 };
 
@@ -277,13 +279,11 @@ class Handshake
   void             addManifestEntry (uint32_t             stream,
                                      ISMRMRD::EntityType  etype,
                                      ISMRMRD::StorageType stype,
+                                     std::string          source,
                                      std::string          description);
   uint32_t         getManifestSize () const;
-  std::map<uint32_t, IsmrmrdManifest> getManifest () const;
-  bool             verifyManifestEntry (uint32_t             stream,
-                                        ISMRMRD::EntityType  etype,
-                                        ISMRMRD::StorageType stype) const;
-
+  std::map<uint32_t, Manifest> getManifest () const;
+  
   virtual uint32_t getVersion () const { return head_.version; }
   virtual uint32_t getStream ()  const { return head_.stream; }
 
@@ -304,7 +304,7 @@ class Handshake
   uint32_t          client_name_length_;
   uint32_t          manifest_size_;
   std::vector<char> client_name_;
-  std::vector<IsmrmrdManifest> manifest_;
+  std::vector<Manifest> manifest_;
 };
 
 struct CommandHeader
