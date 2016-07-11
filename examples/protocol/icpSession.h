@@ -8,6 +8,7 @@
 #include "icpMTQueue.h"
 #include <utility>
 #include <map>
+#include <set>
 #include <time.h>
 #include "ismrmrd/version.h"
 #include "ismrmrd/xml.h"
@@ -103,10 +104,16 @@ class Session
   void   shutdown        ();
   bool   send            (ENTITY*);
 
+  bool   deregister      (std::vector<uint32_t> index);
+  bool   deregister      (uint32_t index, uint32_t inst = 0);
+
   template <typename F>
-  bool   deregister      (F func, Callback* obj, uint32_t index, uint32_t inst = 0);
+  bool   registerHandler (F func, Callback* obj, std::vector<uint32_t> index);
   template <typename F>
-  bool   registerHandler (F func, Callback* obj, uint32_t index, uint32_t inst = 0);
+  bool   registerHandler (F func,
+                          Callback* obj,
+                          uint32_t index,
+                          uint32_t inst = 0);
 
   private:
 
@@ -140,6 +147,44 @@ using START_USER_APP_FUNC = void (*) (SESSION);
 template <typename F>
 bool Session::registerHandler
 (
+  F                      func,
+  Callback*              obj,
+  std::vector<uint32_t>  index
+)
+{
+  // To avoid partial registration check if any of the indexes may be rejected
+  std::string key;
+  for (int ii = 0; ii < index.size(); ++ii)
+  {
+    key = std::to_string (index[ii]) + std::string ("_") + std::string ("0");
+    if (_callbacks.find (key) != _callbacks.end() ||
+        _objects.find (key)   != _objects.end())
+    {
+      std::cerr << "Index vector contains previously registered streams\n";
+      return false;
+    }
+  }
+
+  std::set<uint32_t> temp (index.begin(), index.end());
+  if (index.size() != temp.size() || index.size() < 1)
+  {
+    std::cerr << "Index vector is empty or has duplicates\n";
+    return false;
+  }
+
+  for (int ii = 0; ii < index.size(); ++ii)
+  {
+    registerHandler (func, obj, index[ii], 0);
+  }
+
+  return true;
+}
+
+/*******************************************************************************
+ ******************************************************************************/
+template <typename F>
+bool Session::registerHandler
+(
   F         func,
   Callback* obj,
   uint32_t  index,
@@ -148,22 +193,14 @@ bool Session::registerHandler
 {
   std::string key =
     std::to_string (index) + std::string ("_") + std::to_string (instance);
+  std::cout << "Session registering " << key << "\n";
 
   std::unique_ptr<F> f_uptr (new F (func));
 
-  //using IT = OB_MMAP::const_iterator;
-  //std::pair<IT, IT> range = _objects.equal_range (key);
-  //for (IT it = range.first; it != range.second; ++it)
-  //{
-    //if (it->second == obj)
-    //{
-      //return false;
-    //}
-  //}
-  
   if (_callbacks.find (key) != _callbacks.end() ||
       _objects.find (key)   != _objects.end())
   {
+    std::cout << "Key " << key << " already present\n";
     return false;
   }
 
@@ -174,55 +211,6 @@ bool Session::registerHandler
 
 /*******************************************************************************
  ******************************************************************************/
-template <typename F>
-bool Session::deregister
-(
-  F         func,
-  Callback* obj,
-  uint32_t  index,
-  uint32_t  instance
-)
-{
-  std::string key =
-    std::to_string (index) + std::string ("_") + std::to_string (instance);
-
-  if (_callbacks.find (key) == _callbacks.end() ||
-      _objects.find (key)   == _objects.end())
-  {
-    return false;
-  }
-
-  _callbacks.erase (key);
-  _objects.erase (key);
-
-  return true;
-
-  //bool ob_found = false;
-  //bool cb_found = false;
-  //using OB_IT = OB_MMAP::const_iterator;
-  //std::pair<OB_IT, OB_IT> ob_range = _objects.equal_range (key);
-  //for (OB_IT it = ob_range.first; it != ob_range.second; ++it)
-  //{
-    //if (it->second == obj)
-    //{
-      //_objects.erase (it);
-      //ob_found = true;
-    //}
-  //}
-
-  //using CB_IT = CB_MMAP::const_iterator;
-  //std::pair<CB_IT, CB_IT> cb_range = __callbacks.equal_range (key);
-  //for (CB_IT it = cb_range.first; it != cb_range.second; ++it)
-  //{
-    //if (*it->second == func)
-    //{
-      //__callbacks.erase (it);
-      //cb_found = true;
-    //}
-  //}
-
-  //return (ob_found && cb_found);
-}
 
 }} // end of namespace ISMRMRD::ICP
 #endif // ICP_SESSION_H

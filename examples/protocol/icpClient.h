@@ -30,23 +30,26 @@ class Client
 
   private:
 
-  void beginInput (std::mutex&);
-  void sendHandshake ();
-  void sendCommand (CommandType cmd_type, uint32_t cmd_id);
-  void sendError (ErrorType type, std::string descr);
-  template <typename S>
-  void sendAcquisitions (Dataset& dset, std::mutex& mtx);
+  void    beginInput (std::mutex&);
+  void    sendHandshake ();
+  int32_t getStream (ETYPE, STYPE);
+  void    sendCommand (CommandType cmd_type, uint32_t cmd_id);
+  void    sendError (ErrorType type, std::string descr);
 
-  SESSION                      _session;
-  std::string                  _client_name;
-  std::string                  _in_fname;
-  std::string                  _out_fname;
-  std::string                  _in_dset;
-  std::string                  _out_dset;
-  bool                         _server_done;
-  bool                         _task_done;
-  std::map<uint32_t, Manifest> _manifest;
-  std::vector<Callback*>       _callbacks;
+  template <typename S>
+  void    sendAcquisitions (Dataset& dset, std::mutex& mtx);
+
+  SESSION                         _session;
+  std::thread                     _input_thread;
+  std::string                     _client_name;
+  std::string                     _in_fname;
+  std::string                     _out_fname;
+  std::string                     _in_dset;
+  std::string                     _out_dset;
+  bool                            _server_done;
+  bool                            _task_done;
+  std::map<std::string, Manifest> _manifest;
+  std::vector<Callback*>          _callbacks;
 };
 
 }} // end of namespace scope

@@ -249,9 +249,7 @@ struct Manifest
   uint32_t             stream;
   ISMRMRD::EntityType  entity_type;
   ISMRMRD::StorageType storage_type;
-  uint32_t             source_length;
   uint32_t             descr_length;
-  std::vector<char>    source;
   std::vector<char>    description;
 };
 
@@ -279,10 +277,9 @@ class Handshake
   void             addManifestEntry (uint32_t             stream,
                                      ISMRMRD::EntityType  etype,
                                      ISMRMRD::StorageType stype,
-                                     std::string          source,
                                      std::string          description);
   uint32_t         getManifestSize () const;
-  std::map<uint32_t, Manifest> getManifest () const;
+  std::map<std::string, Manifest> getManifest () const;
   
   virtual uint32_t getVersion () const { return head_.version; }
   virtual uint32_t getStream ()  const { return head_.stream; }

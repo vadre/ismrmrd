@@ -1540,7 +1540,7 @@ std::vector<unsigned char> EntityHeader::serialize()
   buffer.reserve (bytes);
 
   std::copy ((unsigned char*) &this->id[0],
-             (unsigned char*) &this->id[0] + sizeof (ISMRMRD_DATA_ID),
+             (unsigned char*) &this->id[sizeof (ISMRMRD_DATA_ID)],
              std::back_inserter (buffer));
 
   std::copy ((unsigned char*) &this->version,
@@ -1570,7 +1570,7 @@ std::vector<unsigned char> EntityHeader::serialize()
   return buffer;
 }
 
-
+/******************************************************************************/
 void EntityHeader::deserialize(const std::vector<unsigned char>& buffer)
 {
   if (buffer.size() != sizeof (ISMRMRD_DATA_ID) +
@@ -1667,7 +1667,6 @@ void Handshake::setClientName (std::string name)
 void Handshake::addManifestEntry (uint32_t             stream,
                                   ISMRMRD::EntityType  etype,
                                   ISMRMRD::StorageType stype,
-                                  std::string          source,
                                   std::string          description)
 {
   Manifest entry;
@@ -1675,9 +1674,6 @@ void Handshake::addManifestEntry (uint32_t             stream,
   entry.stream       = stream;
   entry.entity_type  = etype;
   entry.storage_type = stype;
-  std::copy (source.c_str(), source.c_str() + source.length(),
-             back_inserter (entry.source));
-  entry.source_length = entry.source.size();
   std::copy (description.c_str(), description.c_str() + description.length(),
              back_inserter (entry.description));
   entry.descr_length = entry.description.size();
@@ -1693,13 +1689,20 @@ uint32_t Handshake::getManifestSize () const
   return manifest_size_;
 }
 /******************************************************************************/
-std::map<uint32_t, Manifest> Handshake::getManifest () const
+std::map<std::string, Manifest> Handshake::getManifest () const
 {
-  std::map<uint32_t, Manifest> mm;
+  std::map<std::string, Manifest> mm;
 
+  std::cout << "Manifest:\n";
   for (int ii = 0; ii < manifest_size_; ii++)
   {
-    mm.insert (std::make_pair (manifest_[ii].stream, manifest_[ii]));
+    std::string key = std::to_string (manifest_[ii].entity_type) +
+                      std::string ("_") +
+                      std::to_string (manifest_[ii].storage_type);
+    mm.insert (std::make_pair (key, manifest_[ii]));
+    std::cout << "stream = " << manifest_[ii].stream
+              << ", etype = " << manifest_[ii].entity_type
+              << ", stype = " << manifest_[ii].storage_type << "\n";
   }
 
   return mm;
@@ -1724,8 +1727,6 @@ std::vector<unsigned char> Handshake::serialize()
     bytes += sizeof (manifest_[ii].stream) +
              sizeof (manifest_[ii].entity_type) +
              sizeof (manifest_[ii].storage_type) +
-             sizeof ( manifest_[ii].source_length) +
-             manifest_[ii].source_length +
              sizeof ( manifest_[ii].descr_length) +
              manifest_[ii].descr_length;
   }
@@ -1762,13 +1763,8 @@ std::vector<unsigned char> Handshake::serialize()
   {
     std::copy ((unsigned char*) &this->manifest_[ii],
                (unsigned char*) &this->manifest_[ii] +
-               sizeof (uint32_t) * 3 +
+               sizeof (uint32_t) * 2 +
                sizeof (EntityType) + sizeof (StorageType),
-               std::back_inserter (buffer));
-
-    std::copy ((unsigned char*) &this->manifest_[ii].source[0],
-               (unsigned char*) &this->manifest_[ii].source[0] +
-                                 this->manifest_[ii].source_length,
                std::back_inserter (buffer));
 
     std::copy ((unsigned char*) &this->manifest_[ii].description[0],
@@ -1836,6 +1832,7 @@ void Handshake::deserialize(const std::vector<unsigned char>& buffer)
                back_inserter (this->client_name_));
   }
 
+  manifest_.reserve (manifest_size_);
   for (int ii = 0; ii < manifest_size_ && right <= buffer.size(); ii++)
   {
     left = right;

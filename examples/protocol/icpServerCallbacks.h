@@ -97,15 +97,15 @@ class ServerImageRecon : public Callback
 /******************************************************************************/
   private:
 
-  Server*                           _server;
+  Server*                     _server;
   IsmrmrdHeader               _header;
-  bool                                 _header_received;
-  bool                                 _stop_acqs;
-  uint32_t                             _expected_num_acqs;
-  bool                                 _params_set;
-  uint32_t                             _version;
-  uint32_t                             _stream;
-  uint32_t                             _num_coils;
+  bool                        _header_received;
+  bool                        _stop_acqs;
+  uint32_t                    _expected_num_acqs;
+  bool                        _params_set;
+  uint32_t                    _version;
+  uint32_t                    _stream;
+  uint32_t                    _num_coils;
   StorageType                 _stype;
   std::queue<Acquisition<S>>  _acqs;
 
@@ -245,8 +245,7 @@ class ServerImageRecon : public Callback
     }
 
     // The following are extra guidance we can put in the image header
-    //img.setStream (config.getStream(&img)); //TODO: ???
-    img.setStream (1000); // TODO: remove this!!
+    img.setStream (_server->getStream (ISMRMRD_IMAGE, img.getStorageType()));
     img.setImageType (ISMRMRD_IMTYPE_MAGNITUDE);
     img.setSlice (0);
     img.setFieldOfView (r_space.fieldOfView_mm.x,

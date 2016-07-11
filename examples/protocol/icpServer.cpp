@@ -12,7 +12,28 @@ void Server::processHandshake
   HANDSHAKE* msg
 )
 {
-  // verify manifest here
+  _manifest = msg->getManifest();
+  // Here server's capabilities may be compared with the received manifest.
+  // For this demo all entities not related to image reconstruction will be
+  // filtered out.
+
+  std::vector<std::string> unsupported;
+  for (auto it = _manifest.begin(); it != _manifest.end(); ++it)
+  {
+    if (it->second.entity_type != ISMRMRD_MRACQUISITION &&
+        it->second.entity_type != ISMRMRD_HEADER        &&
+        it->second.entity_type != ISMRMRD_IMAGE)
+    {
+      unsupported.push_back (it->first);
+    }
+  }
+
+  // Remove unsupported entries
+  for (int ii = 0; ii < unsupported.size(); ++ii)
+  {
+    _manifest.erase (unsupported[ii]);
+  }
+
   clientAccepted (msg, true);
 }
 
@@ -78,6 +99,26 @@ void Server::taskDone
   if (_client_done) sendCommand (ISMRMRD_COMMAND_DONE_FROM_SERVER, 0);
 }
 
+/*****************************************************************************
+ ****************************************************************************/
+int32_t Server::getStream
+(
+  ETYPE etype,
+  STYPE stype
+)
+{
+  std::string key = std::to_string (etype) +
+                    std::string ("_") +
+                    std::to_string (stype);
+  if (_manifest.find (key) == _manifest.end())
+  {
+    std::cout << "Warning! Stream number not available for " << key << "\n";
+    return -1;
+  }
+
+  return _manifest.at (key).stream;
+}
+
 /*******************************************************************************
  ******************************************************************************/
 void Server::configure
@@ -91,8 +132,9 @@ void Server::configure
 
     _callbacks.emplace_back (new ServerImageRecon<int16_t> (this));
     auto fp = std::bind (&Callback::receive, _callbacks.back(), _1, _2);
-    _session->registerHandler ((CB)fp, ISMRMRD_HEADER, _callbacks.back());
-    _session->registerHandler ((CB)fp, ISMRMRD_MRACQUISITION, _callbacks.back());
+    _session->registerHandler ((CB)fp, _callbacks.back(), ISMRMRD_HEADER_STREAM);
+    _session->registerHandler ((CB)fp, _callbacks.back(),
+                               getStream (ISMRMRD_MRACQUISITION, ISMRMRD_SHORT));
   }
   else if (msg->getConfigType() == CONFIGURATION_RECON_INT)
   {
@@ -100,8 +142,9 @@ void Server::configure
 
     _callbacks.emplace_back (new ServerImageRecon<int32_t> (this));
     auto fp = std::bind (&Callback::receive, _callbacks.back(), _1, _2);
-    _session->registerHandler ((CB)fp, ISMRMRD_HEADER, _callbacks.back());
-    _session->registerHandler ((CB)fp, ISMRMRD_MRACQUISITION, _callbacks.back());
+    _session->registerHandler ((CB)fp, _callbacks.back(), ISMRMRD_HEADER_STREAM);
+    _session->registerHandler ((CB)fp, _callbacks.back(),
+                               getStream (ISMRMRD_MRACQUISITION, ISMRMRD_INT));
   }
   else if (msg->getConfigType() == CONFIGURATION_RECON_FLOAT)
   {
@@ -109,8 +152,9 @@ void Server::configure
 
     _callbacks.emplace_back (new ServerImageRecon<float> (this));
     auto fp = std::bind (&Callback::receive, _callbacks.back(), _1, _2);
-    _session->registerHandler ((CB)fp, ISMRMRD_HEADER, _callbacks.back());
-    _session->registerHandler ((CB)fp, ISMRMRD_MRACQUISITION, _callbacks.back());
+    _session->registerHandler ((CB)fp, _callbacks.back(), ISMRMRD_HEADER_STREAM);
+    _session->registerHandler ((CB)fp, _callbacks.back(),
+                               getStream (ISMRMRD_MRACQUISITION, ISMRMRD_FLOAT));
   }
   else if (msg->getConfigType() == CONFIGURATION_RECON_DOUBLE)
   {
@@ -118,8 +162,9 @@ void Server::configure
 
     _callbacks.emplace_back (new ServerImageRecon<double> (this));
     auto fp = std::bind (&Callback::receive, _callbacks.back(), _1, _2);
-    _session->registerHandler ((CB)fp, ISMRMRD_HEADER, _callbacks.back());
-    _session->registerHandler ((CB)fp, ISMRMRD_MRACQUISITION, _callbacks.back());
+    _session->registerHandler ((CB)fp, _callbacks.back(), ISMRMRD_HEADER_STREAM);
+    _session->registerHandler ((CB)fp, _callbacks.back(),
+                              getStream (ISMRMRD_MRACQUISITION, ISMRMRD_DOUBLE));
   }
   else
   {
@@ -155,14 +200,30 @@ void Server::sendEntity
  ****************************************************************************/
 void Server::clientAccepted
 (
-  Handshake* msg,
-  bool                accepted
+  Handshake* hand,
+  bool       accepted
 )
 {
-  msg->setConnectionStatus ((accepted) ?
-    CONNECTION_ACCEPTED : CONNECTION_DENIED_UNKNOWN_USER);
+  Handshake msg;
 
-  _session->send (msg);
+  msg.setTimestamp (hand->getTimestamp());
+  msg.setConnectionStatus ((accepted) ?
+    CONNECTION_ACCEPTED : CONNECTION_DENIED_UNKNOWN_USER);
+  msg.setClientName (hand->getClientName());
+
+  if (_manifest.size() > 0)
+  {
+    for (auto it = _manifest.begin(); it != _manifest.end(); it++)
+    {
+      msg.addManifestEntry (it->second.stream,
+                            it->second.entity_type,
+                            it->second.storage_type,
+                            std::string (it->second.description.begin(),
+                                         it->second.description.end()));
+    }
+  }
+
+  _session->send (&msg);
 
   if (!accepted)
   {
@@ -198,9 +259,9 @@ Server::Server
   _callbacks.emplace_back (new ServerEntityHandler (this));
   auto fp = std::bind (&Callback::receive, _callbacks.back(), _1, _2);
 
-  _session->registerHandler ((CB) fp, ISMRMRD_HANDSHAKE, _callbacks.back());
-  _session->registerHandler ((CB) fp, ISMRMRD_ERROR_REPORT, _callbacks.back());
-  _session->registerHandler ((CB) fp, ISMRMRD_COMMAND, _callbacks.back());
+  _session->registerHandler ((CB) fp, _callbacks.back(), HANDSHAKE_STREAM);
+  _session->registerHandler ((CB) fp, _callbacks.back(), ERROR_REPORT_STREAM);
+  _session->registerHandler ((CB) fp, _callbacks.back(), COMMAND_STREAM);
 
   _session->run ();
 }

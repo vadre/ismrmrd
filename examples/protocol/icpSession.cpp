@@ -62,8 +62,66 @@ void Session::shutdown
 /*******************************************************************************
  ******************************************************************************/
 template<> bool Session::registerHandler (CB, Callback*, uint32_t, uint32_t);
-template<> bool Session::deregister (CB, Callback*, uint32_t, uint32_t);
 template class MTQueue<OUT_MSG>;
+
+/*******************************************************************************
+ ******************************************************************************/
+bool Session::deregister
+(
+  std::vector<uint32_t>  index
+)
+{
+  // To avoid partial completion check if any of the indexes may be rejected
+  std::string key;
+  for (int ii = 0; ii < index.size(); ++ii)
+  {
+    key = std::to_string (index[ii]) + std::string ("_") + std::string ("0");
+    if (_callbacks.find (key) == _callbacks.end() ||
+        _objects.find (key)   == _objects.end())
+    {
+      std::cerr << "Index vector contains non-registered streams\n";
+      return false;
+    }
+  }
+
+  std::set<uint32_t> temp (index.begin(), index.end());
+  if (index.size() != temp.size() || index.size() < 1)
+  {
+    std::cerr << "Index vector has duplicates or is empty\n";
+    return false;
+  }
+
+
+  for (int ii = 0; ii < index.size(); ++ii)
+  {
+    deregister (index[ii], 0);
+  }
+
+  return true;
+}
+
+/*******************************************************************************
+ ******************************************************************************/
+bool Session::deregister
+(
+  uint32_t  index,
+  uint32_t  instance
+)
+{
+  std::string key =
+    std::to_string (index) + std::string ("_") + std::to_string (instance);
+
+  if (_callbacks.find (key) == _callbacks.end() ||
+      _objects.find (key)   == _objects.end())
+  {
+    return false;
+  }
+
+  _callbacks.erase (key);
+  _objects.erase (key);
+
+  return true;
+}
 
 /*******************************************************************************
  ******************************************************************************/
@@ -190,8 +248,10 @@ CB_IT Session::getNextKey
     const std::string& key = it->first;
     if (key.compare (0, prefix.size(), prefix) == 0)
     {
+      std::cout << "Returning: prefix = " << prefix << ", key = " << key << "\n";
       return it;
     }
+    ++it;
   }
 
   return _callbacks.end();
@@ -205,6 +265,7 @@ void Session::getSubscribers
 )
 {
   std::string prefix = std::to_string (in_msg.ehdr.stream) + std::string ("_");
+  std::cout << "getSubscr: prefix = " << prefix << "\n";
   CB_IT cit = _callbacks.lower_bound (prefix);
 
   if (cit == _callbacks.end())
@@ -214,19 +275,22 @@ void Session::getSubscribers
     return;
   }
 
-  getNextKey (prefix, cit);
+  cit = getNextKey (prefix, cit);
 
   while (cit != _callbacks.end())
   {
     std::string key = cit->first;
+    std::cout << "delivering for key " << key << "\n";
     if (_objects.find (key) == _objects.end())
     {
       throw std::runtime_error ("Objects and Callbacks maps don't match");
     }
 
     deliver (in_msg, key);
+    std::cout << "after deliver()\n";
     cit = getNextKey (prefix, ++cit);
   }
+  std::cout << "getSubscr done\n";
 }
 /*******************************************************************************
  ******************************************************************************/
