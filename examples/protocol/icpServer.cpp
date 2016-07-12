@@ -217,9 +217,9 @@ void Server::clientAccepted
     {
       msg.addManifestEntry (it->second.stream,
                             it->second.entity_type,
-                            it->second.storage_type,
-                            std::string (it->second.description.begin(),
-                                         it->second.description.end()));
+                            it->second.storage_type);//,
+                            //std::string (it->second.description.begin(),
+                                         //it->second.description.end()));
     }
   }
 

@@ -248,7 +248,6 @@ CB_IT Session::getNextKey
     const std::string& key = it->first;
     if (key.compare (0, prefix.size(), prefix) == 0)
     {
-      std::cout << "Returning: prefix = " << prefix << ", key = " << key << "\n";
       return it;
     }
     ++it;
@@ -265,7 +264,6 @@ void Session::getSubscribers
 )
 {
   std::string prefix = std::to_string (in_msg.ehdr.stream) + std::string ("_");
-  std::cout << "getSubscr: prefix = " << prefix << "\n";
   CB_IT cit = _callbacks.lower_bound (prefix);
 
   if (cit == _callbacks.end())
@@ -280,17 +278,14 @@ void Session::getSubscribers
   while (cit != _callbacks.end())
   {
     std::string key = cit->first;
-    std::cout << "delivering for key " << key << "\n";
     if (_objects.find (key) == _objects.end())
     {
       throw std::runtime_error ("Objects and Callbacks maps don't match");
     }
 
     deliver (in_msg, key);
-    std::cout << "after deliver()\n";
     cit = getNextKey (prefix, ++cit);
   }
-  std::cout << "getSubscr done\n";
 }
 /*******************************************************************************
  ******************************************************************************/

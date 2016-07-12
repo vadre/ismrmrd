@@ -126,7 +126,7 @@ void ClientImageProcessor::receive
       std::cout << "Error! Received unexpected image storage type\n";
     }
 
-    std::cout << "\nImage processing done" << std::endl;
+    std::cout << "Image processing done" << std::endl;
 
     _this->_client->taskDone();
   }

@@ -216,73 +216,73 @@ void Client::sendHandshake
   msg.setClientName (_client_name);
   msg.addManifestEntry (5000,
                         ISMRMRD_MRACQUISITION,
-                        ISMRMRD_SHORT,
-                        std::string ("Image Reconstruction"));
+                        ISMRMRD_SHORT);//,
+                        //std::string ("Image Reconstruction"));
 
   msg.addManifestEntry (5001,
                         ISMRMRD_MRACQUISITION,
-                        ISMRMRD_INT,
-                        std::string ("Image Reconstruction"));
+                        ISMRMRD_INT);//,
+                        //std::string ("Image Reconstruction"));
 
   msg.addManifestEntry (5002,
                         ISMRMRD_MRACQUISITION,
-                        ISMRMRD_FLOAT,
-                        std::string ("Image Reconstruction"));
+                        ISMRMRD_FLOAT);//,
+                        //std::string ("Image Reconstruction"));
 
   msg.addManifestEntry (5003,
                         ISMRMRD_MRACQUISITION,
-                        ISMRMRD_DOUBLE,
-                        std::string ("Image Reconstruction"));
+                        ISMRMRD_DOUBLE);//,
+                        //std::string ("Image Reconstruction"));
 
   msg.addManifestEntry (ISMRMRD_HEADER_STREAM,
                         ISMRMRD_HEADER,
-                        ISMRMRD_STORAGE_NONE,
-                        std::string ("ISMRMRD Header"));
+                        ISMRMRD_STORAGE_NONE);//,
+                        //std::string ("ISMRMRD Header"));
 
   msg.addManifestEntry (6000,
                         ISMRMRD_IMAGE,
-                        ISMRMRD_SHORT,
-                        std::string ("Image Reconstruction"));
+                        ISMRMRD_SHORT);//,
+                        //std::string ("Image Reconstruction"));
 
   msg.addManifestEntry (6001,
                         ISMRMRD_IMAGE,
-                        ISMRMRD_USHORT,
-                        std::string ("Image Reconstruction"));
+                        ISMRMRD_USHORT);//,
+                        //std::string ("Image Reconstruction"));
 
   msg.addManifestEntry (6002,
                         ISMRMRD_IMAGE,
-                        ISMRMRD_INT,
-                        std::string ("Image Reconstruction"));
+                        ISMRMRD_INT);//,
+                        //std::string ("Image Reconstruction"));
 
   msg.addManifestEntry (6003,
                         ISMRMRD_IMAGE,
-                        ISMRMRD_UINT,
-                        std::string ("Image Reconstruction"));
+                        ISMRMRD_UINT);//,
+                        //std::string ("Image Reconstruction"));
 
   msg.addManifestEntry (6004,
                         ISMRMRD_IMAGE,
-                        ISMRMRD_FLOAT,
-                        std::string ("Image Reconstruction"));
+                        ISMRMRD_FLOAT);//,
+                        //std::string ("Image Reconstruction"));
 
   msg.addManifestEntry (6005,
                         ISMRMRD_IMAGE,
-                        ISMRMRD_DOUBLE,
-                        std::string ("Image Reconstruction"));
+                        ISMRMRD_DOUBLE);//,
+                        //std::string ("Image Reconstruction"));
 
   msg.addManifestEntry (6006,
                         ISMRMRD_IMAGE,
-                        ISMRMRD_CXFLOAT,
-                        std::string ("Image Reconstruction"));
+                        ISMRMRD_CXFLOAT);//,
+                        //std::string ("Image Reconstruction"));
 
   msg.addManifestEntry (6007,
                         ISMRMRD_IMAGE,
-                        ISMRMRD_CXDOUBLE,
-                        std::string ("Image Reconstruction"));
+                        ISMRMRD_CXDOUBLE);//,
+                        //std::string ("Image Reconstruction"));
 
   msg.addManifestEntry (10000,
                         ISMRMRD_BLOB,
-                        ISMRMRD_STORAGE_NONE,
-                        std::string ("Device 1 Data"));
+                        ISMRMRD_STORAGE_NONE);//,
+                        //std::string ("Device 1 Data"));
 
   _manifest = msg.getManifest();
   _session->send (&msg);
@@ -394,20 +394,14 @@ void Client::sendAcquisitions
   std::mutex& mtx
 )
 {
-  std::cout << __func__ << "\n";
   uint32_t num_acq = dset.getNumberOfAcquisitions (0);
-  std::cout << "num acqs = " << num_acq << "\n";
   for (int ii = 0; ii < num_acq; ii++)
   {
     //usleep (500); // For testing only
     Acquisition<S> acq;
     {
       std::lock_guard<std::mutex> guard (mtx);
-      std::cout << __func__ << ": before read\n";
       acq = dset.readAcquisition<S> (ii, 0); //TODO lookup stream number
-      //acq = dset.readAcquisition<S> (ii, getStream (ISMRMRD_MRACQUISITION,
-                                                    //acq.getStorageType()));
-      std::cout << __func__ << ": after read\n";
     }
     acq.setStream (getStream (ISMRMRD_MRACQUISITION, acq.getStorageType()));
     _session->send (&acq);

@@ -193,7 +193,6 @@ bool Session::registerHandler
 {
   std::string key =
     std::to_string (index) + std::string ("_") + std::to_string (instance);
-  std::cout << "Session registering " << key << "\n";
 
   std::unique_ptr<F> f_uptr (new F (func));
 
