@@ -249,8 +249,8 @@ struct Manifest
   uint32_t             stream;
   ISMRMRD::EntityType  entity_type;
   ISMRMRD::StorageType storage_type;
-  uint32_t             descr_length;
-  std::vector<char>    description;
+  //uint32_t             descr_length;
+  //std::vector<char>    description;
 };
 
 struct HandshakeHeader
@@ -276,8 +276,8 @@ class Handshake
   ConnectionStatus getConnectionStatus () const;
   void             addManifestEntry (uint32_t             stream,
                                      ISMRMRD::EntityType  etype,
-                                     ISMRMRD::StorageType stype,
-                                     std::string          description);
+                                     ISMRMRD::StorageType stype);//,
+                                    // std::string          description);
   uint32_t         getManifestSize () const;
   std::map<std::string, Manifest> getManifest () const;
   
@@ -858,6 +858,79 @@ class EXPORTISMRMRD Image
   std::string attribute_string_;
   std::vector<T> data_;
 };
+
+struct WaveformHeader
+{
+  uint32_t version;              /**< First unsigned int indicates the version  */
+  uint32_t entity_type;          /**< Entity type code */
+  uint32_t storage_type;         /**< numeric type of each sample */
+  uint32_t stream;               /**< which stream this belongs to */
+  uint64_t begin_time_stamp;     /**< Experiment time stamp - in nano seconds */
+  uint64_t end_time_stamp;       /**< Experiment time stamp - in nano seconds */
+  uint32_t dwell_time_ns;        /**< Time between samples in nano seconds */
+  uint32_t number_of_samples;    /**< Number of samples acquired */
+  int32_t  user_int[ISMRMRD_USER_INTS];     /**< Free user parameters */
+  float    user_float[ISMRMRD_USER_FLOATS]; /**< Free user parameters */
+};
+
+class Waveform
+: public Entity
+{
+  public:
+
+  Waveform (uint32_t num_samples = 0);
+
+  void setStream(uint32_t);
+
+  uint64_t getBeginTimeStamp() const;
+  void setBeginTimeStamp(uint64_t);
+
+  uint64_t getEndTimeStamp() const;
+  void setEndTimeStamp(uint64_t);
+
+  uint32_t getNumberOfSamples() const;
+  void setNumberOfSamples(uint32_t);
+
+  uint32_t getDwellTime_ns() const;
+  void setDwellTime_ns(uint32_t);
+
+  int32_t getUserInt(int idx) const;
+  void setUserInt(int idx, int32_t val);
+
+  float getUserFloat(int idx) const;
+  void setUserFloat(int idx, float val);
+
+  void resize (uint32_t num_samples);
+
+  WaveformHeader &getHead ();
+  const WaveformHeader &getHead (); const
+  void setHead (const WaveformHeader &other);
+
+  std::vector<double> &getData();
+  const std::vector<double> &getData() const;
+  void setData (const std::vector<double> &data);
+
+  double &at (uint32_t sample);
+
+// Functions inherited from Entity
+  virtual uint32_t     getVersion ()     const { return head_.version; }
+  virtual uint32_t     getStream ()      const { return head_.stream; }
+
+  virtual EntityType   getEntityType ()  const
+    { return static_cast<EntityType>(head_.entity_type); }
+
+  virtual StorageType  getStorageType () const
+    { return static_cast<StorageType>(head_.storage_type); }
+
+  virtual std::vector<unsigned char> serialize();
+  virtual void deserialize(const std::vector<unsigned char>& buffer);
+
+  protected:
+
+  WaveformHeader head_;
+  std::vector<double> data_;
+};
+
 
 /// N-Dimensional array type
 template <typename T>

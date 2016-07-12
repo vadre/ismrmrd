@@ -1526,6 +1526,10 @@ void quaternion_to_directions(float quat[4], float read_dir[3],
     slice_dir[2] = 1.0f - 2.0f * (a * a + b * b);
 }
 
+/********************************* Waveform ***********************************/
+/******************************************************************************/
+
+
 /******************************* EntityHeader *********************************/
 /******************************************************************************/
 std::vector<unsigned char> EntityHeader::serialize()
@@ -1666,17 +1670,16 @@ void Handshake::setClientName (std::string name)
 /******************************************************************************/
 void Handshake::addManifestEntry (uint32_t             stream,
                                   ISMRMRD::EntityType  etype,
-                                  ISMRMRD::StorageType stype,
-                                  std::string          description)
+                                  ISMRMRD::StorageType stype)//,
+                                  //std::string          descr)
 {
   Manifest entry;
 
   entry.stream       = stream;
   entry.entity_type  = etype;
   entry.storage_type = stype;
-  std::copy (description.c_str(), description.c_str() + description.length(),
-             back_inserter (entry.description));
-  entry.descr_length = entry.description.size();
+  //std::copy (descr.begin(), descr.end(), back_inserter (entry.description));
+  //entry.descr_length = entry.description.size();
     
   manifest_.push_back (entry);
   manifest_size_ = manifest_.size();
@@ -1693,16 +1696,16 @@ std::map<std::string, Manifest> Handshake::getManifest () const
 {
   std::map<std::string, Manifest> mm;
 
-  std::cout << "Manifest:\n";
+  //std::cout << "Manifest:\n";
   for (int ii = 0; ii < manifest_size_; ii++)
   {
     std::string key = std::to_string (manifest_[ii].entity_type) +
                       std::string ("_") +
                       std::to_string (manifest_[ii].storage_type);
     mm.insert (std::make_pair (key, manifest_[ii]));
-    std::cout << "stream = " << manifest_[ii].stream
-              << ", etype = " << manifest_[ii].entity_type
-              << ", stype = " << manifest_[ii].storage_type << "\n";
+    //std::cout << "stream = " << manifest_[ii].stream
+              //<< ", etype = " << manifest_[ii].entity_type
+              //<< ", stype = " << manifest_[ii].storage_type << "\n";
   }
 
   return mm;
@@ -1726,9 +1729,9 @@ std::vector<unsigned char> Handshake::serialize()
   {
     bytes += sizeof (manifest_[ii].stream) +
              sizeof (manifest_[ii].entity_type) +
-             sizeof (manifest_[ii].storage_type) +
-             sizeof ( manifest_[ii].descr_length) +
-             manifest_[ii].descr_length;
+             sizeof (manifest_[ii].storage_type);// +
+             //sizeof ( manifest_[ii].descr_length) +
+             //manifest_[ii].descr_length;
   }
 
   std::vector<unsigned char> buffer;
@@ -1755,22 +1758,35 @@ std::vector<unsigned char> Handshake::serialize()
              std::back_inserter (buffer));
 
   std::copy ((unsigned char*) &this->client_name_[0],
-             (unsigned char*) &this->client_name_[0] +
-                               this->client_name_length_,
+             (unsigned char*) &this->client_name_[this->client_name_length_],
              std::back_inserter (buffer));
 
   for (int ii = 0; ii < manifest_size_; ii++)
   {
-    std::copy ((unsigned char*) &this->manifest_[ii],
-               (unsigned char*) &this->manifest_[ii] +
-               sizeof (uint32_t) * 2 +
-               sizeof (EntityType) + sizeof (StorageType),
+    std::copy ((unsigned char*) &this->manifest_[ii].stream,
+               (unsigned char*) &this->manifest_[ii].stream +
+               sizeof (this->manifest_[ii].stream),
                std::back_inserter (buffer));
 
-    std::copy ((unsigned char*) &this->manifest_[ii].description[0],
-               (unsigned char*) &this->manifest_[ii].description[0] +
-                                 this->manifest_[ii].descr_length,
+    std::copy ((unsigned char*) &this->manifest_[ii].entity_type,
+               (unsigned char*) &this->manifest_[ii].entity_type +
+               sizeof (this->manifest_[ii].entity_type),
                std::back_inserter (buffer));
+
+    std::copy ((unsigned char*) &this->manifest_[ii].storage_type,
+               (unsigned char*) &this->manifest_[ii].storage_type +
+               sizeof (this->manifest_[ii].storage_type),
+               std::back_inserter (buffer));
+
+    //std::copy ((unsigned char*) &this->manifest_[ii].descr_length,
+               //(unsigned char*) &this->manifest_[ii].descr_length +
+               //sizeof (this->manifest_[ii].descr_length),
+               //std::back_inserter (buffer));
+
+    //std::copy ((unsigned char*) &this->manifest_[ii].description[0],
+               //(unsigned char*) &this->manifest_[ii].description
+                                 //[this->manifest_[ii].descr_length],
+               //std::back_inserter (buffer));
   }
 
   if (buffer.size() != bytes)
@@ -1783,7 +1799,10 @@ std::vector<unsigned char> Handshake::serialize()
 }
 
 /******************************************************************************/
-void Handshake::deserialize(const std::vector<unsigned char>& buffer)
+void Handshake::deserialize
+(
+  const std::vector<unsigned char>& buffer
+)
 {
   HandshakeHeader* h_ptr = (HandshakeHeader*)&buffer[0];
   if (h_ptr->entity_type != ISMRMRD_HANDSHAKE)
@@ -1826,6 +1845,7 @@ void Handshake::deserialize(const std::vector<unsigned char>& buffer)
   }
 
   left = right;
+  client_name_.reserve (client_name_length_);
   if ((right += client_name_length_) <= buffer.size())
   {
     std::copy (&buffer[left], &buffer[right],
@@ -1856,19 +1876,29 @@ void Handshake::deserialize(const std::vector<unsigned char>& buffer)
                  (unsigned char*) &this->manifest_[ii].storage_type);
     }
 
-    left = right;
-    if ((right += sizeof (uint32_t)) <= buffer.size())
-    {
-      std::copy (&buffer[left], &buffer[right],
-                 (unsigned char*) &this->manifest_[ii].descr_length);
-    }
+  //std::cout << "hand deser\n";
+    //left = right;
+    //if ((right += sizeof (uint32_t)) <= buffer.size())
+    //{
+      //std::copy (&buffer[left], &buffer[right],
+                 //(unsigned char*) &this->manifest_[ii].descr_length);
+    //}
 
-    left = right;
-    if ((right += manifest_[ii].descr_length) <= buffer.size())
-    {
-      std::copy (&buffer[left], &buffer[right],
-               back_inserter (this->manifest_[ii].description));
-    }
+  //std::cout << "descr length = " << manifest_[ii].descr_length << "\n";
+    //left = right;
+    //if ((right += manifest_[ii].descr_length) <= buffer.size())
+    //{
+      //std::cout << "description: <";
+      //std::copy (&buffer[left], &buffer[right],
+                 //std::ostream_iterator<char>(std::cout, "|"));
+      //std::cout << ">\n";
+      //manifest_[ii].description.reserve (manifest_[ii].descr_length);
+      //std::cout << "left = " << left << ", right = " << right << "\n";
+      //std::copy (&buffer[left], &buffer[right],
+                 //back_inserter (this->manifest_[ii].description));
+    //}
+  //std::cout << "description: <" << std::string (manifest_[ii].description.begin(),
+                                       //manifest_[ii].description.end()) << ">\n";
   }
 
   if (buffer.size() != right)
