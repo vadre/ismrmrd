@@ -873,6 +873,8 @@ struct WaveformHeader
   float    user_float[ISMRMRD_USER_FLOATS]; /**< Free user parameters */
 };
 
+bool operator== (const WaveformHeader &h1, const WaveformHeader &h2);
+
 class Waveform
 : public Entity
 {
@@ -880,30 +882,30 @@ class Waveform
 
   Waveform (uint32_t num_samples = 0);
 
-  void setStream(uint32_t);
+  void setStream (uint32_t);
 
   uint64_t getBeginTimeStamp() const;
-  void setBeginTimeStamp(uint64_t);
+  void setBeginTimeStamp (uint64_t);
 
   uint64_t getEndTimeStamp() const;
-  void setEndTimeStamp(uint64_t);
+  void setEndTimeStamp (uint64_t);
 
   uint32_t getNumberOfSamples() const;
-  void setNumberOfSamples(uint32_t);
+  void setNumberOfSamples (uint32_t);
 
   uint32_t getDwellTime_ns() const;
-  void setDwellTime_ns(uint32_t);
+  void setDwellTime_ns (uint32_t);
 
   int32_t getUserInt(int idx) const;
-  void setUserInt(int idx, int32_t val);
+  void setUserInt (int idx, int32_t val);
 
-  float getUserFloat(int idx) const;
-  void setUserFloat(int idx, float val);
+  float getUserFloat (int idx) const;
+  void setUserFloat (int idx, float val);
 
   void resize (uint32_t num_samples);
 
-  WaveformHeader &getHead ();
-  const WaveformHeader &getHead (); const
+  WaveformHeader &getHead();
+  const WaveformHeader &getHead() const;
   void setHead (const WaveformHeader &other);
 
   std::vector<double> &getData();

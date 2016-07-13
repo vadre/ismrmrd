@@ -486,15 +486,22 @@ template <typename T> void Acquisition<T>::setData(const std::vector<std::comple
     this->data_ = data;
 }
 
-template <typename T> std::complex<T>& Acquisition<T>::at(uint32_t sample, uint32_t channel){
-    if (sample >= getNumberOfSamples()) {
-        std::cout << "sample = " << sample << ", num samples = " << getNumberOfSamples() << "\n";
-        throw std::runtime_error("sample greater than number of samples (acq::at)");
-    }
-    if (channel >= getActiveChannels()) {
-        throw std::runtime_error("channel greater than number of active channels");
-    }
-    return data_[sample + channel * getNumberOfSamples()];
+template <typename T>
+std::complex<T>& Acquisition<T>::at
+(
+  uint32_t sample,
+  uint32_t channel
+)
+{
+  if (sample >= getNumberOfSamples())
+  {
+    throw std::runtime_error ("acq sample greater than number of samples");
+  }
+  if (channel >= getActiveChannels())
+  {
+    throw std::runtime_error ("channel greater than number of active channels");
+  }
+  return data_[sample + channel * getNumberOfSamples()];
 }
 
 template <typename T> const std::vector<float>& Acquisition<T>::getTraj() const {
@@ -566,31 +573,6 @@ template <typename T> void Acquisition<T>::setAllChannelsNotActive() {
     }
 }
 
-/*
-template <typename T>
-uint32_t Acquisition<T>::getVersion() const
-{
-  return head_.version;
-}
-
-template <typename T>
-StorageType Acquisition<T>::getStorageType() const
-{
-  return static_cast<StorageType>(head_.storage_type);
-}
-
-template <typename T>
-uint32_t Acquisition<T>::getStream() const
-{
-  return head_.stream;
-}
-
-template <typename T>
-EntityType Acquisition<T>::getEntityType()
-{
-  return static_cast<EntityType>(this->head_.entity_type);
-}
-*/
 
 template <typename T> std::vector<unsigned char> Acquisition<T>::serialize()
 {
@@ -1528,7 +1510,252 @@ void quaternion_to_directions(float quat[4], float read_dir[3],
 
 /********************************* Waveform ***********************************/
 /******************************************************************************/
+bool operator== (const WaveformHeader& h1, const WaveformHeader& h2)
+{
+  return memcmp(&h1, &h2, sizeof(h1)) == 0;
+}
 
+/******************************************************************************/
+Waveform::Waveform (uint32_t num_samples)
+{
+  memset (&head_, 0, sizeof (head_));
+  head_.version           = ISMRMRD_VERSION_MAJOR;
+  head_.entity_type       = ISMRMRD_WAVEFORM;
+  head_.storage_type      = ISMRMRD_DOUBLE;
+  head_.number_of_samples = num_samples;
+  data_.resize (num_samples);
+}
+
+/******************************************************************************/
+std::vector<double> &Waveform::getData()
+{
+  return data_;
+}
+
+/******************************************************************************/
+const std::vector<double> &Waveform::getData() const
+{
+  return data_;
+}
+
+/******************************************************************************/
+void Waveform::setData (const std::vector<double>& data)
+{
+  if (head_.number_of_samples != data.size())
+  {
+    throw std::runtime_error
+      ("Data size does not match size specified by header");
+  }
+
+  data_ = data;
+}
+
+/******************************************************************************/
+double &Waveform::at (uint32_t sample)
+{
+  if (sample >= head_.number_of_samples)
+  {
+    throw std::runtime_error ("waveform sample greater than number of samples");
+  }
+  return data_[sample];
+}
+
+/******************************************************************************/
+uint64_t Waveform::getBeginTimeStamp() const
+{
+  return head_.begin_time_stamp;
+}
+
+/******************************************************************************/
+void Waveform::setBeginTimeStamp (uint64_t ts)
+{
+  head_.begin_time_stamp = ts;
+}
+
+/******************************************************************************/
+uint64_t Waveform::getEndTimeStamp() const
+{
+  return head_.end_time_stamp;
+}
+
+/******************************************************************************/
+void Waveform::setEndTimeStamp (uint64_t ts)
+{
+  head_.end_time_stamp = ts;
+}
+
+/******************************************************************************/
+void Waveform::setStream (uint32_t stream_number)
+{
+  head_.stream = stream_number;
+}
+
+/******************************************************************************/
+uint32_t Waveform::getNumberOfSamples() const
+{
+  return head_.number_of_samples;
+}
+
+/******************************************************************************/
+void Waveform::setNumberOfSamples (uint32_t num_samples)
+{
+  head_.number_of_samples = num_samples;
+}
+
+/******************************************************************************/
+uint32_t Waveform::getDwellTime_ns() const
+{
+  return head_.dwell_time_ns;
+}
+
+/******************************************************************************/
+void Waveform::setDwellTime_ns (uint32_t dwell_time)
+{
+  head_.dwell_time_ns = dwell_time;
+}
+
+/******************************************************************************/
+int32_t Waveform::getUserInt (int idx) const
+{
+  if (idx < 0 || idx >= ISMRMRD_USER_INTS)
+  {
+    throw std::runtime_error ("User int index out of bounds");
+  }
+  return head_.user_int[idx];
+}
+
+/******************************************************************************/
+void Waveform::setUserInt (int idx, int32_t val)
+{
+  if (idx < 0 || idx >= ISMRMRD_USER_INTS)
+  {
+    throw std::runtime_error ("User int index out of bounds");
+  }
+  head_.user_int[idx] = val;
+}
+
+/******************************************************************************/
+float Waveform::getUserFloat (int idx) const
+{
+  if (idx < 0 || idx >= ISMRMRD_USER_FLOATS)
+  {
+    throw std::runtime_error ("User float index out of bounds");
+  }
+  return head_.user_float[idx];
+}
+
+/******************************************************************************/
+void Waveform::setUserFloat (int idx, float val)
+{
+  if (idx < 0 || idx >= ISMRMRD_USER_FLOATS)
+  {
+    throw std::runtime_error ("User float index out of bounds");
+  }
+  head_.user_float[idx] = val;
+}
+
+/******************************************************************************/
+void Waveform::resize (uint32_t num_samples)
+{
+  head_.number_of_samples = num_samples;
+  data_.resize (num_samples);
+}
+
+/******************************************************************************/
+WaveformHeader &Waveform::getHead()
+{
+  return head_;
+}
+
+/******************************************************************************/
+const WaveformHeader &Waveform::getHead () const
+{
+  return head_;
+}
+
+/******************************************************************************/
+void Waveform::setHead (const WaveformHeader &other)
+{
+  this->head_ = other;
+  data_.resize (head_.number_of_samples);
+}
+
+/******************************************************************************/
+std::vector<unsigned char> Waveform::serialize()
+{
+  if (this->head_.entity_type != ISMRMRD_WAVEFORM)
+  {
+    throw std::runtime_error
+      ("The header entity type does not match the Waveform class type");
+  }
+
+  if (this->head_.storage_type != ISMRMRD_DOUBLE)
+  {
+    throw std::runtime_error
+      ("Header storage type does not match Waveform class");
+  }
+
+  size_t bytes = sizeof (WaveformHeader) + data_.size() * sizeof (double);
+
+  std::vector<unsigned char> buffer;
+  buffer.reserve (bytes);
+
+  std::copy ((unsigned char*)(&this->head_),
+             ((unsigned char*)(&this->head_)) + sizeof (WaveformHeader),
+             std::back_inserter (buffer));
+
+  std::copy ((unsigned char*)(&this->data_[0]),
+             (unsigned char*)(&this->data_[0] + data_.size()),
+             std::back_inserter(buffer));
+
+  if (buffer.size() != bytes)
+  {
+    throw std::runtime_error
+      ("Serialized Waveform buffer size does not match expected buffer size");
+  }
+
+  return buffer;
+}
+
+/******************************************************************************/
+void Waveform::deserialize(const std::vector<unsigned char>& buffer)
+{
+  if (buffer.size() < sizeof(WaveformHeader))
+  {
+    throw std::runtime_error("Buffer is too small to contain an Acquisition");
+  }
+
+  WaveformHeader* h_ptr = (WaveformHeader*)&buffer[0];
+
+  if (h_ptr->entity_type != ISMRMRD_WAVEFORM)
+  {
+    throw std::runtime_error
+      ("The header entity type does not match the Waveform class type");
+  }
+
+  if (h_ptr->storage_type != ISMRMRD_DOUBLE)
+  {
+    throw std::runtime_error
+      ("Header storage type does not match Waveform class");
+  }
+
+  size_t expected_bytes =
+    sizeof(WaveformHeader) + h_ptr->number_of_samples * sizeof(double);
+
+  if (expected_bytes != buffer.size())
+  {
+    std::stringstream ss;
+    ss << "Unexpected buffer length " << buffer.size()
+       << ", expected: " << expected_bytes;
+    throw std::runtime_error(ss.str());
+  }
+
+  this->setHead (*h_ptr);
+  size_t data_start = sizeof(WaveformHeader);
+  std::copy (&buffer[data_start],
+             &buffer[expected_bytes],
+             (unsigned char*)(&this->data_[0]));
+}
 
 /******************************* EntityHeader *********************************/
 /******************************************************************************/
